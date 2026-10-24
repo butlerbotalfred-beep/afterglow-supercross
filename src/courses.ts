@@ -1,0 +1,18 @@
+export type CourseId = 'dusk' | 'canyon' | 'alpine' | 'coast' | 'quarry';
+export interface Course {
+  id:CourseId; name:string; description:string; length:number; seed:number;
+  dirt:string; shoulder:string; ground:string; fog:string; skyTop:string; skyHorizon:string;
+  elevation:number; coordinates?:number[][];
+}
+export const COURSES:Course[] = [
+  {id:'dusk',name:'Dusk Valley',description:'Floodlit stadium · big-air rhythm lanes',length:2568.3122473131434,seed:21,dirt:'#ab6538',shoulder:'#875331',ground:'#785038',fog:'#95819e',skyTop:'#55517e',skyHorizon:'#eca27e',elevation:0},
+  {id:'canyon',name:'Red Mesa',description:'Sandstone cliffs · ridge climbs · canyon switchbacks',length:1980,seed:47,dirt:'#b66a3c',shoulder:'#9e5131',ground:'#ad6242',fog:'#c59079',skyTop:'#405d8e',skyHorizon:'#ffd1a0',elevation:16,
+    coordinates:[[-120,-110],[-120,0],[-120,100],[-95,135],[-60,100],[-60,0],[-60,-90],[-30,-125],[0,-90],[0,0],[0,100],[30,135],[60,100],[60,0],[60,-80],[100,-115],[145,-75],[155,20],[135,150],[70,185],[-100,185],[-165,130],[-170,-100],[-150,-140]]},
+  {id:'alpine',name:'Pine Summit',description:'Mountain forest · long hillside descents · high meadow',length:2200,seed:83,dirt:'#8d6849',shoulder:'#6d5740',ground:'#52664a',fog:'#9faeba',skyTop:'#42678c',skyHorizon:'#e5debd',elevation:24,
+    coordinates:[[-140,-120],[-140,-30],[-140,100],[-110,145],[-65,125],[-45,75],[-65,10],[-40,-70],[0,-100],[40,-60],[40,20],[20,100],[55,155],[110,140],[155,80],[160,0],[135,-85],[100,-145],[10,-170],[-100,-165]]},
+  {id:'coast',name:'Saltwind Coast',description:'Ocean headland · rolling dunes · sweeping beach turns',length:1800,seed:137,dirt:'#bc9568',shoulder:'#c7ad80',ground:'#a7996c',fog:'#a4c1ca',skyTop:'#4e8fb3',skyHorizon:'#ffe2ae',elevation:10,
+    coordinates:[[-120,-100],[-120,0],[-120,100],[-90,140],[-50,120],[-50,40],[-50,-70],[-15,-110],[25,-70],[25,20],[25,100],[60,135],[110,110],[145,55],[130,-5],[150,-70],[100,-140],[0,-165],[-95,-150]]},
+  {id:'quarry',name:'Iron Quarry',description:'Rock terraces · industrial towers · steep bowl exits',length:2100,seed:191,dirt:'#8b7360',shoulder:'#6d665f',ground:'#6b706d',fog:'#9f9ba8',skyTop:'#36384e',skyHorizon:'#e8af82',elevation:20,
+    coordinates:[[-140,-110],[-140,0],[-140,100],[-105,135],[-70,100],[-70,0],[-70,-70],[-35,-110],[0,-70],[0,30],[0,100],[35,140],[70,100],[70,20],[70,-60],[110,-100],[150,-60],[155,55],[135,160],[70,200],[-120,195],[-190,130],[-190,-80],[-165,-140]]},
+];
+export function courseById(id:string):Course {return COURSES.find(c=>c.id===id)||COURSES[0];}

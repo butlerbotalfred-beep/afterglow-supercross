@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.DS_Store
+
+# Local verification captures, input traces and generated reports
+output/
+*.log
+
+# Local secrets and environment overrides
+.env
+.env.*
+!.env.example
