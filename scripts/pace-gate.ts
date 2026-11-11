@@ -30,6 +30,7 @@ for(const b of baseline){
   rows.push({course:b.course,difficulty:b.difficulty,baseline:b.winner,now:r.winner,diffPct:diffPct.toFixed(3),
     crashes:r.crashes,recoveries:r.recoveries,status:ok?'ok':'FAIL'});
 }
+if(baseline.length!==results.length){failed++;console.error(`pace-gate: baseline has ${baseline.length} races, expected ${results.length}`);}
 console.table(rows);
 console.log(`pace-gate: ${rows.length-failed}/${rows.length} races within ${tolerance}% with 0 crashes and 0 recoveries`);
 process.exit(failed?1:0);

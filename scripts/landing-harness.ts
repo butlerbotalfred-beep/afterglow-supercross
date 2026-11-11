@@ -19,7 +19,10 @@ if(process.argv.includes('--write')){
   console.log('Wrote baselines/landing.json');
 } else if(process.argv.includes('--check')){
   const base:typeof rows=JSON.parse(readFileSync(file,'utf8')).circuits;
-  const bad=base.filter(b=>{const r=rows.find(x=>x.course===b.course);return !r||r.gapPct!==b.gapPct||r.matchS!==b.matchS||r.nopitchS!==b.nopitchS;});
-  console.log(bad.length?`landing-harness: ${bad.length} circuit(s) differ from baseline: ${bad.map(b=>b.course).join(', ')}`:'landing-harness: all 5 circuits match baseline');
-  process.exit(bad.length?1:0);
+  const bad=rows.filter(r=>{const b=base.find(x=>x.course===r.course);
+    return !b||r.crashes!==0||r.gapPct!==b.gapPct||r.matchS!==b.matchS||r.nopitchS!==b.nopitchS;});
+  const ok=!bad.length&&base.length===rows.length;
+  console.log(ok?`landing-harness: all ${rows.length} circuits match baseline with 0 crashes`
+    :`landing-harness: mismatch (baseline has ${base.length} of ${rows.length} circuits; differing: ${bad.map(r=>r.course).join(', ')||'none'})`);
+  process.exit(ok?0:1);
 }

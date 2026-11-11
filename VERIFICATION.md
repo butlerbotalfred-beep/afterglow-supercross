@@ -4,7 +4,7 @@ Build plan v2, Stage 0, milestone M0.1. No gameplay change. Measured in the clou
 
 | Completion box | Measured | Command | Result |
 | --- | --- | --- | --- |
-| CI runs on every pull request and a failing test blocks the merge | Workflow `.github/workflows/ci.yml` runs on `pull_request` and on pushes to `main`. Blocking the merge also needs the `CI` check marked required in the repository's branch protection | GitHub Actions | See PR checks |
+| CI runs on every pull request and a failing test blocks the merge | Workflow `.github/workflows/ci.yml` runs on `pull_request` and on pushes to `main`. GitHub refuses required checks and rulesets on a private repository on the free plan (`gh api .../rulesets` answers "Upgrade to GitHub Pro or make this repository public"), so a red run cannot yet block a merge | GitHub Actions run 42949582834 | Not met: Michael's decision |
 | All 86 existing tests pass in CI | 86 pass, 0 fail, about 9 s locally | `npm test` | Pass |
 | pace-gate at 0% tolerance reproduces all ten baseline times, 0 crashes, 0 recoveries | 10/10 races exact, 0 crashes, 0 recoveries (table below) | `npm run pace-gate -- --tolerance 0` | Pass |
 | landing-harness reproduces the baseline pitch gap (0.03 to 0.12%) | 0.09 / 0.03 / 0.12 / 0.03 / 0.06% (table below) | `npm run landing-harness -- --check` | Pass |
@@ -38,7 +38,7 @@ All ten races: 4 of 4 finishers, 0 crashes, 0 recoveries. The committed `baselin
 
 ## Build size after this change
 
-The build stamp adds 0.07 KB of JavaScript (758.62 KB, 205.43 KB gzipped). `baselines/build.json` keeps the pre-change numbers as the reference for later budgets.
+The build stamp adds about 0.1 KB of JavaScript (758.66 KB, 205.45 KB gzipped on this branch, locally and in CI; the exact figure moves by a few bytes with the commit hash). `baselines/build.json` keeps the pre-change numbers as the reference for later budgets.
 
 ## Waiting on the play review (D, about 5 minutes)
 

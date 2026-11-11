@@ -1,4 +1,5 @@
 // Runs the production build and measures it. Writes baselines/build.json with --write.
+// It reports sizes only; size budgets that fail CI arrive in M0.4.
 //   node scripts/build-report.mjs            build, then print the sizes
 //   node scripts/build-report.mjs --write    build, then record them as the baseline
 // JavaScript sizes are the ones Vite's own build report prints (KB = 1000 bytes), so they
@@ -27,7 +28,8 @@ const report={
   distBytes:total,
 };
 if(process.argv.includes('--write')){
-  writeFileSync(new URL('../baselines/build.json',import.meta.url),JSON.stringify({note:'Production build sizes before Stage 0 (M0.1). Budgets in later milestones are measured against this.',...report},null,2)+'\n');
+  const commit=execFileSync('git',['rev-parse','--short=7','HEAD'],{encoding:'utf8'}).trim();
+  writeFileSync(new URL('../baselines/build.json',import.meta.url),JSON.stringify({note:`Production build sizes at commit ${commit}. Later size budgets are judged against this. Regenerate only with sign-off.`,...report,commit},null,2)+'\n');
   console.log('Wrote baselines/build.json');
 }
 console.log(JSON.stringify(report,null,2));
