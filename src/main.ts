@@ -30,6 +30,7 @@ import {InputManager,type GamepadLike,type Device,type Control,uniqueDevices,rea
 import {makeRider,stepRider,collide,npcControl,idleControl,type Rider} from './physics';
 import {progressDistance} from './race';
 import {TUNING,COLORS,CSS_COLORS,clamp} from './config';
+import {blendPose,capturePose,pacingStats,type Pose} from './render-interp';
 
 const reviewEnabled=import.meta.env.DEV&&new URLSearchParams(location.search).has('review');
 let reviewDrive=false,reviewFrozen=false,reviewCrashTest='';
@@ -75,6 +76,7 @@ let raceTime=0,countdown=3.8,firstFinish:number|null=null,cameraDistance:number=
 let assignments:(Device|null)[]=[{kind:'keyboard'},null,null,null],ready=[true,false,false,false];
 let riders:Rider[]=[],models:ReturnType<typeof createBike>[]=[],cameras:ChaseCamera[]=[];
 let viewHud:HTMLElement[]=[],fpsFrames:number[]=[],lastHud=0,globalTime=0,lastTickSound=4,accumulator=0;
+let prevPoses:Pose[]=[],stepCounts:number[]=[];
 let lastPadSignature='',padButtons=new Map<number,boolean>(),override=new Map<number,Control>();
 let frameCount=0;
 let activeLayout:TrackLayout|null=null;
@@ -136,7 +138,7 @@ function startRace(){
   humanCount=Number(el<HTMLSelectElement>('humans').value);npcCount=Number(el<HTMLSelectElement>('npcs').value);lapCount=Number(el<HTMLSelectElement>('laps').value);difficulty=el<HTMLSelectElement>('difficulty').value;
   if(!assignments.slice(0,humanCount).every(Boolean)||uniqueDevices(assignments.slice(0,humanCount) as Device[]).length!==humanCount)return;
   testMarkers.visible=practice;
-  touchControls.clear();document.body.classList.toggle('iphone-session',iphoneMode);buildGrid();buildHud();raceTime=0;countdown=3.8;firstFinish=null;paused=false;phase='countdown';lastTickSound=4;accumulator=0;override.clear();
+  touchControls.clear();document.body.classList.toggle('iphone-session',iphoneMode);buildGrid();buildHud();raceTime=0;countdown=3.8;firstFinish=null;paused=false;phase='countdown';lastTickSound=4;accumulator=0;prevPoses=[];override.clear();
   setVisible('setup',false);setVisible('results',false);setVisible('pause',false);setVisible('hud',true);setVisible('race-bar',true);setVisible('countdown',true);touchControls.show(iphoneMode);audio.start();
   el('session-label').textContent=`${(track.customName||track.course.name).toUpperCase()} / ${practice?'FREE PRACTICE':'RACE NIGHT'}`;el('countdown').innerHTML='<small>FIND YOUR LINE</small><strong>3</strong>';updateHud();
 }
@@ -168,7 +170,9 @@ function step(dt:number){
   collide(riders,track);
   if(!practice&&(riders.filter(r=>r.human).every(r=>r.finished!==null)||(firstFinish!==null&&raceTime-firstFinish>TUNING.finishTimeout)))endRace();
 }
-function syncModels(dt:number){riders.forEach((r,i)=>{const m=models[i];m.root.position.set(r.x,r.y,r.z);m.root.rotation.y=r.heading;m.root.visible=r.recovery<=0||Math.floor(globalTime*8)%2===0;m.animate({speed:r.speed,steer:r.steer,lean:r.lean,pitch:r.pitch,compression:r.compression,powerSlide:r.powerSlide,slipAngle:r.slipAngle,time:globalTime,throttle:r.throttle,brake:r.brake,groundDistance:Math.max(0,r.y-track.height(r.surface.s,r.surface.lateral)),crashed:r.crashTime>0,crashAge:r.crashAge,crashSide:r.crashSide},dt);});}
+// Rider pose to draw: between the last two physics steps, so frames that run an uneven number of steps don't jump.
+function drawPose(r:Rider,i:number):Pose{return paused||reviewFrozen||phase==='setup'?capturePose(r):blendPose(prevPoses[i],r,accumulator/TUNING.step);}
+function syncModels(dt:number){riders.forEach((r,i)=>{const m=models[i],pose=drawPose(r,i);m.root.position.set(pose.x,pose.y,pose.z);m.root.rotation.y=pose.heading;m.root.visible=r.recovery<=0||Math.floor(globalTime*8)%2===0;m.animate({speed:r.speed,steer:r.steer,lean:r.lean,pitch:r.pitch,compression:r.compression,powerSlide:r.powerSlide,slipAngle:r.slipAngle,time:globalTime,throttle:r.throttle,brake:r.brake,groundDistance:Math.max(0,r.y-track.height(r.surface.s,r.surface.lateral)),crashed:r.crashTime>0,crashAge:r.crashAge,crashSide:r.crashSide},dt);});}
 function drawMap(canvas:HTMLCanvasElement,r:Rider){const c=canvas.getContext('2d')!;c.clearRect(0,0,150,130);const b=track.bounds,scale=Math.min(136/(b.maxX-b.minX),116/(b.maxZ-b.minZ));const x=(x:number)=>75+(x-(b.minX+b.maxX)/2)*scale,z=(z:number)=>65+(z-(b.minZ+b.maxZ)/2)*scale;c.lineJoin='round';c.beginPath();track.samples.filter((_,i)=>i%8===0).forEach((p,i)=>i?c.lineTo(x(p.x),z(p.z)):c.moveTo(x(p.x),z(p.z)));c.closePath();c.strokeStyle='#fff5';c.lineWidth=3;c.stroke();c.strokeStyle='#151927';c.lineWidth=1.3;c.stroke();if(practice)for(const j of track.obstacles){if(!j.highlight)continue;const p=track.at(j.start);c.fillStyle='#ffdc69';c.fillRect(x(p.x)-3,z(p.z)-3,6,6);}for(const o of riders){c.fillStyle=CSS_COLORS[o.id];c.beginPath();c.arc(x(o.x),z(o.z),o===r?4:2.3,0,Math.PI*2);c.fill();}c.fillStyle='#fff';const p=track.at(0);c.fillRect(x(p.x)-3,z(p.z)-1,6,2);}
 function updateHud(){
   const ordered=ranking();viewHud.forEach((h,i)=>{const r=riders[i];h.querySelector('.position strong')!.innerHTML=`${String(ordered.indexOf(r)+1).padStart(2,'0')}<span>/ ${riders.length}</span>`;h.querySelector('.lap b')!.textContent=String(practice?r.progress.lap+1:Math.min(lapCount,r.progress.lap+1));h.querySelector('.speed strong')!.textContent=String(Math.round(r.speed*3.6)).padStart(2,'0');(h.querySelector('.speed-track i')as HTMLElement).style.width=`${r.speed/TUNING.maxSpeed*100}%`;h.querySelector('.sector')!.textContent=track.sector(r.surface.s);
@@ -191,7 +195,7 @@ function render(dt:number){
   if(phase==='setup'){
     const p=track.at(14),v=track.at(30);preview.position.set(p.x-17+Math.sin(globalTime*.07)*2,track.height(14)+9,p.z-16);preview.lookAt(v.x,track.height(30)+2,v.z);renderer.render(scene,preview);
   }else{
-    renderer.setScissorTest(true);views().forEach((v,i)=>{const cam=cameras[i];cam.update(riders[i],track,dt,cameraDistance,cameraShake,globalTime);cam.camera.aspect=(w*v.w)/(h*v.h);cam.camera.updateProjectionMatrix();effects.viewport(v.x*w,(1-v.y-v.h)*h,v.w*w,v.h*h);models.forEach((m,j)=>{if(j!==i&&m.root.position.distanceTo(cam.camera.position)<3.1)m.root.visible=false;});renderer.render(scene,cam.camera);models.forEach((m,j)=>m.root.visible=riders[j].recovery<=0||Math.floor(globalTime*8)%2===0);});renderer.setScissorTest(false);
+    renderer.setScissorTest(true);views().forEach((v,i)=>{const cam=cameras[i];cam.update({...riders[i],...drawPose(riders[i],i)},track,dt,cameraDistance,cameraShake,globalTime);cam.camera.aspect=(w*v.w)/(h*v.h);cam.camera.updateProjectionMatrix();effects.viewport(v.x*w,(1-v.y-v.h)*h,v.w*w,v.h*h);models.forEach((m,j)=>{if(j!==i&&m.root.position.distanceTo(cam.camera.position)<3.1)m.root.visible=false;});renderer.render(scene,cam.camera);models.forEach((m,j)=>m.root.visible=riders[j].recovery<=0||Math.floor(globalTime*8)%2===0);});renderer.setScissorTest(false);
   }
   sceneDrawCalls=renderer.info.render.calls;effects.finish();
 }
@@ -276,7 +280,9 @@ function frame(now:number){
   const raw=(now-last)/1000,dt=Math.min(TUNING.maxFrame,raw);last=now;globalTime+=dt;frameCount++;
   if(raw>0&&raw<.5){fpsFrames.push(raw);if(fpsFrames.length>600)fpsFrames.shift();}
   pollMenus(now,pollJoins());
-  if(!paused){accumulator+=dt;while(accumulator>=TUNING.step){step(TUNING.step);accumulator-=TUNING.step;}}
+  let steps=0;
+  if(!paused){accumulator+=dt;while(accumulator>=TUNING.step){prevPoses=riders.map(capturePose);step(TUNING.step);accumulator-=TUNING.step;steps++;}}
+  if(raw>0&&raw<.5){stepCounts.push(steps);if(stepCounts.length>600)stepCounts.shift();}
   if(editor.isOpen){audio.update(0,0,false);requestAnimationFrame(frame);return;}
   syncModels(paused||reviewFrozen?0:dt);dust.update(riders,paused||reviewFrozen||phase!=='racing'?0:dt);render(dt);if(now-lastHud>100&&phase!=='setup'){updateHud();lastHud=now;}
   const player=riders[0];audio.update(player?.speed||0,player?.throttle||0,phase==='racing'&&!paused);requestAnimationFrame(frame);
@@ -351,7 +357,7 @@ if(['localhost','127.0.0.1','[::1]'].includes(location.hostname))startNativeCont
 addEventListener('resize',resize);refreshNpcOptions();refreshSlots();buildGrid();resize();requestAnimationFrame(frame);
 // Development-only deterministic controls and telemetry for repeatable local verification.
 if(import.meta.env.DEV){
-  (window as any).__game={get track(){return track;},riders:()=>riders,snapshot:()=>({course:track.course.id,phase,paused,practice,raceTime,humanCount,npcCount,fps:fpsFrames.length/fpsFrames.reduce((a,b)=>a+b,0),frameCount,resolution:[innerWidth,innerHeight],renderScale,riders:riders.map(r=>({id:r.id,human:r.human,s:r.surface.s,speed:r.speed,lap:r.progress.lap,next:r.progress.nextCheckpoint,broken:r.progress.routeBroken,grounded:r.grounded,air:r.bestAir,finished:r.finished,recovery:r.recovery,x:r.x,y:r.y,z:r.z}))}),setControl:(id:number,c:Partial<Control>|null)=>{if(c)override.set(id,{...idleControl(),...c});else override.delete(id);},drive:(id:number)=>{const r=riders[id];override.set(id,npcControl(r,track,riders,'club'));},clearPerf:()=>fpsFrames=[],step:(seconds:number)=>{for(let t=0;t<seconds;t+=TUNING.step)step(TUNING.step);syncModels(0);updateHud();},renderer:()=>renderer.info};
+  (window as any).__game={get track(){return track;},riders:()=>riders,snapshot:()=>({course:track.course.id,phase,paused,practice,raceTime,humanCount,npcCount,fps:fpsFrames.length/fpsFrames.reduce((a,b)=>a+b,0),frameCount,resolution:[innerWidth,innerHeight],renderScale,riders:riders.map(r=>({id:r.id,human:r.human,s:r.surface.s,speed:r.speed,lap:r.progress.lap,next:r.progress.nextCheckpoint,broken:r.progress.routeBroken,grounded:r.grounded,air:r.bestAir,finished:r.finished,recovery:r.recovery,x:r.x,y:r.y,z:r.z}))}),setControl:(id:number,c:Partial<Control>|null)=>{if(c)override.set(id,{...idleControl(),...c});else override.delete(id);},drive:(id:number)=>{const r=riders[id];override.set(id,npcControl(r,track,riders,'club'));},clearPerf:()=>{fpsFrames=[];stepCounts=[];},step:(seconds:number)=>{for(let t=0;t<seconds;t+=TUNING.step)step(TUNING.step);syncModels(0);updateHud();},renderer:()=>renderer.info};
 }
 
 if(reviewEnabled){
@@ -373,8 +379,8 @@ if(reviewEnabled){
       }
       reviewFrozen=true;syncModels(0);updateHud();cameras.forEach(c=>c.initialized=false);fpsFrames=[];
     },
-    run(){reviewFrozen=!reviewFrozen;paused=false;setVisible('pause',false);fpsFrames=[];},
-    stats(){return `${track.course.name} · ${humanCount} view(s) · ${innerWidth} × ${innerHeight} CSS · ${(fpsFrames.length/fpsFrames.reduce((a,b)=>a+b,0)||0).toFixed(1)} fps · ${sceneDrawCalls} draws/view · ${renderer.info.memory.geometries} geometries · ${renderer.info.memory.textures} textures`;}
+    run(){reviewFrozen=!reviewFrozen;paused=false;setVisible('pause',false);fpsFrames=[];stepCounts=[];},
+    stats(){return `${track.course.name} · ${humanCount} view(s) · ${innerWidth} × ${innerHeight} CSS · ${(fpsFrames.length/fpsFrames.reduce((a,b)=>a+b,0)||0).toFixed(1)} fps · ${(()=>{const p=pacingStats(fpsFrames,stepCounts);return `slowest 1% ${p.p99Ms.toFixed(1)} ms · ${p.unevenPct.toFixed(1)}% uneven frames`;})()} · ${sceneDrawCalls} draws/view · ${renderer.info.memory.geometries} geometries · ${renderer.info.memory.textures} textures`;}
   }));
 }
 
