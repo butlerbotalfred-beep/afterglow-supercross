@@ -6,8 +6,12 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "build:report": "node scripts/build-report.mjs",
     "preview": "vite preview --host 0.0.0.0",
     "test": "tsx --test tests/*.test.ts",
+    "pace-gate": "tsx scripts/pace-gate.ts",
+    "landing-harness": "tsx scripts/landing-harness.ts",
     "test:browser": "node scripts/browser-smoke.mjs",
     "test:touch": "node scripts/touch-smoke.mjs",
     "server:install": "node scripts/server-service.mjs install",
