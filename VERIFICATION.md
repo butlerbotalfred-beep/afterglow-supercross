@@ -4,7 +4,7 @@ Build plan v2, Stage 0, milestone M0.1. No gameplay change. Measured in the clou
 
 | Completion box | Measured | Command | Result |
 | --- | --- | --- | --- |
-| CI runs on every pull request and a failing test blocks the merge | Workflow `.github/workflows/ci.yml` runs on `pull_request` and on pushes to `main`. GitHub refuses required checks and rulesets on a private repository on the free plan (`gh api .../rulesets` answers "Upgrade to GitHub Pro or make this repository public"), so a red run cannot yet block a merge | GitHub Actions run 42949582834 | Not met: Michael's decision |
+| CI runs on every pull request and a failing test blocks the merge | Workflow `.github/workflows/ci.yml` runs on `pull_request` and on pushes to `main`. The repository was made public on 11 November 2026 so that a branch ruleset ("main", active) can require the check `Type check, tests, build, pace gate`. Proof: temporary PR #2 added a deliberately failing test; CI failed (run 42961149538) and GitHub reported the PR's merge state as `blocked`. PR #2 was closed unmerged | `gh api repos/.../pulls/2 --jq .mergeable_state` → `blocked` | Pass |
 | All 86 existing tests pass in CI | 86 pass, 0 fail, about 9 s locally | `npm test` | Pass |
 | pace-gate at 0% tolerance reproduces all ten baseline times, 0 crashes, 0 recoveries | 10/10 races exact, 0 crashes, 0 recoveries (table below) | `npm run pace-gate -- --tolerance 0` | Pass |
 | landing-harness reproduces the baseline pitch gap (0.03 to 0.12%) | 0.09 / 0.03 / 0.12 / 0.03 / 0.06% (table below) | `npm run landing-harness -- --check` | Pass |
