@@ -1,0 +1,85 @@
+{
+  "note": "AI race winner times, 3 laps, 4 NPC riders, 120 Hz. Regenerate only with sign-off.",
+  "races": [
+    {
+      "course": "dusk",
+      "difficulty": "club",
+      "winner": 288.833,
+      "crashes": 0,
+      "recoveries": 0,
+      "finishers": 4
+    },
+    {
+      "course": "canyon",
+      "difficulty": "club",
+      "winner": 190.442,
+      "crashes": 0,
+      "recoveries": 0,
+      "finishers": 4
+    },
+    {
+      "course": "alpine",
+      "difficulty": "club",
+      "winner": 185.467,
+      "crashes": 0,
+      "recoveries": 0,
+      "finishers": 4
+    },
+    {
+      "course": "coast",
+      "difficulty": "club",
+      "winner": 158.05,
+      "crashes": 0,
+      "recoveries": 0,
+      "finishers": 4
+    },
+    {
+      "course": "quarry",
+      "difficulty": "club",
+      "winner": 201.408,
+      "crashes": 0,
+      "recoveries": 0,
+      "finishers": 4
+    },
+    {
+      "course": "dusk",
+      "difficulty": "expert",
+      "winner": 273.733,
+      "crashes": 0,
+      "recoveries": 0,
+      "finishers": 4
+    },
+    {
+      "course": "canyon",
+      "difficulty": "expert",
+      "winner": 176.583,
+      "crashes": 0,
+      "recoveries": 0,
+      "finishers": 4
+    },
+    {
+      "course": "alpine",
+      "difficulty": "expert",
+      "winner": 170.2,
+      "crashes": 0,
+      "recoveries": 0,
+      "finishers": 4
+    },
+    {
+      "course": "coast",
+      "difficulty": "expert",
+      "winner": 144.65,
+      "crashes": 0,
+      "recoveries": 0,
+      "finishers": 4
+    },
+    {
+      "course": "quarry",
+      "difficulty": "expert",
+      "winner": 187.058,
+      "crashes": 0,
+      "recoveries": 0,
+      "finishers": 4
+    }
+  ]
+}

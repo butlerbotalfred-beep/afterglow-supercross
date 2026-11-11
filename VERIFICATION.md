@@ -1,3 +1,51 @@
+# M0.1 Baseline and safety net — 11 November 2026
+
+Build plan v2, Stage 0, milestone M0.1. No gameplay change. Measured in the cloud build environment (Node 22.23.4, Linux) on the commit this section ships in.
+
+| Completion box | Measured | Command | Result |
+| --- | --- | --- | --- |
+| CI runs on every pull request and a failing test blocks the merge | Workflow `.github/workflows/ci.yml` runs on `pull_request` and on pushes to `main`. Blocking the merge also needs the `CI` check marked required in the repository's branch protection | GitHub Actions | See PR checks |
+| All 86 existing tests pass in CI | 86 pass, 0 fail, about 9 s locally | `npm test` | Pass |
+| pace-gate at 0% tolerance reproduces all ten baseline times, 0 crashes, 0 recoveries | 10/10 races exact, 0 crashes, 0 recoveries (table below) | `npm run pace-gate -- --tolerance 0` | Pass |
+| landing-harness reproduces the baseline pitch gap (0.03 to 0.12%) | 0.09 / 0.03 / 0.12 / 0.03 / 0.06% (table below) | `npm run landing-harness -- --check` | Pass |
+| baselines/build.json records 758.55 KB JS, 205.40 KB gzipped, and the dist/ total | 758.55 KB, 205.40 KB gzipped, dist/ 16,948,080 bytes (16.95 MB), art 15.56 MB, measured on commit 038508b before any change | `node scripts/build-report.mjs --write` | Pass |
+| The setup screen shows the build stamp | `BUILD <short hash>` in the setup header, visible without scrolling at 1440 × 900 and at 844 × 390 (iPhone landscape). A `+` suffix means uncommitted local edits | Playwright against `vite preview` | Pass |
+| Frame rate and load time on the Mac and the iPhone are recorded here | Not yet measured: needs Michael's play review (D) | `?review=1`, Grid then Run | Open |
+
+## Pace gate: AI race winner, 3 laps, 4 NPC riders
+
+| Circuit | Club (s) | Expert (s) | Plan baseline club / expert |
+| --- | --- | --- | --- |
+| Dusk Valley | 288.833 | 273.733 | 288.8 / 273.7 |
+| Red Mesa | 190.442 | 176.583 | 190.4 / 176.6 |
+| Pine Summit | 185.467 | 170.200 | 185.5 / 170.2 |
+| Saltwind Coast | 158.050 | 144.650 | 158.1 / 144.7 |
+| Iron Quarry | 201.408 | 187.058 | 201.4 / 187.1 |
+
+All ten races: 4 of 4 finishers, 0 crashes, 0 recoveries. The committed `baselines/pace.json` was generated from the unchanged physics and agrees with the plan's independently measured table to its 0.1 s rounding. "Club" is the default NPC pace (internal pace factor 0.91).
+
+## Landing harness: one rider, 3 laps, matching pitch vs pitch forced to zero
+
+| Circuit | Matching (s) | No pitch (s) | Gap |
+| --- | --- | --- | --- |
+| Dusk Valley | 290.04 | 290.29 | 0.09% |
+| Red Mesa | 190.18 | 190.23 | 0.03% |
+| Pine Summit | 186.19 | 186.41 | 0.12% |
+| Saltwind Coast | 158.41 | 158.46 | 0.03% |
+| Iron Quarry | 201.57 | 201.68 | 0.06% |
+
+0 crashes in all ten runs. Recorded in `baselines/landing.json`. M1.2 is expected to raise these gaps on purpose and will update that file with sign-off.
+
+## Build size after this change
+
+The build stamp adds 0.07 KB of JavaScript (758.62 KB, 205.43 KB gzipped). `baselines/build.json` keeps the pre-change numbers as the reference for later budgets.
+
+## Waiting on the play review (D, about 5 minutes)
+
+On the Mac (dev server, which is how the Mac service runs) and on the iPhone: open the game with `?review=1`, press Grid then Run, and read the frame rate the review panel shows. Time the first load on the iPhone with a stopwatch. The numbers go in the last row of the table above.
+
+---
+
 # Physical Xbox menu and editor verification — 23 October 2026
 
 Verified with the user's Bluetooth Xbox Wireless Controller through the actual macOS controller feed in a separate 127.0.0.1 game session, without the simulated controller fixture.

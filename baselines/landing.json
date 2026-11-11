@@ -1,0 +1,40 @@
+{
+  "note": "Time lost over 3 laps by a rider who never uses air pitch. M1.2 is expected to raise these on purpose.",
+  "circuits": [
+    {
+      "course": "dusk",
+      "matchS": 290.04,
+      "nopitchS": 290.29,
+      "gapPct": 0.09,
+      "crashes": 0
+    },
+    {
+      "course": "canyon",
+      "matchS": 190.18,
+      "nopitchS": 190.23,
+      "gapPct": 0.03,
+      "crashes": 0
+    },
+    {
+      "course": "alpine",
+      "matchS": 186.19,
+      "nopitchS": 186.41,
+      "gapPct": 0.12,
+      "crashes": 0
+    },
+    {
+      "course": "coast",
+      "matchS": 158.41,
+      "nopitchS": 158.46,
+      "gapPct": 0.03,
+      "crashes": 0
+    },
+    {
+      "course": "quarry",
+      "matchS": 201.57,
+      "nopitchS": 201.68,
+      "gapPct": 0.06,
+      "crashes": 0
+    }
+  ]
+}
