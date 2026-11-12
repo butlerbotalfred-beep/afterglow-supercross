@@ -12,7 +12,8 @@ export class TouchInput {
 
   setDirections(steering: TouchDirection, pitch: TouchDirection) {
     if (this.steering !== steering || this.pitch !== pitch) this.clear();
-    this.steering = steering; this.pitch = pitch;
+    this.steering = steering;
+    this.pitch = pitch;
   }
   private pointers = new Map<number, TouchAction>();
   private stick: number | null = null;
@@ -33,21 +34,36 @@ export class TouchInput {
 
   move(pointer: number, x: number, y: number) {
     if (pointer !== this.stick) return;
-    this.x = axisWithDeadzone(x, .1);
-    this.y = axisWithDeadzone(-y, .15);
+    this.x = axisWithDeadzone(x, 0.1);
+    this.y = axisWithDeadzone(-y, 0.15);
   }
 
   end(pointer: number) {
     this.pointers.delete(pointer);
-    if (pointer === this.stick) { this.stick = null; this.x = 0; this.y = 0; }
+    if (pointer === this.stick) {
+      this.stick = null;
+      this.x = 0;
+      this.y = 0;
+    }
   }
 
-  clear() { this.pointers.clear(); this.stick = null; this.x = 0; this.y = 0; }
+  clear() {
+    this.pointers.clear();
+    this.stick = null;
+    this.x = 0;
+    this.y = 0;
+  }
 
   read(): Control {
     if (!this.enabled) return neutralControl();
     const held = new Set(this.pointers.values());
-    return { throttle: +held.has('throttle'), brake: +held.has('brake'), steer: this.steering === 'regular' ? screenSteerToWorld(this.x) : this.x,
-      pitch: held.has('noseDown') ? -1 : this.pitch === 'inverted' ? screenSteerToWorld(this.y) : this.y, reset: held.has('reset'), pause: false };
+    return {
+      throttle: +held.has('throttle'),
+      brake: +held.has('brake'),
+      steer: this.steering === 'regular' ? screenSteerToWorld(this.x) : this.x,
+      pitch: held.has('noseDown') ? -1 : this.pitch === 'inverted' ? screenSteerToWorld(this.y) : this.y,
+      reset: held.has('reset'),
+      pause: false,
+    };
   }
 }

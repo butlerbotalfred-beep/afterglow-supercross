@@ -1,10 +1,30 @@
 import {execFileSync} from 'node:child_process';
 import {writeFileSync} from 'node:fs';
-const cli=(args,input)=>execFileSync('npm',['exec','--yes','--package=agent-browser@0.27.0','--','agent-browser','--session','afterglow-verify',...args],{encoding:'utf8',input,timeout:60000});
-const evaluate=source=>{const out=cli(['--json','eval','--stdin'],source);const parsed=JSON.parse(out);if(!parsed.success)throw new Error(out);return parsed.data.result;};
-const results={date:new Date().toISOString(),checks:[],performance:[]};
-console.log(cli(['open','http://localhost:5173']));cli(['set','viewport','1440','900']);
-const stage1=await evaluate(`(async()=>{
+const cli = (args, input) =>
+  execFileSync(
+    'npm',
+    [
+      'exec',
+      '--yes',
+      '--package=agent-browser@0.27.0',
+      '--',
+      'agent-browser',
+      '--session',
+      'afterglow-verify',
+      ...args,
+    ],
+    {encoding: 'utf8', input, timeout: 60000},
+  );
+const evaluate = source => {
+  const out = cli(['--json', 'eval', '--stdin'], source);
+  const parsed = JSON.parse(out);
+  if (!parsed.success) throw new Error(out);
+  return parsed.data.result;
+};
+const results = {date: new Date().toISOString(), checks: [], performance: []};
+console.log(cli(['open', 'http://localhost:5173']));
+cli(['set', 'viewport', '1440', '900']);
+const stage1 = await evaluate(`(async()=>{
  const wait=ms=>new Promise(r=>setTimeout(r,ms)),g=window.__game;
  const assert=(v,m)=>{if(!v)throw new Error(m);};
  document.querySelector('#practice-mode').click();document.querySelector('#start').click();g.step(3.9);
@@ -20,9 +40,11 @@ const stage1=await evaluate(`(async()=>{
  assert(!g.snapshot().riders[0].broken,'steering inputs follow validated course');assert(g.snapshot().riders[0].air>.4,'terrain jump');
  return {checks:['solo practice','keyboard throttle / brake / steering','checkpoint reset delay','keyboard shared pause','jump'],performance:g.snapshot(),environment:{userAgent:navigator.userAgent,dpr:devicePixelRatio,gpu:(()=>{const gl=document.querySelector('canvas').getContext('webgl2'),ext=gl.getExtension('WEBGL_debug_renderer_info');return gl.getParameter(ext.UNMASKED_RENDERER_WEBGL);})()}};
 })()`);
-results.checks.push(...stage1.checks);results.performance.push(stage1.performance);results.environment=stage1.environment;
-cli(['screenshot','output/one-player.png']);
-const stage2=evaluate(`(async()=>{
+results.checks.push(...stage1.checks);
+results.performance.push(stage1.performance);
+results.environment = stage1.environment;
+cli(['screenshot', 'output/one-player.png']);
+const stage2 = evaluate(`(async()=>{
  const wait=ms=>new Promise(r=>setTimeout(r,ms)),g=window.__game;const assert=(v,m)=>{if(!v)throw new Error(m);};clearInterval(window.__driver);
  for(let i=0;i<42000&&g.snapshot().phase!=='results';i++){g.drive(0);g.step(1/60);}
  assert(g.snapshot().phase==='results'&&g.riders()[0].finished!==null,'valid human finish and results');
@@ -51,12 +73,17 @@ const stage2=evaluate(`(async()=>{
  window.__driver=setInterval(()=>{for(let i=0;i<4;i++)g.drive(i);},8);g.clearPerf();await wait(10000);
  return {checks:['human finishes validated race / results','clean restart','countdown pause','2 stacked views','3 views plus standings','4 view grid','zero NPCs at 2/3/4 players','independent simulated pad routing','controller disconnect / reconnect'],finish,performance:g.snapshot()};
 })()`);
-results.checks.push(...stage2.checks);results.performance.push(stage2.performance);results.finish=stage2.finish;
-cli(['screenshot','output/four-player.png']);
-const stage3=evaluate(`(async()=>{const g=window.__game;clearInterval(window.__driver);for(let i=0;i<42000&&g.snapshot().phase!=='results';i++){for(let j=0;j<4;j++)g.drive(j);g.step(1/60);}if(g.snapshot().phase!=='results'||g.riders().filter(r=>r.human).some(r=>r.finished===null))throw new Error('all human finish');return g.snapshot();})()`);
-results.checks.push('all four humans finish three validated laps');results.fourFinish=stage3;
-cli(['screenshot','output/results.png']);
-const stage4=evaluate(`(async()=>{
+results.checks.push(...stage2.checks);
+results.performance.push(stage2.performance);
+results.finish = stage2.finish;
+cli(['screenshot', 'output/four-player.png']);
+const stage3 = evaluate(
+  `(async()=>{const g=window.__game;clearInterval(window.__driver);for(let i=0;i<42000&&g.snapshot().phase!=='results';i++){for(let j=0;j<4;j++)g.drive(j);g.step(1/60);}if(g.snapshot().phase!=='results'||g.riders().filter(r=>r.human).some(r=>r.finished===null))throw new Error('all human finish');return g.snapshot();})()`,
+);
+results.checks.push('all four humans finish three validated laps');
+results.fourFinish = stage3;
+cli(['screenshot', 'output/results.png']);
+const stage4 = evaluate(`(async()=>{
  const wait=ms=>new Promise(r=>setTimeout(r,ms)),g=window.__game;const assert=(v,m)=>{if(!v)throw new Error(m);};
  document.querySelector('#setup-results').click();
  const select=(id,value)=>{const s=document.querySelector(id);s.value=value;s.dispatchEvent(new Event('change'));};
@@ -71,7 +98,25 @@ const stage4=evaluate(`(async()=>{
  const state=g.snapshot();assert(state.phase==='results'&&g.riders()[0].finished!==null,'first human finishes');assert(g.riders().slice(1).every(r=>r.dnf),'timeout marks unfinished humans DNF');assert(state.raceTime-g.riders()[0].finished>=60,'finish timeout lasts sixty seconds');
  return {checks:['gamepad A join / ready','four simulated gamepads without keyboard','unassigned keyboard has no cross-control','60 second finish timeout / DNF'],snapshot:state};
 })()`);
-results.checks.push(...stage4.checks);results.timeout=stage4.snapshot;
-results.errors=cli(['errors']);results.console=cli(['console']);writeFileSync('output/browser-verification.json',JSON.stringify(results,null,2));
-console.log(JSON.stringify({checks:results.checks,performance:results.performance.map(p=>({fps:p.fps,humans:p.humanCount,npcs:p.npcCount,resolution:p.resolution})),errors:results.errors},null,2));
+results.checks.push(...stage4.checks);
+results.timeout = stage4.snapshot;
+results.errors = cli(['errors']);
+results.console = cli(['console']);
+writeFileSync('output/browser-verification.json', JSON.stringify(results, null, 2));
+console.log(
+  JSON.stringify(
+    {
+      checks: results.checks,
+      performance: results.performance.map(p => ({
+        fps: p.fps,
+        humans: p.humanCount,
+        npcs: p.npcCount,
+        resolution: p.resolution,
+      })),
+      errors: results.errors,
+    },
+    null,
+    2,
+  ),
+);
 cli(['close']);

@@ -48,12 +48,14 @@ export class TouchControls {
     });
     window.addEventListener('blur', () => this.clear());
     window.addEventListener('resize', () => this.clear());
-    document.addEventListener('visibilitychange', () => { if (document.hidden) this.clear(); });
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) this.clear();
+    });
   }
 
   private moveStick(event: PointerEvent) {
     const rect = this.stick.getBoundingClientRect();
-    const radius = rect.width * .34;
+    const radius = rect.width * 0.34;
     const dx = event.clientX - (rect.left + rect.width / 2);
     const dy = event.clientY - (rect.top + rect.height / 2);
     const distance = Math.hypot(dx, dy);
@@ -83,7 +85,10 @@ export class TouchControls {
   setDirections(steering: TouchDirection, pitch: TouchDirection) {
     this.clear();
     this.input.setDirections(steering, pitch);
-    this.stick.setAttribute('aria-label', `Drag left to steer ${steering === 'regular' ? 'left' : 'right'}; drag up to pitch nose ${pitch === 'regular' ? 'up' : 'down'}`);
+    this.stick.setAttribute(
+      'aria-label',
+      `Drag left to steer ${steering === 'regular' ? 'left' : 'right'}; drag up to pitch nose ${pitch === 'regular' ? 'up' : 'down'}`,
+    );
   }
 
   show(visible: boolean) {
