@@ -10,7 +10,11 @@ Prettier 3.9.10 formats `src`, `tests` and `scripts` in one commit (cfab1de, lis
 | All 86+ tests pass with no test logic changed | Pass | 91 of 91 pass. Re-printing every test and script file with esbuild gives identical code before and after the format commit, apart from one object key in `scripts/controller-plugin.ts` that lost its quotes (`'Connection'` became `Connection`). |
 | Pace gate exact | Pass | 10 of 10 races at 0.000% with 0 crashes and 0 recoveries |
 | Production JS within 2% of baseline | Pass | 760.03 KB (206.12 KB gzip) against 758.55 KB, +0.2% (this includes smooth rendering from PR #3) |
-| browser-smoke, touch-smoke and course-smoke pass on the Mac | Waiting for Michael | These need real frame rates. In the cloud the software GPU runs at about 2 fps, and browser-smoke fails its "keyboard throttle" check in the same way on the code before and after the split. |
+| browser-smoke, touch-smoke and course-smoke pass on the Mac | Pass | Run on the MacBook (Apple M6, ANGLE Metal, 1440×900), Node 22, at 9fcc0e8 with PR #7. browser-smoke passed 19/19 checks on both runs: 58.5 / 58.3 fps with 1 human + 5 NPCs and 58.3 / 57.7 fps with 4 humans + 4 NPCs. touch-smoke passed 13/13. course-smoke passed 5/5 at 59.6–59.9 fps on every course, with 421 geometries steady. |
+
+## Smoke run found an older bug (fixed in PR #7)
+
+browser-smoke stage 4 ("gamepad join reaches four humans") failed on main. It also failed the same way on 9ad7310, before M0.2. The cause: after a race with several riders, lowering HUMAN RIDERS left those pads assigned and ready in hidden slots, so pressing A on them was ignored. PR #7 limits the lookup to visible slots. After that, all three smoke scripts pass.
 
 ## How "no behaviour change" was checked
 
