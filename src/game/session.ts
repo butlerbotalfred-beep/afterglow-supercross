@@ -533,7 +533,8 @@ function pollJoins() {
     const join = pressed && !padButtons.get(p.index);
     padButtons.set(p.index, pressed);
     if (phase !== 'setup' || iphoneMode || editor.isOpen) continue;
-    const assigned = assignments.findIndex(d => d?.kind === 'gamepad' && d.index === p.index);
+    // Only visible slots count: a pad left in a hidden slot (after lowering the rider count) can still join.
+    const assigned = assignments.slice(0, humanCount).findIndex(d => d?.kind === 'gamepad' && d.index === p.index);
     if ((join && (assigned < 0 || !ready[assigned])) || (waitingForController && (pressed || p.index >= 1000))) {
       const slot = controllerJoinSlot(assignments.slice(0, humanCount), p.index, practice);
       if (slot >= 0) {
