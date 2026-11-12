@@ -28,9 +28,11 @@ export function mountControllerReview(publish: (pad: GamepadLike) => void) {
     ]
       .map(([name, n]) => `<button data-button="${n}" tabindex="-1">${name}</button>`)
       .join('') +
-    '<button data-axis="2" data-value="1" tabindex="-1">Right stick right</button><button data-axis="3" data-value="-1" tabindex="-1">Right stick up</button></div>';
+    ('<button data-axis="2" data-value="1" tabindex="-1">Right stick right</button>' +
+      '<button data-axis="3" data-value="-1" tabindex="-1">Right stick up</button></div>');
   panel.style.cssText =
-    'position:fixed;right:8px;top:8px;width:330px;background:#151c2ef2;border:1px solid #ffce72;padding:10px;z-index:300;font-size:11px;color:#ffce72';
+    'position:fixed;right:8px;top:8px;width:330px;background:#151c2ef2;' +
+    'border:1px solid #ffce72;padding:10px;z-index:300;font-size:11px;color:#ffce72';
   panel.querySelectorAll<HTMLButtonElement>('button').forEach(b => {
     b.style.cssText = 'font-size:11px;padding:6px;margin:2px';
     b.onpointerdown = e => e.preventDefault();

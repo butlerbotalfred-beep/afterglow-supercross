@@ -18,12 +18,16 @@ export class Dust {
       transparent: true,
       depthWrite: false,
       uniforms: {viewportHeight: {value: 720}, color: {value: new THREE.Color('#b58d64')}},
-      vertexShader: `attribute float size;attribute float alpha;varying float opacity;uniform float viewportHeight;void main(){vec4 p=modelViewMatrix*vec4(position,1.);opacity=alpha;gl_Position=projectionMatrix*p;gl_PointSize=min(180.,size*viewportHeight/-p.z);}`,
-      fragmentShader:
-        `uniform vec3 color;varying float opacity;void main(){float d=length(gl_PointCoord-.5)*2.;float a=pow(max(0.,1.-d),2.)*opacity;gl_FragColor=vec4(color,a);#include <tonemapping_fragment>\n#include <colorspace_fragment>\n}`.replace(
-          ';#include',
-          ';\n#include',
-        ),
+      vertexShader:
+        `attribute float size;attribute float alpha;varying float opacity;` +
+        `uniform float viewportHeight;void main(){vec4 p=modelViewMatrix*vec4(position,1.);` +
+        `opacity=alpha;gl_Position=projectionMatrix*p;gl_PointSize=min(180.,` +
+        `size*viewportHeight/-p.z);}`,
+      fragmentShader: (
+        `uniform vec3 color;varying float opacity;void main(){float d=length(gl_PointCoord-.5)*2.;` +
+        `float a=pow(max(0.,1.-d),2.)*opacity;gl_FragColor=vec4(color,a);` +
+        `#include <tonemapping_fragment>\n#include <colorspace_fragment>\n}`
+      ).replace(';#include', ';\n#include'),
     });
     this.mesh = new THREE.Points(geometry, material);
     this.mesh.frustumCulled = false;

@@ -37,10 +37,12 @@ export function createWorld(track: Track) {
       depthWrite: false,
       uniforms: {top: {value: new THREE.Color(theme.skyTop)}, horizon: {value: new THREE.Color(theme.skyHorizon)}},
       vertexShader: `varying vec3 v;void main(){v=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
-      fragmentShader: `
+      fragmentShader:
+        `
     varying vec3 v;uniform vec3 top;uniform vec3 horizon;
     float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
-    float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x),f.y);}
+    float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);` +
+        `return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x),f.y);}
     float fbm(vec2 p){return noise(p)*.55+noise(p*2.03)*.26+noise(p*4.07)*.13+noise(p*8.11)*.06;}
     void main(){vec3 d=normalize(v);float h=d.y;vec3 c=mix(horizon,top,smoothstep(-.04,.28,h));
       vec2 p=d.xz/(max(.12,h+.18))*3.;float n=fbm(p*vec2(1.1,2.4));

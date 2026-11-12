@@ -19,7 +19,10 @@ export class RaceEffects {
     this.glowA = new THREE.WebGLRenderTarget(1, 1, {type, depthBuffer: false});
     this.glowB = this.glowA.clone();
     const vertexShader = 'varying vec2 uvScreen;void main(){uvScreen=uv;gl_Position=vec4(position.xy,0.,1.);}';
-    const clampView = `uniform float views;vec2 viewUV(vec2 p,vec2 origin){vec2 grid=views>2.5?vec2(2.):views>1.5?vec2(1.,2.):vec2(1.);vec2 lo=floor(origin*grid)/grid;return clamp(p,lo+pixel*.6,lo+1./grid-pixel*.6);}`;
+    const clampView =
+      `uniform float views;vec2 viewUV(vec2 p,` +
+      `vec2 origin){vec2 grid=views>2.5?vec2(2.):views>1.5?vec2(1.,2.):vec2(1.);` +
+      `vec2 lo=floor(origin*grid)/grid;return clamp(p,lo+pixel*.6,lo+1./grid-pixel*.6);}`;
     this.blur = new THREE.ShaderMaterial({
       depthTest: false,
       depthWrite: false,
@@ -33,10 +36,12 @@ export class RaceEffects {
         views: {value: 1},
       },
       vertexShader,
-      fragmentShader: `
+      fragmentShader:
+        `
       varying vec2 uvScreen;uniform sampler2D source;uniform vec2 direction,pixel;uniform float extract,threshold;
       ${clampView}
-      vec3 readGlow(vec2 uv){vec3 c=texture2D(source,viewUV(uv,uvScreen)).rgb;return extract>.5?c*smoothstep(threshold,threshold+.65,max(c.r,max(c.g,c.b))):c;}
+      vec3 readGlow(vec2 uv){vec3 c=texture2D(source,viewUV(uv,uvScreen)).rgb;` +
+        `return extract>.5?c*smoothstep(threshold,threshold+.65,max(c.r,max(c.g,c.b))):c;}
       void main(){vec3 c=readGlow(uvScreen)*.227027;
         c+=(readGlow(uvScreen+direction*1.384615)+readGlow(uvScreen-direction*1.384615))*.316216;
         c+=(readGlow(uvScreen+direction*3.230769)+readGlow(uvScreen-direction*3.230769))*.070270;
@@ -55,14 +60,16 @@ export class RaceEffects {
         nearPlane: {value: 0.08},
       },
       vertexShader,
-      fragmentShader: `
+      fragmentShader:
+        `
       varying vec2 uvScreen;uniform sampler2D source,bloom,depth;uniform vec2 pixel;uniform float nearPlane;
       ${clampView}
       float viewDepth(vec2 uv){float d=texture2D(depth,uv).x;return nearPlane*1800./(1800.-d*(1800.-nearPlane));}
       void main(){
         vec3 color=texture2D(source,uvScreen).rgb;float z=viewDepth(uvScreen),occlusion=0.;
         float radius=clamp(70./max(z,1.),1.5,12.);
-        for(int i=0;i<8;i++){float a=float(i)*.785398;vec2 offset=vec2(cos(a),sin(a))*pixel*radius;float delta=z-viewDepth(viewUV(uvScreen+offset,uvScreen));occlusion+=smoothstep(.04,.3,delta)*(1.-smoothstep(.45,1.7,delta));}
+        for(int i=0;i<8;i++){float a=float(i)*.785398;vec2 offset=vec2(cos(a),sin(a))*pixel*radius;` +
+        `float delta=z-viewDepth(viewUV(uvScreen+offset,uvScreen));occlusion+=smoothstep(.04,.3,delta)*(1.-smoothstep(.45,1.7,delta));}
         color*=1.-occlusion*.035*(1.-smoothstep(35.,80.,z));
         color+=texture2D(bloom,uvScreen).rgb*.22;
         vec2 grid=views>2.5?vec2(2.):views>1.5?vec2(1.,2.):vec2(1.);vec2 centered=fract(uvScreen*grid)-.5;

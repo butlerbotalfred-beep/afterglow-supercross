@@ -87,11 +87,60 @@ export class TrackEditor {
     this.redo = [];
     this.selected = {kind: 'jump', index: 0};
     this.mode = 'select';
-    this.root.innerHTML = `<header class="editor-header"><div><span class="eyebrow">YOUR LINE. YOUR RHYTHM.</span><h2>TRACK EDITOR</h2></div><button data-action="close">DISCARD & CLOSE</button></header>
-      <div class="editor-toolbar" role="toolbar" aria-label="Map tools"><button data-mode="select" class="active">Select / move</button><button data-mode="jump">Place obstacle</button><button data-mode="turn">Add turn point</button><button data-action="undo">Undo</button><button data-action="redo">Redo</button><button data-action="zoom-in" aria-label="Zoom in">＋</button><button data-action="zoom-out" aria-label="Zoom out">−</button><button data-action="fit">Fit track</button></div>
-      <div class="editor-workspace"><div class="editor-views"><div class="editor-map-wrap"><svg id="editor-map" role="group" aria-label="Overhead circuit map. Drag orange jump markers or blue turn points." preserveAspectRatio="xMidYMid meet"></svg><p class="editor-map-hint" id="editor-hint"></p></div><section class="editor-3d" aria-label="Live 3D track preview"><div class="editor-3d-heading"><span class="eyebrow">LIVE 3D PREVIEW</span><span id="preview-3d-status" role="status">Loading preview…</span></div><div class="editor-3d-canvas"><canvas id="editor-3d-canvas" aria-label="Live 3D view of the edited track"></canvas><p>Drag to orbit · scroll or pinch to zoom · right-drag to pan</p></div><div class="editor-3d-tools"><button data-action="3d-focus">Focus selected</button><button data-action="3d-whole">Whole track</button><button data-action="3d-side">Side view</button><button data-action="3d-in" aria-label="Zoom 3D in">＋</button><button data-action="3d-out" aria-label="Zoom 3D out">−</button></div></section></div>
-      <aside class="editor-inspector"><label>LAYOUT NAME<input id="layout-name" maxlength="48"></label><p id="editor-stats"></p><div class="editor-tabs"><button data-kind="jump">Obstacles</button><button data-kind="turn">Turns</button></div><label>SELECT OBJECT<select id="editor-object"></select></label><div id="editor-fields"></div><p id="editor-spacing-status" class="editor-storage"></p><div class="button-row"><button data-action="add-jump">Add obstacle</button><button data-action="add-turn">Add turn</button></div><div class="button-row"><button data-action="duplicate">Duplicate obstacle</button><button data-action="delete">Delete selected</button></div><div class="editor-profile"><span id="editor-profile-title">OBSTACLE SIDE PROFILE</span><svg id="jump-profile" viewBox="0 0 280 90" aria-label="Selected jump side profile"></svg></div><div id="editor-status" role="status" aria-live="polite"></div><p class="editor-storage">Saved in this browser, one layout per circuit. Export a file to back up or move a layout to another device.</p><div class="button-row"><button data-action="export">Export JSON</button><button data-action="import">Import JSON</button><input id="layout-import" type="file" accept="application/json,.json" hidden></div><button data-action="reset">Reset draft to original</button></aside></div>
-      <footer class="editor-footer"><span>Xbox: ↑/↓ focus · ←/→ adjust · A select · LB/RB object · X obstacles/turns · Y highlight · right stick move · LT fine / RT fast · B exit button</span><button data-action="save">SAVE & RETURN</button><button class="primary" data-action="ride">SAVE & TEST RIDE ↗</button></footer>`;
+    this.root.innerHTML =
+      `<header class="editor-header"><div><span class="eyebrow">YOUR LINE. YOUR RHYTHM.</span>` +
+      `<h2>TRACK EDITOR</h2></div><button data-action="close">DISCARD & CLOSE</button>` +
+      `</header>
+      <div class="editor-toolbar" role="toolbar" aria-label="Map tools">` +
+      `<button data-mode="select" class="active">Select / move</button>` +
+      `<button data-mode="jump">Place obstacle</button>` +
+      `<button data-mode="turn">Add turn point</button><button data-action="undo">Undo</button>` +
+      `<button data-action="redo">Redo</button>` +
+      `<button data-action="zoom-in" aria-label="Zoom in">＋</button>` +
+      `<button data-action="zoom-out" aria-label="Zoom out">−</button>` +
+      `<button data-action="fit">Fit track</button></div>
+      <div class="editor-workspace">` +
+      `<div class="editor-views"><div class="editor-map-wrap">` +
+      `<svg id="editor-map" role="group" aria-label="Overhead circuit map. Drag orange jump ` +
+      `markers or blue turn points." preserveAspectRatio="xMidYMid meet"></svg>` +
+      `<p class="editor-map-hint" id="editor-hint"></p></div>` +
+      `<section class="editor-3d" aria-label="Live 3D track preview">` +
+      `<div class="editor-3d-heading"><span class="eyebrow">LIVE 3D PREVIEW</span>` +
+      `<span id="preview-3d-status" role="status">Loading preview…</span></div>` +
+      `<div class="editor-3d-canvas">` +
+      `<canvas id="editor-3d-canvas" aria-label="Live 3D view of the edited track"></canvas>` +
+      `<p>Drag to orbit · scroll or pinch to zoom · right-drag to pan</p></div>` +
+      `<div class="editor-3d-tools"><button data-action="3d-focus">Focus selected</button>` +
+      `<button data-action="3d-whole">Whole track</button>` +
+      `<button data-action="3d-side">Side view</button>` +
+      `<button data-action="3d-in" aria-label="Zoom 3D in">＋</button>` +
+      `<button data-action="3d-out" aria-label="Zoom 3D out">−</button></div></section>` +
+      `</div>
+      <aside class="editor-inspector">` +
+      `<label>LAYOUT NAME<input id="layout-name" maxlength="48"></label><p id="editor-stats"></p>` +
+      `<div class="editor-tabs"><button data-kind="jump">Obstacles</button>` +
+      `<button data-kind="turn">Turns</button></div>` +
+      `<label>SELECT OBJECT<select id="editor-object"></select></label><div id="editor-fields">` +
+      `</div><p id="editor-spacing-status" class="editor-storage"></p><div class="button-row">` +
+      `<button data-action="add-jump">Add obstacle</button>` +
+      `<button data-action="add-turn">Add turn</button></div><div class="button-row">` +
+      `<button data-action="duplicate">Duplicate obstacle</button>` +
+      `<button data-action="delete">Delete selected</button></div><div class="editor-profile">` +
+      `<span id="editor-profile-title">OBSTACLE SIDE PROFILE</span>` +
+      `<svg id="jump-profile" viewBox="0 0 280 90" aria-label="Selected jump side profile"></svg>` +
+      `</div><div id="editor-status" role="status" aria-live="polite"></div>` +
+      `<p class="editor-storage">Saved in this browser,` +
+      ` one layout per circuit. Export a file to back up or move a layout to another device.</p>` +
+      `<div class="button-row"><button data-action="export">Export JSON</button>` +
+      `<button data-action="import">Import JSON</button>` +
+      `<input id="layout-import" type="file" accept="application/json,.json" hidden></div>` +
+      `<button data-action="reset">Reset draft to original</button></aside>` +
+      `</div>
+      <footer class="editor-footer">` +
+      `<span>Xbox: ↑/↓ focus · ←/→ adjust · A select · LB/RB object · X obstacles/turns · Y ` +
+      `highlight · right stick move · LT fine / RT fast · B exit button</span>` +
+      `<button data-action="save">SAVE & RETURN</button>` +
+      `<button class="primary" data-action="ride">SAVE & TEST RIDE ↗</button></footer>`;
     this.svg = this.root.querySelector('#editor-map')!;
     this.root.classList.remove('hidden');
     try {
@@ -275,7 +324,9 @@ export class TrackEditor {
       ...list.map(
         (_, i) =>
           new Option(
-            `${this.selected.kind === 'jump' ? `O${i + 1} · ${obstacleType(this.draft.jumps[i])}${this.draft.jumps[i].highlight ? ' ★' : ''}` : `T${i + 1} · Turn${i === 0 ? ' / START' : ''}`}`,
+            this.selected.kind === 'jump'
+              ? `O${i + 1} · ${obstacleType(this.draft.jumps[i])}${this.draft.jumps[i].highlight ? ' ★' : ''}`
+              : `T${i + 1} · Turn${i === 0 ? ' / START' : ''}`,
             String(i),
           ),
       ),
@@ -288,7 +339,9 @@ export class TrackEditor {
     this.updateTools();
     this.preview3D?.select(this.selected, this.valid);
     this.element('#editor-stats').textContent =
-      `${Math.round(this.preview?.length || 0)} m · ${this.draft.points.length} turn points · ${this.draft.jumps.length} obstacles · ${this.draft.jumps.filter(j => j.highlight).length} marked for test`;
+      `${Math.round(this.preview?.length || 0)} m · ${this.draft.points.length} turn points · ` +
+      `${this.draft.jumps.length} obstacles · ` +
+      `${this.draft.jumps.filter(j => j.highlight).length} marked for test`;
     for (const a of ['save', 'ride']) this.element<HTMLButtonElement>(`[data-action="${a}"]`).disabled = !this.valid;
     this.element<HTMLButtonElement>('[data-action="undo"]').disabled = !this.undo.length;
     this.element<HTMLButtonElement>('[data-action="redo"]').disabled = !this.redo.length;
@@ -317,7 +370,8 @@ export class TrackEditor {
     const j = this.draft.jumps[index],
       p = this.draft.points[index];
     const field = (label: string, key: string, value: number, min: number, max: number, step = 0.1) =>
-      `<label>${label}<input type="number" data-field="${key}" min="${min}" max="${max}" step="${step}" value="${Number((Math.round(value / step) * step).toFixed(2))}"></label>`;
+      `<label>${label}<input type="number" data-field="${key}" min="${min}" max="${max}" ` +
+      `step="${step}" value="${Number((Math.round(value / step) * step).toFixed(2))}"></label>`;
     const spacing = kind === 'jump' && j ? obstacleSpacing(this.draft.jumps, index, this.preview.length) : null;
     const berm = this.draft.bermHeights?.[index] ?? null;
     host.innerHTML =
@@ -330,17 +384,29 @@ export class TrackEditor {
             ['3', 'High / 3 m'],
             ['custom', 'Custom height'],
           ]
-            .map(
-              ([value, label]) =>
-                `<option value="${value}" ${String(berm) === value || (berm === null && value === 'auto') || (berm !== null && ![0, 0.75, 1.5, 3].includes(berm) && value === 'custom') ? 'selected' : ''}>${label}</option>`,
-            )
+            .map(([value, label]) => {
+              const custom = berm !== null && ![0, 0.75, 1.5, 3].includes(berm) && value === 'custom';
+              const selected = String(berm) === value || (berm === null && value === 'auto') || custom;
+              return `<option value="${value}" ${selected ? 'selected' : ''}>${label}</option>`;
+            })
             .join('')}</select></label>` +
           (berm !== null ? field('Berm height (m)', 'berm', berm, 0, 5, 0.05) : '') +
-          `<p class="editor-storage editor-wide">Height at the outside track edge, above the centerline at this point. Blends smoothly into neighbouring track sections. Automatic preserves the original banking.</p>` +
+          (`<p class="editor-storage editor-wide">Height at the outside track edge,` +
+            ` above the centerline at this point. Blends smoothly into neighbouring track sections. ` +
+            `Automatic preserves the original banking.</p>`) +
           field('East / west (m)', 'x', p[0], -1000, 1000) +
           field('North / south (m)', 'z', p[1], -1000, 1000)
         : j
-          ? `<label class="editor-wide">Replace obstacle<select id="obstacle-type">${OBSTACLE_TYPES.map(type => `<option value="${type}" ${obstacleType(j) === type ? 'selected' : ''}>${type[0].toUpperCase() + type.slice(1)}</option>`).join('')}</select></label><label class="editor-check editor-wide"><input id="test-highlight" type="checkbox" ${j.highlight ? 'checked' : ''}>★ Highlight in test ride</label>` +
+          ? `<label class="editor-wide">Replace obstacle<select ` +
+            `id="obstacle-type">` +
+            OBSTACLE_TYPES.map(
+              type =>
+                `<option value="${type}" ${obstacleType(j) === type ? 'selected' : ''}>` +
+                `${type[0].toUpperCase() + type.slice(1)}</option>`,
+            ).join('') +
+            `</select></label><label class="editor-check editor-wide">` +
+            `<input id="test-highlight" type="checkbox" ${j.highlight ? 'checked' : ''}>★ Highlight in ` +
+            `test ride</label>` +
             field(
               'Position along lap (m)',
               'position',
@@ -357,7 +423,11 @@ export class TrackEditor {
                 `<p class="editor-storage">${obstacleCount(j)} mounds · dimensions apply to each mound.</p>`
               : '') +
             (spacing
-              ? `<div class="editor-wide editor-spacing"><strong>Clear ground spacing</strong><p>Moves this obstacle; neighbours stay fixed. Changing one gap updates the other.</p>${field(`After O${spacing.previous + 1} (m)`, 'before', spacing.before, 0, this.preview.length)}${field(`Before O${spacing.next + 1} (m)`, 'after', spacing.after, 0, this.preview.length)}</div>`
+              ? `<div class="editor-wide editor-spacing"><strong>Clear ground spacing</strong>` +
+                `<p>Moves this obstacle; neighbours stay fixed. Changing one gap updates the ` +
+                `other.</p>${field(`After O${spacing.previous + 1} (m)`, 'before', spacing.before, 0, this.preview.length)}` +
+                `${field(`Before O${spacing.next + 1} (m)`, 'after', spacing.after, 0, this.preview.length)}` +
+                `</div>`
               : '<p class="editor-storage editor-wide">Add another obstacle to adjust spacing.</p>')
           : '<p>No obstacles yet. Choose Place obstacle, then click the track.</p>';
     this.element('#editor-spacing-status').textContent = '';
@@ -456,7 +526,17 @@ export class TrackEditor {
         points.push(`${10 + (n / 40) * 260},${78 - ((this.preview.height(s, lateral) - center) / 6) * 60}`);
       }
       const height = this.draft.bermHeights?.[index];
-      profile.innerHTML = `<path d="M10 78 L${points.join(' L')} L270 78Z" fill="#5fc8f044" stroke="#5fc8f0" stroke-width="2"/><text x="10" y="14" fill="#d9dce6" font-size="12">${height === null || height === undefined ? 'Automatic banking' : height === 0 ? 'Flat turn' : height + ' m outside berm'}</text>`;
+      const heightLabel =
+        height === null || height === undefined
+          ? 'Automatic banking'
+          : height === 0
+            ? 'Flat turn'
+            : height + ' m outside berm';
+      profile.innerHTML =
+        `<path d="M10 78 L${points.join(' L')} L270 78Z" fill="#5fc8f044" stroke="#5fc8f0" ` +
+        `stroke-width="2"/><text x="10" y="14" fill="#d9dce6" ` +
+        `font-size="12">${heightLabel}` +
+        `</text>`;
       return;
     }
     if (!j) {
@@ -479,7 +559,10 @@ export class TrackEditor {
               : j.height * (0.5 + 0.5 * Math.cos((Math.PI * (local - j.rise - j.flat)) / j.fall));
       points.push(`${10 + (d / total) * 260},${78 - (h / 8) * 65}`);
     }
-    profile.innerHTML = `<path d="M10 78 L${points.join(' L')} L270 78Z" fill="#ff794b44" stroke="#ff794b" stroke-width="2"/><text x="10" y="14" fill="#d9dce6" font-size="12">${total.toFixed(1)} m long · ${j.height.toFixed(1)} m high</text>`;
+    profile.innerHTML =
+      `<path d="M10 78 L${points.join(' L')} L270 78Z" fill="#ff794b44" stroke="#ff794b" ` +
+      `stroke-width="2"/><text x="10" y="14" fill="#d9dce6" font-size="12">${total.toFixed(1)} m ` +
+      `long · ${j.height.toFixed(1)} m high</text>`;
   }
   private fit() {
     const b = this.preview.bounds;
@@ -495,7 +578,12 @@ export class TrackEditor {
         .join(' '),
       scale = Math.min((this.svg.clientWidth || 400) / this.view.w, (this.svg.clientHeight || 400) / this.view.h),
       r = 6 / scale;
-    let html = `<defs><marker id="editor-direction" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0L10 5L0 10Z" fill="#a3f6d4"/></marker></defs><polyline points="${line}" fill="none" stroke="#101725" stroke-width="16" stroke-linejoin="round"/><polyline points="${line}" fill="none" stroke="#b79b76" stroke-width="9.6" stroke-linejoin="round"/>`;
+    let html =
+      `<defs><marker id="editor-direction" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" ` +
+      `markerHeight="5" orient="auto"><path d="M0 0L10 5L0 10Z" fill="#a3f6d4"/></marker></defs>` +
+      `<polyline points="${line}" fill="none" stroke="#101725" stroke-width="16" ` +
+      `stroke-linejoin="round"/><polyline points="${line}" fill="none" stroke="#b79b76" ` +
+      `stroke-width="9.6" stroke-linejoin="round"/>`;
     const markers: string[] = [];
     this.draft.jumps.forEach((j, i) => {
       const s = j.position * this.preview.length,
@@ -506,14 +594,33 @@ export class TrackEditor {
           return `${q.x},${q.z}`;
         }).join(' ');
       const selected = this.selected.kind === 'jump' && this.selected.index === i;
-      html += `<polyline data-kind="jump" data-index="${i}" points="${band}" fill="none" stroke="${selected ? '#ffef9b' : j.highlight ? '#ffdc69' : '#ff794b'}" stroke-width="${selected ? 12 : 8}" opacity=".75"/>`;
+      html +=
+        `<polyline data-kind="jump" data-index="${i}" points="${band}" fill="none" ` +
+        `stroke="${selected ? '#ffef9b' : j.highlight ? '#ffdc69' : '#ff794b'}" ` +
+        `stroke-width="${selected ? 12 : 8}" opacity=".75"/>`;
       markers.push(
-        `<g data-kind="jump" data-index="${i}" role="button" tabindex="0" aria-label="O${i + 1} ${obstacleType(j)}${j.highlight ? ' highlighted for test' : ''}" aria-pressed="${selected}"><title>O${i + 1} · ${obstacleType(j)} · select and drag</title><rect x="${p.x - r * 2}" y="${p.z - r}" width="${r * 4}" height="${r * 2}" rx="${r * 0.4}" fill="${selected ? '#fff2c7' : '#572e22'}" stroke="${j.highlight ? '#ffdc69' : '#ff956e'}" stroke-width="${r * 0.25}"/><text x="${p.x}" y="${p.z + r * 0.5}" text-anchor="middle" fill="${selected ? '#181b26' : '#fff2c7'}" font-size="${r * 1.5}">O${i + 1}${j.highlight ? '★' : ''}</text></g>`,
+        `<g data-kind="jump" data-index="${i}" role="button" tabindex="0" aria-label="O${i + 1} ` +
+          `${obstacleType(j)}${j.highlight ? ' highlighted for test' : ''}" ` +
+          `aria-pressed="${selected}"><title>O${i + 1} · ${obstacleType(j)} · select and drag</title>` +
+          `<rect x="${p.x - r * 2}" y="${p.z - r}" width="${r * 4}" height="${r * 2}" ` +
+          `rx="${r * 0.4}" fill="${selected ? '#fff2c7' : '#572e22'}" ` +
+          `stroke="${j.highlight ? '#ffdc69' : '#ff956e'}" stroke-width="${r * 0.25}"/>` +
+          `<text x="${p.x}" y="${p.z + r * 0.5}" text-anchor="middle" ` +
+          `fill="${selected ? '#181b26' : '#fff2c7'}" ` +
+          `font-size="${r * 1.5}">O${i + 1}${j.highlight ? '★' : ''}</text></g>`,
       );
     });
     this.draft.points.forEach(([x, z], i) => {
       const selected = this.selected.kind === 'turn' && this.selected.index === i;
-      html += `<g data-kind="turn" data-index="${i}" role="button" tabindex="0" aria-label="T${i + 1} turn${i === 0 ? ' start point' : ''}" aria-pressed="${selected}"><title>T${i + 1} · select and drag turn</title><circle cx="${x}" cy="${z}" r="${r * 0.85}" fill="${selected ? '#e1f9ff' : '#243d55'}" stroke="#7fddff" stroke-width="${r * 0.25}"/><text x="${x + r}" y="${z + r * 1.5}" fill="#a7e9ff" stroke="#111723" stroke-width="${r * 0.25}" paint-order="stroke" font-size="${r * 1.4}">T${i + 1}</text></g>`;
+      html +=
+        `<g data-kind="turn" data-index="${i}" role="button" tabindex="0" aria-label="T${i + 1} ` +
+        `turn${i === 0 ? ' start point' : ''}" aria-pressed="${selected}">` +
+        `<title>T${i + 1} · select and drag turn</title>` +
+        `<circle cx="${x}" cy="${z}" r="${r * 0.85}" fill="${selected ? '#e1f9ff' : '#243d55'}" ` +
+        `stroke="#7fddff" stroke-width="${r * 0.25}"/>` +
+        `<text x="${x + r}" y="${z + r * 1.5}" fill="#a7e9ff" stroke="#111723" ` +
+        `stroke-width="${r * 0.25}" paint-order="stroke" font-size="${r * 1.4}">T${i + 1}</text>` +
+        `</g>`;
     });
     html += markers.join('');
     const start = this.preview.at(0),
@@ -521,7 +628,16 @@ export class TrackEditor {
       b = this.preview.at(0, 9),
       direction = this.preview.at(25),
       label = this.preview.at(0, 28);
-    html += `<g pointer-events="none"><line x1="${a.x}" y1="${a.z}" x2="${b.x}" y2="${b.z}" stroke="#101725" stroke-width="6"/><line x1="${a.x}" y1="${a.z}" x2="${b.x}" y2="${b.z}" stroke="#fff" stroke-width="4" stroke-dasharray="2 2"/><line x1="${start.x}" y1="${start.z}" x2="${direction.x}" y2="${direction.z}" stroke="#a3f6d4" stroke-width="${r * 0.5}" marker-end="url(#editor-direction)"/><text x="${label.x}" y="${label.z - r * 2}" fill="#a3f6d4" stroke="#111723" stroke-width="${r * 0.6}" paint-order="stroke" font-size="${r * 2}" font-weight="bold" text-anchor="middle">START / FINISH</text></g>`;
+    html +=
+      `<g pointer-events="none"><line x1="${a.x}" y1="${a.z}" x2="${b.x}" y2="${b.z}" ` +
+      `stroke="#101725" stroke-width="6"/>` +
+      `<line x1="${a.x}" y1="${a.z}" x2="${b.x}" y2="${b.z}" stroke="#fff" stroke-width="4" ` +
+      `stroke-dasharray="2 2"/><line x1="${start.x}" y1="${start.z}" x2="${direction.x}" ` +
+      `y2="${direction.z}" stroke="#a3f6d4" stroke-width="${r * 0.5}" ` +
+      `marker-end="url(#editor-direction)"/>` +
+      `<text x="${label.x}" y="${label.z - r * 2}" fill="#a3f6d4" stroke="#111723" ` +
+      `stroke-width="${r * 0.6}" paint-order="stroke" font-size="${r * 2}" font-weight="bold" ` +
+      `text-anchor="middle">START / FINISH</text></g>`;
     this.svg.innerHTML = html;
   }
   private mapPoint(e: PointerEvent) {

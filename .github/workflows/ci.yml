@@ -21,6 +21,10 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Formatting (Prettier)
+        run: npm run format:check
+      - name: Line length (140 characters in src/)
+        run: npm run lint:lines
       - name: Type check
         run: npm run typecheck
       - name: Unit tests

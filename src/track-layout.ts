@@ -58,7 +58,8 @@ export function moveObstacleToGap(
   const available = spacing.before + spacing.after;
   if (gap > available + 0.001)
     throw new Error(
-      `Only ${Math.max(0, available).toFixed(1)} m of clear ground is available between these neighbours. Shorten or move an obstacle first.`,
+      `Only ${Math.max(0, available).toFixed(1)} m of clear ground is available between these ` +
+        `neighbours. Shorten or move an obstacle first.`,
     );
   const start =
     side === 'before'

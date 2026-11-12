@@ -6,6 +6,9 @@ import {obstacleMarker, surfaceMarker, markerSign, startMarker, disposeMarkers} 
 import {dirtMaterial} from './track-material';
 export type PreviewSelection = {kind: 'jump' | 'turn'; index: number};
 /** A lightweight, on-demand scene sharing the actual race surface and materials. */
+function bermLabel(height: number | null | undefined) {
+  return height === undefined || height === null ? 'Automatic berm' : height === 0 ? 'Flat turn' : height + ' m berm';
+}
 export class TrackPreview {
   private renderer: THREE.WebGLRenderer;
   private scene = new THREE.Scene();
@@ -97,7 +100,8 @@ export class TrackPreview {
   select(selection: PreviewSelection, valid = true) {
     if (!this.track) return;
     this.selection = selection;
-    const key = `${selection.kind}:${selection.index}:${selection.kind === 'jump' && this.track.obstacles[selection.index] ? obstacleType(this.track.obstacles[selection.index]) : ''}`,
+    const obstacle = this.track.obstacles[selection.index];
+    const key = `${selection.kind}:${selection.index}:${selection.kind === 'jump' && obstacle ? obstacleType(obstacle) : ''}`,
       changed = key !== this.selectedKey;
     this.selectedKey = key;
     this.clearHighlight();
@@ -110,7 +114,9 @@ export class TrackPreview {
         p = track.at(mid);
       target = new THREE.Vector3(p.x, track.height(mid) + 0.4, p.z);
       this.highlight.add(obstacleMarker(track, selection.index));
-      this.label.textContent = `O${selection.index + 1} · ${obstacleType(jump)} · ${jump.height.toFixed(1)} m high · ${total.toFixed(1)} m long`;
+      this.label.textContent =
+        `O${selection.index + 1} · ${obstacleType(jump)} · ${jump.height.toFixed(1)} m high · ` +
+        `${total.toFixed(1)} m long`;
     } else {
       const point = track.controlPoints[selection.index] || track.controlPoints[0],
         p = track.project(point[0], point[1]);
@@ -130,7 +136,7 @@ export class TrackPreview {
       }
       this.label.textContent =
         selection.kind === 'turn'
-          ? `T${selection.index + 1} · ${track.bermHeights?.[selection.index] === undefined || track.bermHeights[selection.index] === null ? 'Automatic berm' : track.bermHeights[selection.index] === 0 ? 'Flat turn' : track.bermHeights[selection.index] + ' m berm'}`
+          ? `T${selection.index + 1} · ${bermLabel(track.bermHeights?.[selection.index])}`
           : 'Live · No jumps placed';
     }
     if (!valid) this.label.textContent = 'Showing last valid shape · fix the highlighted layout issue';
