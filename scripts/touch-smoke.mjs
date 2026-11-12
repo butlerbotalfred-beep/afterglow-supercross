@@ -1,13 +1,15 @@
 import {execFileSync} from 'node:child_process';
 import {writeFileSync} from 'node:fs';
 import assert from 'node:assert/strict';
+// Game URL to test; set AFTERGLOW_URL when the dev server isn't on localhost:5173.
+const BASE_URL = process.env.AFTERGLOW_URL || 'http://localhost:5173';
 const cli = (...args) =>
   execFileSync(
     'npm',
     ['exec', '--yes', '--package=agent-browser@0.27.0', '--', 'agent-browser', '--session', 'iphone-check', ...args],
     {encoding: 'utf8', timeout: 30000},
   ).trim();
-cli('open', 'http://localhost:5173');
+cli('open', BASE_URL);
 const socket = new WebSocket(cli('get', 'cdp-url'));
 await new Promise((resolve, reject) => {
   socket.onopen = resolve;
@@ -31,7 +33,7 @@ const send = (method, params = {}, sessionId) =>
     socket.send(JSON.stringify({id, method, params, sessionId}));
   });
 const targets = await send('Target.getTargets');
-const target = targets.targetInfos.find(t => t.type === 'page' && t.url.startsWith('http://localhost:5173'));
+const target = targets.targetInfos.find(t => t.type === 'page' && t.url.startsWith(BASE_URL));
 const {sessionId} = await send('Target.attachToTarget', {targetId: target.targetId, flatten: true});
 const cdp = (method, params) => send(method, params, sessionId);
 const evaluate = async expression => {
