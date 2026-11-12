@@ -1,5 +1,7 @@
 import {execFileSync} from 'node:child_process';
 import {writeFileSync} from 'node:fs';
+// Game URL to test; set AFTERGLOW_URL when the dev server isn't on localhost:5173.
+const BASE_URL = process.env.AFTERGLOW_URL || 'http://localhost:5173';
 const cli = (args, input) =>
   execFileSync(
     'npm',
@@ -11,7 +13,7 @@ const evaluate = source => {
   if (!parsed.success) throw new Error(JSON.stringify(parsed));
   return parsed.data.result;
 };
-cli(['open', 'http://localhost:5173']);
+cli(['open', BASE_URL]);
 cli(['set', 'viewport', '1440', '900']);
 const report = {date: new Date().toISOString(), courses: [], checks: []};
 try {

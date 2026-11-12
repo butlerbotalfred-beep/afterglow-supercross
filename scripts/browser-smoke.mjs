@@ -1,5 +1,7 @@
 import {execFileSync} from 'node:child_process';
 import {writeFileSync} from 'node:fs';
+// Game URL to test; set AFTERGLOW_URL when the dev server isn't on localhost:5173.
+const BASE_URL = process.env.AFTERGLOW_URL || 'http://localhost:5173';
 const cli = (args, input) =>
   execFileSync(
     'npm',
@@ -22,7 +24,7 @@ const evaluate = source => {
   return parsed.data.result;
 };
 const results = {date: new Date().toISOString(), checks: [], performance: []};
-console.log(cli(['open', 'http://localhost:5173']));
+console.log(cli(['open', BASE_URL]));
 cli(['set', 'viewport', '1440', '900']);
 const stage1 = await evaluate(`(async()=>{
  const wait=ms=>new Promise(r=>setTimeout(r,ms)),g=window.__game;
