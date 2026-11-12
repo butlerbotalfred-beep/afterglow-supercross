@@ -1,0 +1,16 @@
+{
+  "note": "Production build sizes at commit 038508b, before any Stage 0 change. Later size budgets are judged against this.",
+  "javascriptKb": 758.55,
+  "javascriptGzipKb": 205.4,
+  "javascriptFiles": [
+    {
+      "file": "assets/index-CWsSQ6qq.js",
+      "kb": 758.55,
+      "gzipKb": 205.4
+    }
+  ],
+  "artMb": 15.56,
+  "distMb": 16.95,
+  "distBytes": 16948080,
+  "commit": "038508b"
+}
