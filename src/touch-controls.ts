@@ -12,16 +12,22 @@ export class TouchControls {
     this.root.id = 'touch-controls';
     this.root.className = 'touch-controls hidden';
     this.root.setAttribute('aria-label', 'iPhone riding controls');
-    this.root.innerHTML = `
+    this.root.innerHTML =
+      `
       <div class="touch-steering">
         <div class="touch-stick" role="group" aria-label="Drag to steer; up or down adjusts air pitch" data-touch="stick">
           <span class="stick-cross horizontal"></span><span class="stick-cross vertical"></span>
           <span class="stick-arrow left">‹</span><span class="stick-arrow right">›</span><span class="touch-knob"></span>
         </div><span class="touch-caption">STEER ↔ <span>· AIR PITCH ↕</span></span>
       </div>
-      <button type="button" class="touch-nose" data-touch="noseDown" aria-label="Hold to dip the nose in the air">↘<span>NOSE DOWN</span></button>
-      <div class="touch-utilities"><button type="button" data-touch="reset" aria-label="Recover to checkpoint">↺<span>RECOVER</span></button><button type="button" class="touch-pause" aria-label="Pause race">Ⅱ<span>PAUSE</span></button></div>
-      <div class="touch-pedals"><button type="button" class="touch-brake" data-touch="brake" aria-label="Hold to brake">▰<span>BRAKE</span></button><button type="button" class="touch-throttle" data-touch="throttle" aria-label="Hold to accelerate">↑<span>GAS</span></button></div>
+      <button type="button" class="touch-nose" data-touch="noseDown" ` +
+      `aria-label="Hold to dip the nose in the air">↘<span>NOSE DOWN</span></button>
+      <div class="touch-utilities">` +
+      `<button type="button" data-touch="reset" aria-label="Recover to checkpoint">↺<span>RECOVER</span></button>` +
+      `<button type="button" class="touch-pause" aria-label="Pause race">Ⅱ<span>PAUSE</span></button></div>
+      <div class="touch-pedals">` +
+      `<button type="button" class="touch-brake" data-touch="brake" aria-label="Hold to brake">▰<span>BRAKE</span></button>` +
+      `<button type="button" class="touch-throttle" data-touch="throttle" aria-label="Hold to accelerate">↑<span>GAS</span></button></div>
       <span class="touch-orientation">ROTATE TO LANDSCAPE FOR A WIDER VIEW</span>`;
     parent.append(this.root);
     this.stick = this.root.querySelector('.touch-stick')!;
@@ -48,12 +54,14 @@ export class TouchControls {
     });
     window.addEventListener('blur', () => this.clear());
     window.addEventListener('resize', () => this.clear());
-    document.addEventListener('visibilitychange', () => { if (document.hidden) this.clear(); });
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) this.clear();
+    });
   }
 
   private moveStick(event: PointerEvent) {
     const rect = this.stick.getBoundingClientRect();
-    const radius = rect.width * .34;
+    const radius = rect.width * 0.34;
     const dx = event.clientX - (rect.left + rect.width / 2);
     const dy = event.clientY - (rect.top + rect.height / 2);
     const distance = Math.hypot(dx, dy);
@@ -83,7 +91,10 @@ export class TouchControls {
   setDirections(steering: TouchDirection, pitch: TouchDirection) {
     this.clear();
     this.input.setDirections(steering, pitch);
-    this.stick.setAttribute('aria-label', `Drag left to steer ${steering === 'regular' ? 'left' : 'right'}; drag up to pitch nose ${pitch === 'regular' ? 'up' : 'down'}`);
+    this.stick.setAttribute(
+      'aria-label',
+      `Drag left to steer ${steering === 'regular' ? 'left' : 'right'}; drag up to pitch nose ${pitch === 'regular' ? 'up' : 'down'}`,
+    );
   }
 
   show(visible: boolean) {

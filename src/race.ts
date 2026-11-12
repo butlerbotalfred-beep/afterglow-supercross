@@ -1,7 +1,12 @@
 /** Sixteen ordered timing planes make track progress independent of raw position. */
 export const CHECKPOINT_COUNT = 16;
 export const OFF_TRACK_FORWARD_LIMIT = 30;
-interface Excursion { s:number; lateral:number; distance:number; forward:number; }
+interface Excursion {
+  s: number;
+  lateral: number;
+  distance: number;
+  forward: number;
+}
 
 export interface Progress {
   lap: number;
@@ -16,25 +21,34 @@ export interface Progress {
 }
 
 const wrap = (value: number, length: number) => ((value % length) + length) % length;
-const shortestDelta = (from: number, to: number, length: number) =>
-  wrap(to - from + length / 2, length) - length / 2;
+const shortestDelta = (from: number, to: number, length: number) => wrap(to - from + length / 2, length) - length / 2;
 
 /** initialS may be negative for riders staged just behind the start line. */
 export function createProgress(initialS = 0): Progress {
   return {
-    lap: 0, nextCheckpoint: 1, lastS: initialS,
-    distanceSinceCheckpoint: initialS, routeBroken: false,
-    offTrack: false, wrongWay: false, lastLateral: 0, excursion: null,
+    lap: 0,
+    nextCheckpoint: 1,
+    lastS: initialS,
+    distanceSinceCheckpoint: initialS,
+    routeBroken: false,
+    offTrack: false,
+    wrongWay: false,
+    lastLateral: 0,
+    excursion: null,
   };
 }
 
 /** Returns true only on a newly completed lap, after all sixteen planes. */
 export function updateProgress(
-  progress: Progress, s: number, lateral: number,
-  trackLength: number, halfWidth: number, dt: number,
+  progress: Progress,
+  s: number,
+  lateral: number,
+  trackLength: number,
+  halfWidth: number,
+  dt: number,
 ): boolean {
-  if (![s, lateral, trackLength, halfWidth, dt].every(Number.isFinite)
-    || trackLength <= 0 || halfWidth <= 0 || dt <= 0) return false;
+  if (![s, lateral, trackLength, halfWidth, dt].every(Number.isFinite) || trackLength <= 0 || halfWidth <= 0 || dt <= 0)
+    return false;
 
   const spacing = trackLength / CHECKPOINT_COUNT;
   const previousS = wrap(progress.lastS, trackLength);
@@ -50,8 +64,12 @@ export function updateProgress(
   // re-entry; a shortcut always retains the original departure point.
   const teleport = Math.abs(delta) > spacing + 1e-7;
   if (!progress.excursion && (progress.offTrack || teleport)) {
-    progress.excursion = {s:previousS, lateral:previousLateral,
-      distance:progress.distanceSinceCheckpoint, forward:0};
+    progress.excursion = {
+      s: previousS,
+      lateral: previousLateral,
+      distance: progress.distanceSinceCheckpoint,
+      forward: 0,
+    };
   }
   let creditDelta = delta;
   let creditStart = previousS;
@@ -61,8 +79,8 @@ export function updateProgress(
     if (teleport || exit.forward > OFF_TRACK_FORWARD_LIMIT) progress.routeBroken = true;
     if (progress.routeBroken) {
       // Returning to the departure point under your own power is also valid.
-      if (!progress.offTrack && Math.abs(shortestDelta(exit.s,currentS,trackLength)) < 1) {
-        exit.forward = shortestDelta(exit.s,currentS,trackLength);
+      if (!progress.offTrack && Math.abs(shortestDelta(exit.s, currentS, trackLength)) < 1) {
+        exit.forward = shortestDelta(exit.s, currentS, trackLength);
         progress.distanceSinceCheckpoint = exit.distance;
         progress.routeBroken = false;
       } else return false;
@@ -82,7 +100,9 @@ export function updateProgress(
   while (distanceToPlane <= creditDelta + 1e-7 && progress.distanceSinceCheckpoint >= spacing - 1e-5) {
     progress.distanceSinceCheckpoint -= spacing;
     if (progress.nextCheckpoint === 0) {
-      progress.lap += 1; progress.nextCheckpoint = 1; completedLap = true;
+      progress.lap += 1;
+      progress.nextCheckpoint = 1;
+      completedLap = true;
     } else progress.nextCheckpoint = (progress.nextCheckpoint + 1) % CHECKPOINT_COUNT;
     distanceToPlane += spacing;
   }
@@ -93,17 +113,23 @@ export function updateProgress(
 export function progressDistance(progress: Progress, trackLength: number): number {
   const spacing = trackLength / CHECKPOINT_COUNT;
   const previousCheckpoint = (progress.nextCheckpoint + CHECKPOINT_COUNT - 1) % CHECKPOINT_COUNT;
-  return progress.lap * trackLength + previousCheckpoint * spacing
-    + Math.max(0, Math.min(spacing, progress.distanceSinceCheckpoint));
+  return (
+    progress.lap * trackLength +
+    previousCheckpoint * spacing +
+    Math.max(0, Math.min(spacing, progress.distanceSinceCheckpoint))
+  );
 }
 
 /** Undo only the off-track excursion, preserving every previously earned metre. */
-export function restoreDeparture(progress: Progress): {s:number;lateral:number} | null {
+export function restoreDeparture(progress: Progress): {s: number; lateral: number} | null {
   const exit = progress.excursion;
   if (!exit) return null;
-  progress.lastS = exit.s; progress.lastLateral = exit.lateral;
+  progress.lastS = exit.s;
+  progress.lastLateral = exit.lateral;
   progress.distanceSinceCheckpoint = exit.distance;
-  progress.excursion = null; progress.routeBroken = false;
-  progress.offTrack = false; progress.wrongWay = false;
-  return {s:exit.s,lateral:exit.lateral};
+  progress.excursion = null;
+  progress.routeBroken = false;
+  progress.offTrack = false;
+  progress.wrongWay = false;
+  return {s: exit.s, lateral: exit.lateral};
 }

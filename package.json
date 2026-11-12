@@ -7,6 +7,9 @@
     "dev": "vite --host 0.0.0.0",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
+    "format": "prettier --write src tests scripts",
+    "format:check": "prettier --check src tests scripts",
+    "lint:lines": "node scripts/check-line-length.mjs",
     "build:report": "node scripts/build-report.mjs",
     "preview": "vite preview --host 0.0.0.0",
     "test": "tsx --test tests/*.test.ts",
@@ -27,6 +30,7 @@
   "devDependencies": {
     "@types/node": "22.19.15",
     "@types/three": "0.183.1",
+    "prettier": "3.9.10",
     "tsx": "4.23.15",
     "typescript": "7.0.2",
     "vite": "8.3.8"
