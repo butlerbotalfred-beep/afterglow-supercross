@@ -1,3 +1,43 @@
+# M0.2 Reformat and split main.ts — 12 November 2026
+
+Prettier 3.9.10 formats `src`, `tests` and `scripts` in one commit (cfab1de, listed in `.git-blame-ignore-revs`). Then main.ts is split into modules by moving code, not rewriting it. CI now runs `format:check` and `lint:lines`.
+
+| Completion box | Result | Evidence |
+| --- | --- | --- |
+| main.ts is 120 lines or fewer | Pass | 10 lines: fonts, styles and `import './game/session'` |
+| No line in src/ is over 140 characters (CI check) | Pass | `npm run lint:lines`, now a CI step |
+| `format:check` passes in CI | Pass | `npm run format:check`, now a CI step |
+| All 86+ tests pass with no test logic changed | Pass | 91 of 91 pass. Re-printing every test and script file with esbuild gives identical code before and after the format commit, apart from one object key in `scripts/controller-plugin.ts` that lost its quotes (`'Connection'` became `Connection`). |
+| Pace gate exact | Pass | 10 of 10 races at 0.000% with 0 crashes and 0 recoveries |
+| Production JS within 2% of baseline | Pass | 760.03 KB (206.12 KB gzip) against 758.55 KB, +0.2% (this includes smooth rendering from PR #3) |
+| browser-smoke, touch-smoke and course-smoke pass on the Mac | Waiting for Michael | These need real frame rates. In the cloud the software GPU runs at about 2 fps, and browser-smoke fails its "keyboard throttle" check in the same way on the code before and after the split. |
+
+## How "no behaviour change" was checked
+
+- **Built JS after the format commit** is byte-identical to the build before it, apart from the build stamp.
+- **Page HTML at nine points** of a scripted session is identical before and after the split, and so is every rider's final position and the race time to full precision. The nine points are: setup, a second course, countdown, racing, paused, results after a full 1-lap race, practice setup, practice and the track editor.
+- **Every shader the GPU compiled** in a headless run (54 programs, including bloom and ambient occlusion) is identical before and after. The sky shader didn't compile in that short run, so its source text was compared directly instead, and it is also identical.
+- **Long strings** are split into concatenated pieces (`'abc' + 'def'`). The splitting script checks that the pieces rejoin to the original text.
+- **Nine long `${...}` expressions** were moved into named local values: two in hud.ts, one in setup-screen.ts, four in track-editor.ts and two in track-preview.ts.
+- **Moved functions** that used to read main.ts variables now receive them as parameters (`HudContext`, `RenderContext`). Their bodies are otherwise unchanged.
+
+## Where the code went
+
+| File | Lines | What it holds |
+| --- | --- | --- |
+| src/main.ts | 10 | Entry point |
+| src/game/session.ts | 906 | Race state, fixed-step loop, setup/pause/results flow, menus, controller joins, dev hooks (`window.__game` unchanged) |
+| src/ui/setup-screen.ts | 154 | Page and setup markup, device slots, NPC options, controller status text |
+| src/ui/pause-menu.ts, results-screen.ts, ride-settings.ts, dom.ts | 99 | Pause and results markup, ranking, shared settings controls, DOM helpers |
+| src/ui/hud.ts | 202 | Race chrome, split-screen viewports, rider panels, mini map |
+| src/render/renderer.ts | 99 | Renderer setup, resize and per-viewport drawing |
+
+session.ts is still large because it owns the shared race state. Shrinking it further would mean changing how that state is passed around, which is more than a move. That belongs in a later milestone.
+
+## Play review (D, about 5 minutes, on the Mac)
+
+Xbox join, race one lap, pause and resume, editor move and save, test ride, iPhone touch lap.
+
 # Smooth rendering between physics steps — 12 November 2026
 
 Reported on 11 November: on Michael's MacBook the game read 60 fps on average (old build, served from the Mac Studio over Tailscale) but looked "very stuttery". Cause: physics runs at a fixed 1/120 s step and frames drew the raw physics state, so frames that ran an uneven number of steps jumped. Fix: riders and chase cameras are drawn between their last two physics poses (`src/render-interp.ts`). Physics is unchanged: `npm run pace-gate -- --tolerance 0` 10/10 exact, `npm run landing-harness -- --check` 5/5.
