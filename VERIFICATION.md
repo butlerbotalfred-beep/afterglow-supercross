@@ -1,3 +1,13 @@
+# Smooth rendering between physics steps — 12 November 2026
+
+Reported on 11 November: on Michael's MacBook the game read 60 fps on average (old build, served from the Mac Studio over Tailscale) but looked "very stuttery". Cause: physics runs at a fixed 1/120 s step and frames drew the raw physics state, so frames that ran an uneven number of steps jumped. Fix: riders and chase cameras are drawn between their last two physics poses (`src/render-interp.ts`). Physics is unchanged: `npm run pace-gate -- --tolerance 0` 10/10 exact, `npm run landing-harness -- --check` 5/5.
+
+Play test, MacBook (Chrome, local dev server on the `smooth-rendering` branch, Dusk Valley, `?review=1`, Grid then Run): **120.0 fps, slowest 1% 9.4 ms, 0.0% uneven frames**, 761 draws per view. Michael: "it was much smoother".
+
+Caveat: this run hit 120 fps, where each frame runs exactly one physics step, so it doesn't by itself separate the fix from the higher refresh rate. The earlier 60 fps run went over Tailscale, and its browser wasn't recorded. A 60 Hz run of this branch would isolate the fix.
+
+---
+
 # M0.1 Baseline and safety net — 11 November 2026
 
 Build plan v2, Stage 0, milestone M0.1. No gameplay change. Measured in the cloud build environment (Node 22.23.4, Linux) on the commit this section ships in.
