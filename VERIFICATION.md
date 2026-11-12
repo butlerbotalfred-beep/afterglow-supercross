@@ -10,7 +10,7 @@ Build plan v2, Stage 0, milestone M0.1. No gameplay change. Measured in the clou
 | landing-harness reproduces the baseline pitch gap (0.03 to 0.12%) | 0.09 / 0.03 / 0.12 / 0.03 / 0.06% (table below) | `npm run landing-harness -- --check` | Pass |
 | baselines/build.json records 758.55 KB JS, 205.40 KB gzipped, and the dist/ total | 758.55 KB, 205.40 KB gzipped, dist/ 16,948,080 bytes (16.95 MB), art 15.56 MB, measured on commit 038508b before any change | `node scripts/build-report.mjs --write` | Pass |
 | The setup screen shows the build stamp | `BUILD <short hash>` in the setup header, visible without scrolling at 1440 × 900 and at 844 × 390 (iPhone landscape). A `+` suffix means uncommitted local edits | Playwright against `vite preview` | Pass |
-| Frame rate and load time on the Mac and the iPhone are recorded here | Not yet measured: needs Michael's play review (D) | `?review=1`, Grid then Run | Open |
+| Frame rate and load time on the Mac and the iPhone are recorded here | Measured by Michael on 11 and 12 November over Tailscale from another network (details below). iPhone: about 53 fps, first load 7 to 10 s. MacBook: 60 fps average but visibly stuttery. Mac Studio fps not yet measured | `?review=1`, Grid then Run; stopwatch | Open: Mac Studio fps, or sign-off to use the MacBook |
 
 ## Pace gate: AI race winner, 3 laps, 4 NPC riders
 
@@ -40,7 +40,17 @@ All ten races: 4 of 4 finishers, 0 crashes, 0 recoveries. The committed `baselin
 
 The build stamp adds about 0.1 KB of JavaScript (758.66 KB, 205.45 KB gzipped on this branch, locally and in CI; the exact figure moves by a few bytes with the commit hash). `baselines/build.json` keeps the pre-change numbers as the reference for later budgets.
 
-## Waiting on the play review (D, about 5 minutes)
+## Device measurements (play review D)
+
+| Device | Build | How reached | fps (average) | First load | Notes |
+| --- | --- | --- | --- | --- | --- |
+| iPhone | 038508b (Mac Studio dev server) | Tailscale, another network | about 53 | not timed | Looked smoother than the MacBook |
+| iPhone | Dev server over Tailscale, another network (by elimination the MacBook's `smooth-rendering` copy on port 5180; not confirmed) | Tailscale | not read | 7 to 10 s by count | Dev-server load: about 56 separate module requests. M0.4 should re-time under the same conditions |
+| MacBook (Chrome) | 038508b (Mac Studio dev server) | Tailscale, another network | 60 | not timed | "Not playable, very stuttery": fixed-step judder, see PR #3 |
+| MacBook (Chrome) | `smooth-rendering` (PR #3), local | localhost | 120 | not timed | Slowest 1% 9.4 ms, 0.0% uneven frames, "much smoother" |
+| Mac Studio | none yet | none yet | not measured | not timed | Michael has no physical access yet |
+
+## Original instructions for the play review (D, about 5 minutes)
 
 On the Mac (dev server, which is how the Mac service runs) and on the iPhone: open the game with `?review=1`, press Grid then Run, and read the frame rate the review panel shows. Time the first load on the iPhone with a stopwatch. The numbers go in the last row of the table above.
 
