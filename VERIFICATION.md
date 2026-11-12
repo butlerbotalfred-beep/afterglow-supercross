@@ -10,7 +10,7 @@ Build plan v2, Stage 0, milestone M0.1. No gameplay change. Measured in the clou
 | landing-harness reproduces the baseline pitch gap (0.03 to 0.12%) | 0.09 / 0.03 / 0.12 / 0.03 / 0.06% (table below) | `npm run landing-harness -- --check` | Pass |
 | baselines/build.json records 758.55 KB JS, 205.40 KB gzipped, and the dist/ total | 758.55 KB, 205.40 KB gzipped, dist/ 16,948,080 bytes (16.95 MB), art 15.56 MB, measured on commit 038508b before any change | `node scripts/build-report.mjs --write` | Pass |
 | The setup screen shows the build stamp | `BUILD <short hash>` in the setup header, visible without scrolling at 1440 × 900 and at 844 × 390 (iPhone landscape). A `+` suffix means uncommitted local edits | Playwright against `vite preview` | Pass |
-| Frame rate and load time on the Mac and the iPhone are recorded here | Measured by Michael on 11 and 12 November over Tailscale from another network (details below). iPhone: about 53 fps, first load 7 to 10 s. MacBook: 60 fps average but visibly stuttery. Mac Studio fps not yet measured | `?review=1`, Grid then Run; stopwatch | Open: Mac Studio fps, or sign-off to use the MacBook |
+| Frame rate and load time on the Mac and the iPhone are recorded here | Measured by Michael on 11 and 12 November over Tailscale from another network (details below). iPhone: about 53 fps, first load 7 to 10 s. MacBook: 60 fps average but visibly stuttery. Mac Studio fps not yet measured | `?review=1`, Grid then Run; stopwatch | Pass. Michael chose on 12 November to count the MacBook now and add the Mac Studio as an extra row when he is next at it (box change approved under rule 1) |
 
 ## Pace gate: AI race winner, 3 laps, 4 NPC riders
 
