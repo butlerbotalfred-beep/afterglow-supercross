@@ -76,7 +76,8 @@ export interface TrackLayout {
   bermHeights?: (number | null)[];
 }
 export const LAYOUT_KEY = 'afterglow.track-layouts.v1';
-const ids = ['dusk', 'canyon', 'alpine', 'coast', 'quarry'];
+export const COURSE_IDS: readonly CourseId[] = ['dusk', 'canyon', 'alpine', 'coast', 'quarry'];
+const ids: readonly string[] = COURSE_IDS;
 const bounded = (n: unknown, min: number, max: number) =>
   typeof n === 'number' && Number.isFinite(n) && n >= min && n <= max;
 export function validateLayout(value: unknown): TrackLayout {

@@ -1,11 +1,10 @@
 // The game session: race state, the fixed-step loop, setup/pause/results flow, menus and controller joins.
 import * as THREE from 'three';
 import {MenuPad, MenuFocus, type MenuEvent} from '../menu-controller';
-import {loadSlideAggression, normalizeSlideAggression, SLIDE_AGGRESSION_KEY} from '../handling-settings';
 import {obstacleMarker} from '../track-markers';
 import {Track} from '../track';
 import {TrackEditor} from '../track-editor';
-import {layoutFromTrack, loadLayout, saveLayout, type TrackLayout} from '../track-layout';
+import {layoutFromTrack, type TrackLayout} from '../track-layout';
 import {COURSES, courseById} from '../courses';
 import {disposeWorld} from '../scenery';
 import {createWorld} from '../world';
@@ -26,8 +25,10 @@ import {
   readBrowserGamepads,
   controllerJoinSlot,
 } from '../input';
-import {makeRider, stepRider, collide, npcControl, idleControl, type Rider} from '../physics';
-import {TUNING, COLORS} from '../config';
+import {npcControl, idleControl, type Rider} from '../physics';
+import {TUNING} from '../config';
+import {browserStorage, SaveStore} from '../save';
+import {devicesReady, RaceSession} from './race-session';
 import {blendPose, capturePose, pacingStats, type Pose} from '../render-interp';
 import {createRenderer, renderViews, resizeRenderer, type RenderContext} from '../render/renderer';
 import {el, setVisible} from '../ui/dom';
@@ -45,10 +46,6 @@ import {
 } from '../ui/setup-screen';
 
 const reviewEnabled = import.meta.env.DEV && new URLSearchParams(location.search).has('review');
-let reviewDrive = false,
-  reviewFrozen = false,
-  reviewCrashTest = '';
-type Phase = 'setup' | 'countdown' | 'racing' | 'results';
 const app = document.querySelector<HTMLDivElement>('#app')!;
 app.innerHTML = appShellHtml();
 const {renderer, lightWorld} = createRenderer(el<HTMLCanvasElement>('game'));
@@ -60,52 +57,59 @@ const input = new InputManager(undefined, menuGamepads, () => touchControls.inpu
   audio = new GameAudio();
 el('track-length').textContent = String(Math.round(track.length));
 el('track-sectors').textContent = String(track.sections.filter(s => !s.name.startsWith('BERM')).length);
-const touchControls = new TouchControls(app, () => togglePause());
+const touchControls = new TouchControls(app, () => session.togglePause());
 let dust = new Dust(scene);
 const effects = new RaceEffects(renderer);
 let sceneDrawCalls = 0;
 const preview = new THREE.PerspectiveCamera(58, 1, 0.1, 1800);
 let iphoneMode = false;
-let phase: Phase = 'setup',
-  paused = false,
-  practice = false,
+let practice = false,
   humanCount = 1,
-  npcCount = 5,
-  lapCount = 3,
-  difficulty = 'club';
-let slideAggression = 1;
-try {
-  slideAggression = loadSlideAggression(localStorage);
-} catch {}
-let raceTime = 0,
-  countdown = 3.8,
-  firstFinish: number | null = null,
-  cameraDistance: number = TUNING.cameraDistance,
+  npcCount = 5;
+const save = new SaveStore(browserStorage());
+// Race flow and rules live in RaceSession; this file is the browser around it.
+const session = new RaceSession(input, {
+  countdown: n => (el('countdown').innerHTML = `<small>FIND YOUR LINE</small><strong>${n}</strong>`),
+  racing: () => setVisible('countdown', false),
+  cue: (frequency, seconds) => audio.cue(frequency, seconds),
+  landing: impact => audio.landing(impact),
+  pause(nowPaused, missing) {
+    touchControls.show(iphoneMode && !nowPaused);
+    setVisible('pause', nowPaused);
+    el('pause-message').textContent = pauseMessage(missing);
+    audio.update(0, 0, false);
+  },
+  results() {
+    touchControls.show(false);
+    setVisible('results', true);
+    setVisible('countdown', false);
+    audio.update(0, 0, false);
+    showResultsTable(track, session.riders, session.lapCount, session.raceTime);
+  },
+});
+session.slideAggression = save.slideAggression;
+let cameraDistance: number = TUNING.cameraDistance,
   cameraShake: number = TUNING.cameraShake,
   renderScale = 1;
 let assignments: (Device | null)[] = [{kind: 'keyboard'}, null, null, null],
   ready = [true, false, false, false];
-let riders: Rider[] = [],
-  models: ReturnType<typeof createBike>[] = [],
+let models: ReturnType<typeof createBike>[] = [],
   cameras: ChaseCamera[] = [];
 let viewHud: HTMLElement[] = [],
   fpsFrames: number[] = [],
   lastHud = 0,
-  globalTime = 0,
-  lastTickSound = 4,
-  accumulator = 0;
+  globalTime = 0;
 let prevPoses: Pose[] = [],
   stepCounts: number[] = [];
 let lastPadSignature = '',
-  padButtons = new Map<number, boolean>(),
-  override = new Map<number, Control>();
+  padButtons = new Map<number, boolean>();
 let frameCount = 0;
 let activeLayout: TrackLayout | null = null;
 let testMarkers = new THREE.Group();
 scene.add(testMarkers);
 const editor = new TrackEditor(
   (layout, ride) => {
-    saveLayout(layout, localStorage); // Throw before changing the race if browser storage fails.
+    save.saveLayout(layout); // Throw before changing the race if browser storage fails.
     activeLayout = layout;
     el<HTMLSelectElement>('track-layout').value = 'custom';
     rebuildTrack(new Track(courseById(layout.courseId), layout));
@@ -118,16 +122,16 @@ const editor = new TrackEditor(
   () => setVisible('setup', true),
 );
 function openEditor() {
-  reviewDrive = false;
-  reviewFrozen = false;
-  reviewCrashTest = '';
+  session.reviewDrive = false;
+  session.reviewFrozen = false;
+  session.reviewCrashTest = '';
   toSetup();
   setVisible('setup', false);
   editor.open(activeLayout || layoutFromTrack(track));
 }
 function rebuildTrack(next: Track) {
   touchControls.clear();
-  override.clear();
+  session.override.clear();
   disposeWorld(scene);
   models = [];
   track = next;
@@ -144,7 +148,7 @@ function rebuildTrack(next: Track) {
   renderer.renderLists.dispose();
 }
 function layoutChoice() {
-  const stored = loadLayout(track.course.id, localStorage);
+  const stored = save.layout(track.course.id);
   el<HTMLOptionElement>('track-layout').querySelector<HTMLOptionElement>('option[value="custom"]')!.disabled = !stored;
   el<HTMLSelectElement>('track-layout').value = activeLayout ? 'custom' : 'original';
 }
@@ -218,14 +222,8 @@ function buildGrid() {
       }
     });
   }
-  riders = Array.from({length: humanCount + (practice ? 0 : npcCount)}, (_, i) =>
-    makeRider(track, i, i < humanCount, COLORS[i], i < humanCount ? assignments[i] || undefined : undefined),
-  );
-  const names = ['S. MORA', 'J. REYES', 'K. NOVA', 'A. RIVERS', 'T. FOX', 'R. VALE', 'M. PARK'];
-  riders.forEach((r, i) => {
-    if (!r.human) r.name = names[(i - humanCount) % names.length];
-  });
-  models = riders.map(r => {
+  session.grid({track, humanCount, npcCount, practice, assignments});
+  models = session.riders.map(r => {
     const m = createBike(r.color, r.id + 1);
     scene.add(m.root);
     return m;
@@ -233,34 +231,23 @@ function buildGrid() {
   cameras = Array.from({length: humanCount}, () => new ChaseCamera());
   syncModels(0);
 }
-function buildHud() {
-  el('hud').innerHTML = hudHtml(humanCount, riders, assignments, practice, lapCount);
+function buildHud(lapCount: number) {
+  el('hud').innerHTML = hudHtml(humanCount, session.riders, assignments, practice, lapCount);
   viewHud = [...el('hud').querySelectorAll<HTMLElement>('.viewport-hud')];
 }
 function startRace() {
   humanCount = Number(el<HTMLSelectElement>('humans').value);
   npcCount = Number(el<HTMLSelectElement>('npcs').value);
-  lapCount = Number(el<HTMLSelectElement>('laps').value);
-  difficulty = el<HTMLSelectElement>('difficulty').value;
-  if (
-    !assignments.slice(0, humanCount).every(Boolean) ||
-    uniqueDevices(assignments.slice(0, humanCount) as Device[]).length !== humanCount
-  )
-    return;
+  const lapCount = Number(el<HTMLSelectElement>('laps').value);
+  const difficulty = el<HTMLSelectElement>('difficulty').value;
+  if (!devicesReady(assignments, humanCount)) return;
   testMarkers.visible = practice;
   touchControls.clear();
   document.body.classList.toggle('iphone-session', iphoneMode);
   buildGrid();
-  buildHud();
-  raceTime = 0;
-  countdown = 3.8;
-  firstFinish = null;
-  paused = false;
-  phase = 'countdown';
-  lastTickSound = 4;
-  accumulator = 0;
+  buildHud(lapCount);
+  session.start({lapCount, difficulty});
   prevPoses = [];
-  override.clear();
   setVisible('setup', false);
   setVisible('results', false);
   setVisible('pause', false);
@@ -276,108 +263,22 @@ function startRace() {
 }
 function toSetup() {
   testMarkers.visible = false;
-  reviewCrashTest = '';
   touchControls.show(false);
   document.body.classList.remove('iphone-session');
-  phase = 'setup';
-  paused = false;
+  session.toSetup();
   audio.update(0, 0, false);
   ['hud', 'pause', 'results', 'countdown', 'race-bar'].forEach(id => setVisible(id, false));
   setVisible('setup', true);
   refreshSlots();
 }
-function missingController() {
-  if (reviewDrive) return;
-  const pads = input.connectedGamepads();
-  return riders.find(
-    r =>
-      r.human &&
-      r.device?.kind === 'gamepad' &&
-      !pads.some(p => r.device?.kind === 'gamepad' && p.index === r.device.index),
-  );
-}
-function togglePause() {
-  if (phase === 'setup' || phase === 'results') return;
-  const missing = missingController();
-  if (paused && missing) return;
-  paused = !paused;
-  touchControls.show(iphoneMode && !paused);
-  setVisible('pause', paused);
-  el('pause-message').textContent = pauseMessage(missing);
-  audio.update(0, 0, false);
-}
-function endRace() {
-  touchControls.show(false);
-  phase = 'results';
-  riders.forEach(r => (r.dnf = r.finished === null));
-  setVisible('results', true);
-  setVisible('countdown', false);
-  audio.update(0, 0, false);
-  showResultsTable(track, riders, lapCount, raceTime);
-}
-function step(dt: number) {
-  if (phase === 'setup' || phase === 'results' || paused || reviewFrozen) return;
-  if (phase === 'countdown') {
-    for (const r of riders.filter(r => r.human))
-      if (input.sample(r.device!).pause) {
-        togglePause();
-        return;
-      }
-    countdown -= dt;
-    const n = Math.ceil(countdown);
-    if (n !== lastTickSound && n > 0 && n <= 3) {
-      audio.cue(600, 0.13);
-      lastTickSound = n;
-    }
-    el('countdown').innerHTML = `<small>FIND YOUR LINE</small><strong>${Math.max(1, n)}</strong>`;
-    if (countdown <= 0) {
-      phase = 'racing';
-      audio.cue(1100, 0.35);
-      setVisible('countdown', false);
-    }
-    return;
-  }
-  raceTime += dt;
-  for (const r of riders) {
-    const humanControl = r.human
-      ? reviewDrive
-        ? npcControl(r, track, riders, 'club')
-        : override.get(r.id) || input.sample(r.device!)
-      : null;
-    if (reviewCrashTest === 'Crash landing' && r.id === 0 && humanControl && !r.grounded) humanControl.pitch = 1;
-    const c =
-      r.finished !== null
-        ? npcControl(r, track, riders, 'relaxed')
-        : humanControl || npcControl(r, track, riders, difficulty);
-    if (humanControl?.pause) {
-      togglePause();
-      return;
-    }
-    if (reviewCrashTest === 'Rider contact') Object.assign(c, idleControl());
-    stepRider(r, c, track, dt, riders, r.human ? slideAggression : 1);
-    if (r.lastLanding > 3 && r.human) audio.landing(r.lastLanding);
-    if (!practice && r.finished === null && r.progress.lap >= lapCount) {
-      r.finished = raceTime;
-      if (r.human && firstFinish === null) firstFinish = raceTime;
-      audio.cue(900, 0.25);
-    }
-  }
-  collide(riders, track);
-  if (
-    !practice &&
-    (riders.filter(r => r.human).every(r => r.finished !== null) ||
-      (firstFinish !== null && raceTime - firstFinish > TUNING.finishTimeout))
-  )
-    endRace();
-}
 // Rider pose to draw: between the last two physics steps, so frames that run an uneven number of steps don't jump.
 function drawPose(r: Rider, i: number): Pose {
-  return paused || reviewFrozen || phase === 'setup'
+  return session.paused || session.reviewFrozen || session.phase === 'setup'
     ? capturePose(r)
-    : blendPose(prevPoses[i], r, accumulator / TUNING.step);
+    : blendPose(prevPoses[i], r, session.accumulator / TUNING.step);
 }
 function syncModels(dt: number) {
-  riders.forEach((r, i) => {
+  session.riders.forEach((r, i) => {
     const m = models[i],
       pose = drawPose(r, i);
     m.root.position.set(pose.x, pose.y, pose.z);
@@ -405,6 +306,7 @@ function syncModels(dt: number) {
   });
 }
 function hudContext(): HudContext {
+  const {riders, phase, lapCount, raceTime, firstFinish} = session;
   return {track, riders, viewHud, phase, practice, lapCount, humanCount, raceTime, firstFinish, iphoneMode};
 }
 function renderContext(): RenderContext {
@@ -414,10 +316,10 @@ function renderContext(): RenderContext {
     scene,
     preview,
     track,
-    riders,
+    riders: session.riders,
     models,
     cameras,
-    phase,
+    phase: session.phase,
     humanCount,
     globalTime,
     cameraDistance,
@@ -438,11 +340,11 @@ document.body.append(controllerHint);
 function menuRoot() {
   return editor.isOpen
     ? el('track-editor')
-    : paused
+    : session.paused
       ? el('pause')
-      : phase === 'setup'
+      : session.phase === 'setup'
         ? el('setup')
-        : phase === 'results'
+        : session.phase === 'results'
           ? el('results')
           : null;
 }
@@ -475,9 +377,9 @@ function menuAction(event: MenuEvent) {
       }
     }
   } else if (action === 'back' || action === 'start') {
-    if (paused) togglePause();
-    else if (phase === 'setup' && action === 'start') el<HTMLButtonElement>('start').click();
-    else if (phase === 'results') el(action === 'start' ? 'restart-results' : 'setup-results').click();
+    if (session.paused) session.togglePause();
+    else if (session.phase === 'setup' && action === 'start') el<HTMLButtonElement>('start').click();
+    else if (session.phase === 'results') el(action === 'start' ? 'restart-results' : 'setup-results').click();
     else {
       const details = document.activeElement?.closest('details');
       if (details) {
@@ -500,14 +402,14 @@ function pollMenus(now: number, consumed: Set<number>) {
   // Consume riding button edges while in menus, so B/Menu cannot reset or pause
   // the bike as the menu closes. Keyboard pause continues to work here too.
   if (root)
-    for (const r of riders.filter(r => r.human && r.device)) {
+    for (const r of session.riders.filter(r => r.human && r.device)) {
       const c = input.sample(r.device!);
-      if (paused && r.device?.kind === 'keyboard' && c.pause) togglePause();
+      if (session.paused && r.device?.kind === 'keyboard' && c.pause) session.togglePause();
     }
   for (const event of menuPad.update(pads, now))
     if (root && !(event.action === 'accept' && consumed.has(event.index))) menuAction(event);
   if (root && !menuRoot()) {
-    for (const r of riders.filter(r => r.human && r.device)) input.sample(r.device!);
+    for (const r of session.riders.filter(r => r.human && r.device)) input.sample(r.device!);
     menuFocus.clear();
   }
 }
@@ -522,17 +424,17 @@ function pollJoins() {
     signature = pads.map(p => p.index + ':' + p.id).join('|');
   if (signature !== lastPadSignature) {
     lastPadSignature = signature;
-    if (phase === 'setup') refreshSlots();
-    else if (missingController() && !paused) togglePause();
+    if (session.phase === 'setup') refreshSlots();
+    else session.checkControllers();
   }
   for (const index of padButtons.keys()) if (!pads.some(p => p.index === index)) padButtons.delete(index);
-  if (phase === 'setup') controllerStatus();
+  if (session.phase === 'setup') controllerStatus();
   for (const p of Array.from(menuGamepads())) {
     if (!p || p.connected === false) continue;
     const pressed = !!p.buttons[0]?.pressed || (p.buttons[0]?.value || 0) > 0.5;
     const join = pressed && !padButtons.get(p.index);
     padButtons.set(p.index, pressed);
-    if (phase !== 'setup' || iphoneMode || editor.isOpen) continue;
+    if (session.phase !== 'setup' || iphoneMode || editor.isOpen) continue;
     // Only visible slots count: a pad left in a hidden slot (after lowering the rider count) can still join.
     const assigned = assignments.slice(0, humanCount).findIndex(d => d?.kind === 'gamepad' && d.index === p.index);
     if ((join && (assigned < 0 || !ready[assigned])) || (waitingForController && (pressed || p.index >= 1000))) {
@@ -587,16 +489,7 @@ function frame(now: number) {
     if (fpsFrames.length > 600) fpsFrames.shift();
   }
   pollMenus(now, pollJoins());
-  let steps = 0;
-  if (!paused) {
-    accumulator += dt;
-    while (accumulator >= TUNING.step) {
-      prevPoses = riders.map(capturePose);
-      step(TUNING.step);
-      accumulator -= TUNING.step;
-      steps++;
-    }
-  }
+  const steps = session.advance(dt, () => (prevPoses = session.riders.map(capturePose)));
   if (raw > 0 && raw < 0.5) {
     stepCounts.push(steps);
     if (stepCounts.length > 600) stepCounts.shift();
@@ -606,15 +499,15 @@ function frame(now: number) {
     requestAnimationFrame(frame);
     return;
   }
-  syncModels(paused || reviewFrozen ? 0 : dt);
-  dust.update(riders, paused || reviewFrozen || phase !== 'racing' ? 0 : dt);
+  syncModels(session.paused || session.reviewFrozen ? 0 : dt);
+  dust.update(session.riders, session.paused || session.reviewFrozen || session.phase !== 'racing' ? 0 : dt);
   sceneDrawCalls = renderViews(renderContext(), dt);
-  if (now - lastHud > 100 && phase !== 'setup') {
+  if (now - lastHud > 100 && session.phase !== 'setup') {
     updateHud(hudContext());
     lastHud = now;
   }
-  const player = riders[0];
-  audio.update(player?.speed || 0, player?.throttle || 0, phase === 'racing' && !paused);
+  const player = session.riders[0];
+  audio.update(player?.speed || 0, player?.throttle || 0, session.phase === 'racing' && !session.paused);
   requestAnimationFrame(frame);
 }
 function setMode(isPractice: boolean) {
@@ -672,8 +565,8 @@ el<HTMLSelectElement>('humans').onchange = e => {
 };
 el<HTMLSelectElement>('npcs').onchange = e => (npcCount = Number((e.target as HTMLSelectElement).value));
 el('start').onclick = startRace;
-el('pause-button').onclick = togglePause;
-el('resume').onclick = togglePause;
+el('pause-button').onclick = () => session.togglePause();
+el('resume').onclick = () => session.togglePause();
 for (const id of ['restart-pause', 'restart-results']) el(id).onclick = startRace;
 for (const id of ['setup-pause', 'setup-results']) el(id).onclick = toSetup;
 function toggleMute() {
@@ -697,17 +590,15 @@ for (const id of ['camera-shake', 'pause-shake'])
   };
 function syncSlideSetting() {
   for (const prefix of ['', 'pause-']) {
-    el<HTMLInputElement>(`${prefix}slide-aggression`).value = String(Math.round(slideAggression * 100));
-    el(`${prefix}slide-value`).textContent = slideAggression === 0 ? 'Off' : `${Math.round(slideAggression * 100)}%`;
+    el<HTMLInputElement>(`${prefix}slide-aggression`).value = String(Math.round(session.slideAggression * 100));
+    el(`${prefix}slide-value`).textContent =
+      session.slideAggression === 0 ? 'Off' : `${Math.round(session.slideAggression * 100)}%`;
   }
 }
 for (const prefix of ['', 'pause-'])
   el<HTMLInputElement>(`${prefix}slide-aggression`).oninput = e => {
-    slideAggression = normalizeSlideAggression(Number((e.target as HTMLInputElement).value) / 100);
+    session.slideAggression = save.setSlideAggression(Number((e.target as HTMLInputElement).value) / 100);
     syncSlideSetting();
-    try {
-      localStorage.setItem(SLIDE_AGGRESSION_KEY, String(slideAggression));
-    } catch {}
   };
 syncSlideSetting();
 el<HTMLSelectElement>('render-scale').onchange = e => {
@@ -718,10 +609,11 @@ addEventListener('keydown', e => {
   if (!editor.isOpen && e.code === 'KeyM' && !e.repeat && !(e.target instanceof HTMLInputElement)) toggleMute();
 });
 addEventListener('blur', () => {
-  if ((phase === 'racing' || phase === 'countdown') && !paused) togglePause();
+  if ((session.phase === 'racing' || session.phase === 'countdown') && !session.paused) session.togglePause();
 });
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden && (phase === 'racing' || phase === 'countdown') && !paused) togglePause();
+  if (document.hidden && (session.phase === 'racing' || session.phase === 'countdown') && !session.paused)
+    session.togglePause();
 });
 function describeCourse() {
   el('track-length').textContent = String(Math.round(track.length));
@@ -732,13 +624,12 @@ function describeCourse() {
   el('course-description').textContent = courseDescriptionText(track);
 }
 el<HTMLSelectElement>('course').onchange = () => {
-  if (phase !== 'setup') return;
+  if (session.phase !== 'setup') return;
   activeLayout = null;
   rebuildTrack(new Track(courseById(el<HTMLSelectElement>('course').value)));
 };
 el<HTMLSelectElement>('track-layout').onchange = () => {
-  activeLayout =
-    el<HTMLSelectElement>('track-layout').value === 'custom' ? loadLayout(track.course.id, localStorage) : null;
+  activeLayout = el<HTMLSelectElement>('track-layout').value === 'custom' ? save.layout(track.course.id) : null;
   rebuildTrack(new Track(track.course, activeLayout || undefined));
 };
 el('open-editor').onclick = openEditor;
@@ -758,20 +649,20 @@ if (import.meta.env.DEV) {
     get track() {
       return track;
     },
-    riders: () => riders,
+    riders: () => session.riders,
     snapshot: () => ({
       course: track.course.id,
-      phase,
-      paused,
+      phase: session.phase,
+      paused: session.paused,
       practice,
-      raceTime,
+      raceTime: session.raceTime,
       humanCount,
       npcCount,
       fps: fpsFrames.length / fpsFrames.reduce((a, b) => a + b, 0),
       frameCount,
       resolution: [innerWidth, innerHeight],
       renderScale,
-      riders: riders.map(r => ({
+      riders: session.riders.map(r => ({
         id: r.id,
         human: r.human,
         s: r.surface.s,
@@ -789,19 +680,19 @@ if (import.meta.env.DEV) {
       })),
     }),
     setControl: (id: number, c: Partial<Control> | null) => {
-      if (c) override.set(id, {...idleControl(), ...c});
-      else override.delete(id);
+      if (c) session.override.set(id, {...idleControl(), ...c});
+      else session.override.delete(id);
     },
     drive: (id: number) => {
-      const r = riders[id];
-      override.set(id, npcControl(r, track, riders, 'club'));
+      const r = session.riders[id];
+      session.override.set(id, npcControl(r, track, session.riders, 'club'));
     },
     clearPerf: () => {
       fpsFrames = [];
       stepCounts = [];
     },
     step: (seconds: number) => {
-      for (let t = 0; t < seconds; t += TUNING.step) step(TUNING.step);
+      for (let t = 0; t < seconds; t += TUNING.step) session.step(TUNING.step);
       syncModels(0);
       updateHud(hudContext());
     },
@@ -813,12 +704,12 @@ if (reviewEnabled) {
   import('../visual-review').then(({mountVisualReview}) =>
     mountVisualReview({
       shot(kind) {
-        reviewDrive = true;
-        reviewFrozen = false;
-        paused = false;
+        session.reviewDrive = true;
+        session.reviewFrozen = false;
+        session.paused = false;
         practice = false;
         iphoneMode = false;
-        reviewCrashTest = kind === 'Crash landing' || kind === 'Rider contact' ? kind : '';
+        session.reviewCrashTest = kind === 'Crash landing' || kind === 'Rider contact' ? kind : '';
         humanCount = kind === 'Four views' ? 4 : 1;
         npcCount = kind === 'Rider contact' ? 1 : 8 - humanCount;
         assignments = [
@@ -837,7 +728,7 @@ if (reviewEnabled) {
             [0, -1],
             [1, 1],
           ]) {
-            const r = riders[i],
+            const r = session.riders[i],
               p = track.at(2, side * 1.4);
             Object.assign(r, {
               x: p.x,
@@ -859,25 +750,28 @@ if (reviewEnabled) {
                 ? track.rhythms[1].start + 26
                 : track.jumps[0].start + track.jumps[0].rise + 6;
         for (let i = 0; i < 120 * 90; i++) {
-          step(TUNING.step);
-          dust.update(riders, TUNING.step);
+          session.step(TUNING.step);
+          dust.update(session.riders, TUNING.step);
           if (
-            phase === 'racing' &&
-            (reviewCrashTest
-              ? riders[0].crashTime > 0 && riders[0].crashAge > 0.45
-              : target === 0 || (raceTime > 1 && riders[0].surface.s >= target && riders[0].surface.s < target + 8))
+            session.phase === 'racing' &&
+            (session.reviewCrashTest
+              ? session.riders[0].crashTime > 0 && session.riders[0].crashAge > 0.45
+              : target === 0 ||
+                (session.raceTime > 1 &&
+                  session.riders[0].surface.s >= target &&
+                  session.riders[0].surface.s < target + 8))
           )
             break;
         }
-        reviewFrozen = true;
+        session.reviewFrozen = true;
         syncModels(0);
         updateHud(hudContext());
         cameras.forEach(c => (c.initialized = false));
         fpsFrames = [];
       },
       run() {
-        reviewFrozen = !reviewFrozen;
-        paused = false;
+        session.reviewFrozen = !session.reviewFrozen;
+        session.paused = false;
         setVisible('pause', false);
         fpsFrames = [];
         stepCounts = [];

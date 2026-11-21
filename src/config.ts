@@ -1,3 +1,8 @@
+/**
+ * Bump this whenever a change alters how a bike moves for the same inputs. Saved times and replays carry the
+ * number, so results from different physics are never compared.
+ */
+export const PHYSICS_VERSION = 1;
 /** Metres, seconds, radians. See README for handling/camera tuning. */
 export const TUNING = {
   step: 1 / 120,
