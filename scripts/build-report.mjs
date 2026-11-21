@@ -57,22 +57,6 @@ const report = {
   distMb: Math.round(total / 1e4) / 100,
   distBytes: total,
 };
-if (process.argv.includes('--write')) {
-  const commit = execFileSync('git', ['rev-parse', '--short=7', 'HEAD'], {encoding: 'utf8'}).trim();
-  writeFileSync(
-    new URL('../baselines/build.json', import.meta.url),
-    JSON.stringify(
-      {
-        note: `Production build sizes at commit ${commit}. Later size budgets are judged against this. Regenerate only with sign-off.`,
-        ...report,
-        commit,
-      },
-      null,
-      2,
-    ) + '\n',
-  );
-  console.log('Wrote baselines/build.json');
-}
 console.log(JSON.stringify(report, null, 2));
 
 if (process.argv.includes('--check')) {
@@ -112,4 +96,22 @@ if (process.argv.includes('--check')) {
   ];
   for (const [name, ok, measured] of budgets) console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}: ${measured}`);
   if (budgets.some(([, ok]) => !ok)) process.exit(1);
+}
+
+// Written last, so a build that breaks a budget is never recorded as the baseline.
+if (process.argv.includes('--write')) {
+  const commit = execFileSync('git', ['rev-parse', '--short=7', 'HEAD'], {encoding: 'utf8'}).trim();
+  writeFileSync(
+    new URL('../baselines/build.json', import.meta.url),
+    JSON.stringify(
+      {
+        note: `Production build sizes at commit ${commit}. Later size budgets are judged against this. Regenerate only with sign-off.`,
+        ...report,
+        commit,
+      },
+      null,
+      2,
+    ) + '\n',
+  );
+  console.log('Wrote baselines/build.json');
 }

@@ -19,5 +19,5 @@ export default defineConfig({
   base:'./',
   plugins:[macControllerPlugin()],
   define:{__BUILD_STAMP__:JSON.stringify(buildStamp())},
-  build:{chunkSizeWarningLimit:700,rollupOptions:{output:{manualChunks:id=>id.includes('node_modules/three/')?'three':undefined}}},
+  build:{chunkSizeWarningLimit:700,rollupOptions:{output:{manualChunks:id=>/[\\/]node_modules[\\/]three[\\/]/.test(id)?'three':undefined}}},
 });

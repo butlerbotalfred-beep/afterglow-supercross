@@ -47,7 +47,8 @@ const check = (name, ok, detail = '') => {
 };
 const browser = await chromium.launch();
 try {
-  const page = await browser.newPage({viewport: {width: 1280, height: 720}});
+  // A small window keeps software rendering quick, so the test stays well inside the 30-second stall allowance.
+  const page = await browser.newPage({viewport: {width: 480, height: 270}});
   const requested = [],
     failed = [],
     errors = [];
@@ -60,6 +61,8 @@ try {
   // Hold every texture back until released, like a slow connection.
   const held = [];
   await page.route('**/art/**', route => held.push(route));
+  // Software rendering makes this page slow, so lift the game's 30-second limit on a stalled texture here.
+  await page.addInitScript(() => (globalThis.AFTERGLOW_STALL_SECONDS = 3600));
   await page.goto(url, {waitUntil: 'commit'});
   await page.waitForFunction(() => /Loading textures/.test(document.getElementById('loading-text')?.textContent || ''));
   const waitForHeld = async () => {
@@ -76,32 +79,49 @@ try {
         bar: document.getElementById('loading-bar')?.style.width || '',
       };
     });
-  await waitForHeld();
-  let released = 0,
-    alwaysShown = true,
-    last = await loadingState();
+  // Wait until every texture request is being held (none new for a second).
+  for (let quiet = 0, seen = 0; quiet < 20; quiet = held.length === seen ? quiet + 1 : 0, seen = held.length)
+    await page.waitForTimeout(50);
+  let last = await loadingState();
   check('loading screen covers the page while textures are held back', last.shown, `${last.text}, bar ${last.bar}`);
-  const widths = [parseInt(last.bar) || 0];
-  // Release textures one at a time. Before each release the loading screen must still be up.
-  for (;;) {
-    await waitForHeld();
-    if (!held.length) break;
-    last = await loadingState();
-    alwaysShown &&= last.shown;
-    widths.push(parseInt(last.bar) || 0);
+  check('the page behind it cannot be used yet', await page.evaluate(() => document.getElementById('app').inert));
+  const finishedCount = text => Number(/(\d+) of/.exec(text)?.[1] ?? -1);
+  const widths = [parseInt(last.bar) || 0],
+    steps = [last.text];
+  const total = held.length;
+  let shownAfterEachRelease = true;
+  // Release all but one texture, one at a time. After each, wait for the page to count it, then the loading
+  // screen must still be up.
+  while (held.length > 1) {
+    const before = finishedCount(last.text);
     await held.shift().continue();
-    released++;
-    await page.waitForTimeout(400);
+    await page.waitForFunction(
+      n => Number(/(\d+) of/.exec(document.getElementById('loading-text')?.textContent || '')?.[1] ?? 1e9) > n,
+      before,
+      {timeout: 30000},
+    );
+    last = await loadingState();
+    shownAfterEachRelease &&= last.shown;
+    widths.push(parseInt(last.bar) || 0);
+    steps.push(last.text);
   }
-  check('loading screen stayed up until the last texture was released', alwaysShown, `${released} textures`);
+  check(
+    `loading screen was still up after each of the first ${total - 1} of ${total} textures arrived`,
+    total >= 4 && shownAfterEachRelease,
+    steps.map(t => t.replace('Loading textures ', '')).join(' → '),
+  );
   check(
     'the bar only moves forward',
-    widths.every((w, i) => i === 0 || w >= widths[i - 1]) && widths.at(-1) > widths[0],
+    widths.every((w, i) => i === 0 || w > widths[i - 1]),
     widths.map(w => `${w}%`).join(' → '),
   );
+  await held.shift().continue();
   await page.waitForFunction(() => !document.getElementById('loading'), null, {timeout: 20000});
   check('loading screen is removed once every texture is ready', true);
-  check('setup screen is showing', await page.isVisible('#setup'));
+  check(
+    'setup screen is showing and usable',
+    (await page.isVisible('#setup')) && !(await page.evaluate(() => document.getElementById('app').inert)),
+  );
   const art = requested.filter(u => u.includes('/art/'));
   check(
     'textures come from the page folder as WebP',
@@ -124,6 +144,35 @@ try {
     'every request stayed inside the page folder',
     requested.every(u => u.startsWith(url)),
   );
+
+  // A texture that never arrives must not hold the loading screen for ever.
+  const stalledPage = await browser.newPage({viewport: {width: 480, height: 270}});
+  await stalledPage.addInitScript(() => (globalThis.AFTERGLOW_STALL_SECONDS = 2));
+  await stalledPage.route('**/art/**', () => {});
+  await stalledPage.goto(url, {waitUntil: 'commit'});
+  const gaveUp = await stalledPage
+    .waitForFunction(() => !!document.getElementById('setup') && !document.getElementById('loading'), null, {
+      timeout: 60000,
+    })
+    .then(
+      () => true,
+      () => false,
+    );
+  check('with every texture stalled, the loading screen gives up after its limit and the game is usable', gaveUp);
+
+  // If a script fails to download, the loading screen must say so, not sit on "Loading".
+  const brokenPage = await browser.newPage({viewport: {width: 480, height: 270}});
+  await brokenPage.route('**/assets/three-*.js', route => route.abort());
+  await brokenPage.goto(url, {waitUntil: 'commit'});
+  const said = await brokenPage
+    .waitForFunction(() => /could not start/i.test(document.getElementById('loading-text')?.textContent || ''), null, {
+      timeout: 30000,
+    })
+    .then(
+      () => true,
+      () => false,
+    );
+  check('a failed script download shows "could not start" on the loading screen', said);
 } finally {
   await browser.close();
   server.close();

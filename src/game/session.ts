@@ -32,7 +32,7 @@ import {devicesReady, RaceSession} from './race-session';
 import {blendPose, capturePose, pacingStats, type Pose} from '../render-interp';
 import {createRenderer, renderViews, resizeRenderer, type RenderContext} from '../render/renderer';
 import {el, setVisible} from '../ui/dom';
-import {watchLoading} from '../ui/loading';
+import {isLoading, watchLoading} from '../ui/loading';
 import {hudHtml, updateHud, type HudContext} from '../ui/hud';
 import {pauseMessage} from '../ui/pause-menu';
 import {showResultsTable} from '../ui/results-screen';
@@ -135,18 +135,27 @@ function loadEditor() {
   return editorLoading;
 }
 async function openEditor() {
+  // Download first and only then leave the race, so a failed download costs nothing.
+  const from = {phase: session.phase, paused: session.paused};
+  const buttons = [el<HTMLButtonElement>('open-editor'), el<HTMLButtonElement>('pause-editor')];
+  let loaded: TrackEditor;
+  buttons.forEach(b => (b.disabled = true));
+  try {
+    loaded = await loadEditor();
+  } catch {
+    const message = 'The track editor could not be downloaded. Check the connection and try again.';
+    el('setup-status').textContent = message;
+    el('pause-message').textContent = message;
+    return;
+  } finally {
+    buttons.forEach(b => (b.disabled = false));
+  }
+  // If the player moved on while it downloaded (started a race, resumed), leave them where they are.
+  if (loaded.isOpen || session.phase !== from.phase || session.paused !== from.paused) return;
   session.reviewDrive = false;
   session.reviewFrozen = false;
   session.reviewCrashTest = '';
   toSetup();
-  let loaded: TrackEditor;
-  try {
-    loaded = await loadEditor();
-  } catch {
-    el('setup-status').textContent = 'The track editor could not be downloaded. Check the connection and try again.';
-    return;
-  }
-  if (loaded.isOpen || session.phase !== 'setup') return;
   setVisible('setup', false);
   loaded.open(activeLayout || layoutFromTrack(track));
 }
@@ -509,7 +518,8 @@ function frame(now: number) {
     fpsFrames.push(raw);
     if (fpsFrames.length > 600) fpsFrames.shift();
   }
-  pollMenus(now, pollJoins());
+  // Controllers do nothing until the loading screen has gone, so a race cannot start unseen.
+  if (!isLoading()) pollMenus(now, pollJoins());
   const steps = session.advance(dt, () => (prevPoses = session.riders.map(capturePose)));
   if (raw > 0 && raw < 0.5) {
     stepCounts.push(steps);

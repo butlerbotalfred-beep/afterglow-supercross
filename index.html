@@ -4,4 +4,9 @@
 #loading-track{width:min(320px,70vw);height:6px;border-radius:3px;background:rgba(255,255,255,.14);overflow:hidden}
 #loading-bar{width:8%;height:100%;border-radius:3px;background:#ff7950;transition:width .25s ease}
 #loading-text{font-size:13px;letter-spacing:.14em;text-transform:uppercase;opacity:.7}
-</style><div id="loading" role="status" aria-live="polite"><strong>AFTERGLOW</strong><div id="loading-track"><div id="loading-bar"></div></div><div id="loading-text">Loading</div></div><div id="app"></div><script type="module" src="/src/main.ts"></script></body></html>
+</style><div id="loading" role="status" aria-live="polite"><strong>AFTERGLOW</strong><div id="loading-track"><div id="loading-bar"></div></div><div id="loading-text">Loading</div></div><div id="app" inert></div><script>
+// If the game cannot start (a script fails to download or the browser has no WebGL), say so instead of
+// showing "Loading" forever. Once the loading screen has gone this does nothing.
+(function(){function failed(){var text=document.getElementById('loading-text');if(text)text.textContent='The game could not start. Reload the page to try again.';}
+addEventListener('error',failed,true);addEventListener('unhandledrejection',failed);})();
+</script><script type="module" src="/src/main.ts"></script></body></html>

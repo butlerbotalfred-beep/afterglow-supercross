@@ -27,14 +27,36 @@ The download drops from 16.95 MB to 3.04 MB. Textures ship as WebP at their orig
 
 The sky gets a higher quality because smooth gradients show compression first. `dusk-sky-v2.png` was not used by the game; it stays in `art-source/` and is no longer shipped.
 
-## Browser test (`scripts/load-smoke.mjs`, 12 of 12 checks)
+## Browser test (`scripts/load-smoke.mjs`, 15 of 15 checks)
 
 Run against the production build, served from a sub-folder address (`/games/afterglow/`) to prove nothing depends on the site root:
 
-- The loading screen covers the page while textures are held back, stays until the last one is released, and its bar only moves forward (20% → 36% → 68% → removed).
+- The loading screen covers the page while textures are held back, and the page behind it cannot be used. Textures are released one at a time; after each the test waits for the page to count it (0 of 5 → 1 → 3 → 4) and the loading screen is still up. It is removed only after the last. The bar moves 20% → 36% → 68% → 84%.
 - All textures are requested as WebP from the page's own folder. No PNG is requested.
 - No track-editor file is requested before Edit track is pressed. After the press it downloads and the editor opens.
 - Nothing fails to load, the console has no errors, and every request stays inside the page folder.
+- With every texture stalled for ever, the loading screen gives up after its limit (30 s in the game, shortened to 2 s in the test) and the game is usable.
+- If a script fails to download, the loading screen says "The game could not start. Reload the page to try again."
+
+## Mac smoke run
+
+MacBook (1440 × 900, Node 22): SMOKE_TEXT
+
+## Independent review (B)
+
+No blocking bug found. Findings and what was done:
+
+| Finding | Action |
+| --- | --- |
+| If the game failed to start (no WebGL, or a script failed to download) the loading screen stayed on "Loading" for ever | Fixed: it now says the game could not start. Test added |
+| A texture download that hangs would hold the loading screen for ever | Fixed: each texture stops being waited for after 30 s and still appears if it arrives later. Test added |
+| Controllers and the keyboard could press setup buttons behind the loading screen, so a race could start unseen | Fixed: the page is inert and controller input is ignored until the loading screen has gone. Test added |
+| The browser test only looked at the loading screen before each release, so an early removal could slip through | Fixed: it now waits for each texture to be counted and checks afterwards |
+| Edit track from the pause menu left the race before the editor had downloaded, so a failed download lost the race | Fixed: the editor downloads first. On failure the race is untouched and the pause and setup screens say so. If the player moves on while it downloads, the editor does not pop open late |
+| `build-report --write` wrote the baseline before `--check` could fail | Fixed: it writes last |
+| `optimize-art --check` comment promised more than the code does; the three.js rule would not match Windows paths | Fixed both |
+| Lossy WebP for the dirt and jersey bump maps needs a human look | Already part of the play review below |
+| The loading browser test does not run in CI | Declined for now: CI has no browser installed. The budgets that can be checked without one (sizes, no PNG, editor split out) do run in CI |
 
 ## How "no gameplay change" was checked
 

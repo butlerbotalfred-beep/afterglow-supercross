@@ -1,7 +1,7 @@
 // Converts the PNG originals in art-source/ into the WebP textures the game ships in public/art/.
 // Each texture keeps its resolution. Run it after adding or changing an original:
 //   node scripts/optimize-art.mjs            convert and print the sizes
-//   node scripts/optimize-art.mjs --check    fail if a shipped texture is missing or older than its original
+//   node scripts/optimize-art.mjs --check    fail if a shipped texture is missing
 import {existsSync, mkdirSync, statSync} from 'node:fs';
 import sharp from 'sharp';
 
