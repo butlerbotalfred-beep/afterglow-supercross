@@ -19,6 +19,8 @@
     "test:touch": "node scripts/touch-smoke.mjs",
     "test:load": "node scripts/load-smoke.mjs",
     "art:optimize": "node scripts/optimize-art.mjs",
+    "mac:update": "node scripts/mac-update.mjs",
+    "test:prod": "node scripts/prod-smoke.mjs",
     "server:install": "node scripts/server-service.mjs install",
     "server:status": "node scripts/server-service.mjs status",
     "server:restart": "node scripts/server-service.mjs restart",

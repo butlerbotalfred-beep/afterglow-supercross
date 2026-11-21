@@ -2,6 +2,14 @@
 
 A playable browser-based, third-person arcade Supercross milestone. Five selectable circuits, led by the 2,568 m dusk stadium (800% longer than the original), sculpted procedural motorcycle/rider, local split screen for 1–4 humans, and up to eight total racers. No online networking or accounts.
 
+## Play online
+
+**https://afterglow-supercross.vercel.app** is the hosted game. It is public, served over HTTPS, and needs no Mac, no Tailscale and no install. Every merge to `main` rebuilds and replaces it automatically within about a minute (Vercel builds the repository with `npm run build`). The **BUILD** stamp at the top of the setup screen is the commit it was built from.
+
+Saves at the hosted link are separate from saves on the Mac's addresses. See **Moving a layout between addresses** to carry a custom layout across.
+
+`npm run test:prod -- https://afterglow-supercross.vercel.app/ --expect-stamp <commit>` checks the hosted build in a real browser: clean load, a simulated gamepad joining and starting a race, and no failed requests or console errors.
+
 ## Launch
 
 Tested with Node **22.23.2** and npm **10.9.8** on macOS. Use Node 22.12 or newer.
@@ -39,6 +47,14 @@ npm run server:stop      # stop/unload it for this login session
 npm run server:install   # install or re-enable the login service
 ```
 
+To bring this Mac's copy up to date with `main` in one step:
+
+```sh
+npm run mac:update
+```
+
+It refuses to run if the folder is not on `main` or has uncommitted edits, then pulls, reinstalls packages and restarts the login service. It prints the commit it finished on, which is the **BUILD** stamp the Mac's address shows after a reload and should match the stamp at the hosted link.
+
 Configuration: `~/Library/LaunchAgents/local.afterglow.supercross.plist`. Logs: `~/Library/Logs/Afterglow/server.log` and `server-error.log`. The service uses the current absolute Node and project paths. If either moves, rerun `server:install`. Do not start a second dev server on the same port while this service runs. To permanently remove automatic startup, run `server:stop` and remove that plist.
 
 ## Track editor
@@ -57,7 +73,20 @@ Choose a circuit in setup, then **Edit track**. The overhead map edits a copy of
 - **Save & return** applies your layout to setup. **Save & test ride** opens solo free practice using the edited physics and geometry. Pause → **Edit this track** returns to the editor and ends the current run.
 - After reloading, choose **Track layout → My saved layout** to ride or edit it. **Original circuit** remains available. Changing circuits defaults to the original layout for that circuit.
 
-One layout per circuit is saved in browser local storage. Saves are specific to that browser and address: localhost and the Tailscale address have separate storage, and clearing site data removes saves. **Export JSON** makes a portable backup; choose the matching circuit and **Import JSON** to restore it on another device. Imported data is validated before replacing the draft. **Discard & close** drops unsaved changes; **Reset draft to original** is undoable and does not replace your saved layout until you save.
+One layout per circuit is saved in browser local storage. Saves are specific to that browser and address: localhost and the Tailscale address have separate storage, and clearing site data removes saves. **Export JSON** makes a portable backup; choose the matching circuit and **Import JSON** to restore it on another device or address (steps under **Moving a layout between addresses** below). Imported data is validated before replacing the draft. **Discard & close** drops unsaved changes; **Reset draft to original** is undoable and does not replace your saved layout until you save.
+
+### Moving a layout between addresses
+
+The hosted link, `localhost` and the Mac's Tailscale address each keep their own saves, so a layout built at one does not appear at another by itself. To move one:
+
+1. At the address that has the layout, pick its circuit in race setup, choose **Track layout → My saved layout**, and open **Edit track**.
+2. Press **Export JSON**. The browser downloads `afterglow-<circuit>-layout.json`. On an iPhone it lands in the Files app under Downloads.
+3. Get the file to the other device if needed (AirDrop, iCloud Drive or email).
+4. At the other address, pick the same circuit in race setup and open **Edit track**.
+5. Press **Import JSON** and choose the file. The editor shows the imported layout and its name.
+6. Press **Save & return** or **Save & test ride**. Until you save, the import is only a draft.
+
+A file for a different circuit is refused with a message; pick the matching circuit first. `npm run test:prod -- --layout-from <address>` runs this export and import automatically between two addresses.
 
 The editor allows up to 120 obstacles (240 individual mounds) and 120 route points, with dimensions bounded to keep the geometry finite. Overlaps, tight-turn jumps and crossing route segments produce warnings. Warnings do not prove a layout is unridable or guarantee it is safe: test the approach speed and nose alignment. There are no bridges, freehand terrain sculpting or automatic guarantees that an arbitrary custom route is easy for NPCs.
 
@@ -69,7 +98,7 @@ In race setup, choose **Play on → iPhone / Touch controls**, then **Drop the g
 
 The iPhone option assigns one human rider to touch input; optional NPCs and free practice still work. Landscape is recommended. Hold **GAS** with your right thumb and drag the left stick sideways to steer. Drag the stick up/down to pitch the nose up/down in the air. Hold the dedicated **NOSE DOWN** button to dip the front wheel over doubles/triples; it always lowers the nose regardless of the stick inversion setting. **BRAKE**, **RECOVER**, and **PAUSE** are also on screen. Simultaneous fingers are independent. Pause, focus loss, cancelled gestures and rotation clear held input so throttle cannot remain stuck. Controls are hidden in setup, pause and results.
 
-With Tailscale connected on both devices and this Mac awake/running the dev server, the current phone address is **http://100.96.154.105:5173**. Touch input works without the browser Gamepad API, including HTTP contexts where that API is unavailable. This is a separate local game session on the phone, not remote control of the Mac's race or online multiplayer.
+On an iPhone, open the hosted link **https://afterglow-supercross.vercel.app** (see **Play online** above); it needs no Mac and no Tailscale. To play the Mac's own copy instead, connect Tailscale on both devices, keep the Mac awake and open the Mac's Tailscale address on port 5173 (`tailscale ip -4` on the Mac prints it). Touch input works without the browser Gamepad API, including HTTP contexts where that API is unavailable. This is a separate local game session on the phone, not remote control of the Mac's race or online multiplayer.
 
 Mobile landscape/portrait rendering and multi-touch events were tested in Chromium emulation. Physical iPhone Safari performance and feel remain unverified. Use the setup render-scale setting if needed.
 

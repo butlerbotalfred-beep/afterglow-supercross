@@ -4,41 +4,13 @@
 //   1. the loading screen stays up until every texture has arrived, on a deliberately held-back network
 //   2. no PNG is requested, nothing fails to load and the console has no errors
 //   3. the track editor's code is not downloaded until Edit track is pressed
-import {createServer} from 'node:http';
-import {existsSync, readFileSync, statSync} from 'node:fs';
-import {extname, join, normalize} from 'node:path';
 import {createRequire} from 'node:module';
+import {serveDist} from './serve-dist.mjs';
 
 // require() rather than import, so a globally installed Playwright is found through NODE_PATH.
 const {chromium} = createRequire(import.meta.url)('playwright');
-const dist = new URL('../dist/', import.meta.url).pathname;
-if (!existsSync(join(dist, 'index.html'))) {
-  console.error('load-smoke: dist/ is missing. Run npm run build first.');
-  process.exit(1);
-}
-const FOLDER = '/games/afterglow/';
-const TYPES = {
-  '.html': 'text/html',
-  '.js': 'text/javascript',
-  '.css': 'text/css',
-  '.webp': 'image/webp',
-  '.woff': 'font/woff',
-  '.woff2': 'font/woff2',
-  '.txt': 'text/plain',
-};
-const server = createServer((request, response) => {
-  const path = decodeURIComponent(new URL(request.url, 'http://x').pathname);
-  const inside = path.startsWith(FOLDER) ? normalize(path.slice(FOLDER.length) || 'index.html') : null;
-  const file = inside && !inside.startsWith('..') ? join(dist, inside) : null;
-  if (!file || !existsSync(file) || statSync(file).isDirectory()) {
-    response.writeHead(404).end('not found');
-    return;
-  }
-  response.writeHead(200, {'content-type': TYPES[extname(file)] || 'application/octet-stream'});
-  response.end(readFileSync(file));
-});
-await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-const url = `http://127.0.0.1:${server.address().port}${FOLDER}`;
+const server = await serveDist('/games/afterglow/');
+const url = server.url;
 
 const checks = [];
 const check = (name, ok, detail = '') => {
