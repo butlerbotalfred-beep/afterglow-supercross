@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {SLIDE_AGGRESSION_KEY} from '../src/handling-settings.ts';
-import {defaultSave, SAVE_KEY, SAVE_VERSION, SaveStore} from '../src/save.ts';
+import {DAMAGED_SAVE_KEY, defaultSave, SAVE_KEY, SAVE_VERSION, SaveStore} from '../src/save.ts';
 import {Track} from '../src/track.ts';
 import {courseById} from '../src/courses.ts';
 import {LAYOUT_KEY, layoutFromTrack} from '../src/track-layout.ts';
@@ -72,6 +72,7 @@ test('a corrupt save falls back to defaults instead of breaking the game', () =>
   const storage = memory({[SAVE_KEY]: '{oops'});
   new SaveStore(storage).setSlideAggression(0.25);
   assert.equal(new SaveStore(storage).slideAggression, 0.25);
+  assert.equal(storage.values.get(DAMAGED_SAVE_KEY), '{oops', 'a copy of the damaged save is set aside first');
 });
 
 test('damaged parts of a save are replaced with defaults and the good parts are kept', () => {
@@ -105,8 +106,8 @@ test('a save from a newer version of the game is left untouched', () => {
   assert.equal(save.source, 'newer');
   assert.equal(save.slideAggression, 0.4, 'this build falls back to what it understands');
   assert.equal(save.setSlideAggression(1.2), 1.2, 'changes still apply for this visit');
-  save.saveLayout(dusk);
-  assert.deepEqual(save.layout('dusk'), dusk);
+  assert.throws(() => save.saveLayout(dusk), /newer version/, 'the editor is told the layout cannot be kept');
+  assert.equal(save.layout('dusk'), null);
   save.write();
   assert.deepEqual(storage.writes, []);
   assert.equal(storage.values.get(SAVE_KEY), newer);
@@ -146,8 +147,8 @@ test('blocked or full browser storage never breaks the game', () => {
   const blocked = new SaveStore(null);
   assert.deepEqual(blocked.data, defaultSave());
   assert.equal(blocked.setSlideAggression(0.5), 0.5);
-  blocked.saveLayout(dusk);
-  assert.deepEqual(blocked.layout('dusk'), dusk);
+  assert.throws(() => blocked.saveLayout(dusk), /blocking/, 'the editor is told the layout cannot be kept');
+  assert.equal(blocked.layout('dusk'), null);
   const throwing = {
     getItem: () => {
       throw new Error('blocked');
@@ -161,4 +162,51 @@ test('blocked or full browser storage never breaks the game', () => {
   assert.equal(save.setSlideAggression(0.5), 0.5, 'a setting still applies when it cannot be stored');
   assert.throws(() => save.saveLayout(dusk), /quota/, 'the editor is told when a layout cannot be stored');
   assert.equal(save.layout('dusk'), null, 'a layout that could not be stored is not kept');
+});
+
+test('two tabs do not overwrite each other', () => {
+  const storage = memory();
+  const tabA = new SaveStore(storage),
+    tabB = new SaveStore(storage);
+  tabA.saveLayout(canyon);
+  tabB.setSlideAggression(0.6);
+  tabA.saveLayout(dusk);
+  const reloaded = new SaveStore(storage);
+  assert.deepEqual(reloaded.layout('canyon'), canyon, "tab A's layout survives tab B's change");
+  assert.deepEqual(reloaded.layout('dusk'), dusk);
+  assert.equal(reloaded.slideAggression, 0.6, "tab B's setting survives tab A's later save");
+  assert.deepEqual(tabB.layout('canyon'), canyon, "a tab picks up the other tab's layouts when it next saves");
+});
+
+test('parts of a save this build does not recognise survive a change', () => {
+  const stored = {
+    version: SAVE_VERSION,
+    settings: {slideAggression: 0.7, volume: 0.4},
+    layouts: {dusk, moon: {some: 'future course'}},
+    records: {},
+    career: {},
+    garage: ['bike-2'],
+  };
+  const storage = memory({[SAVE_KEY]: JSON.stringify(stored)});
+  const save = new SaveStore(storage);
+  save.setSlideAggression(1.1);
+  save.saveLayout(canyon);
+  save.write();
+  const after = JSON.parse(storage.values.get(SAVE_KEY)!);
+  assert.deepEqual(after.settings, {slideAggression: 1.1, volume: 0.4});
+  assert.deepEqual(after.garage, ['bike-2']);
+  assert.deepEqual(after.layouts.moon, {some: 'future course'});
+  assert.deepEqual(after.layouts.canyon, canyon);
+  assert.deepEqual(after.layouts.dusk, dusk);
+});
+
+test('a save that another tab upgraded to a newer version is not written over', () => {
+  const storage = memory();
+  const save = new SaveStore(storage);
+  save.setSlideAggression(0.5);
+  const newer = JSON.stringify({version: SAVE_VERSION + 1, settings: {slideAggression: 0.9}});
+  storage.values.set(SAVE_KEY, newer);
+  save.setSlideAggression(0.2);
+  save.write();
+  assert.equal(storage.values.get(SAVE_KEY), newer);
 });

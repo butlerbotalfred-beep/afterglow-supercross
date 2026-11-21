@@ -46,10 +46,19 @@ test('range, int, chance and pick respect their limits and follow the seed', () 
   assert.equal(new Rng(3).chance(0), false);
   assert.equal(new Rng(3).chance(1), true);
   const names = ['a', 'b', 'c'];
-  assert.deepEqual(
-    Array.from({length: 20}, () => new Rng(5).pick(names)),
-    new Array(20).fill(new Rng(5).pick(names)),
-  );
+  const picker = new Rng(5),
+    picked = new Set<string>();
+  for (let i = 0; i < 200; i++) picked.add(picker.pick(names));
+  assert.deepEqual([...picked].sort(), names, 'every item can be picked and nothing else');
+  assert.equal(new Rng(5).pick(names), new Rng(5).pick(names));
+  const coin = new Rng(11);
+  const heads = Array.from({length: 4000}, () => coin.chance(0.25)).filter(Boolean).length;
+  assert.ok(heads > 850 && heads < 1150, `${heads} of 4000 at 25%`);
+  assert.throws(() => new Rng(1).int(6, 1));
+  assert.throws(() => new Rng(1).int(0.5, 3));
+  // Very large bounds must not round past the top.
+  const big = new Rng(3);
+  for (let i = 0; i < 2000; i++) assert.ok(big.int(16777216, 16777221) <= 16777221);
   assert.throws(() => new Rng(5).pick([]));
 });
 

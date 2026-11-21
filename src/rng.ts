@@ -11,6 +11,7 @@ export function seedFromText(text: string) {
 export class Rng {
   private state: number;
 
+  /** Seeds are whole numbers from 0 to 2^32 - 1. Anything else is cut down to one (fractions dropped). */
   constructor(seed: number) {
     this.state = seed >>> 0;
   }
@@ -28,7 +29,10 @@ export class Rng {
   }
   /** A whole number from `min` to `max`, both included. */
   int(min: number, max: number) {
-    return Math.floor(this.range(min, max + 1));
+    if (!Number.isInteger(min) || !Number.isInteger(max) || min > max)
+      throw new Error('int needs whole numbers with min no greater than max.');
+    // The clamp guards against rounding with very large bounds.
+    return Math.min(max, min + Math.floor(this.next() * (max - min + 1)));
   }
   /** True with the given probability (0 never, 1 always). */
   chance(probability: number) {

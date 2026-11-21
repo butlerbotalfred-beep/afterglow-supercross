@@ -5,9 +5,9 @@ The race flow moves out of the browser file into a `RaceSession` class that take
 | Completion box | Result | Evidence |
 | --- | --- | --- |
 | 12 or more new session tests: setup to countdown to racing to results, pause and resume, restart, pause on controller disconnect, the 60-second finish timeout, practice never ending | Pass | 17 tests in `tests/session.test.ts`. Each named case has its own test, and the races in them are real: the test rides a full lap on Dusk Valley with the physics running |
-| Save tests: both legacy keys, corrupt data gives defaults, a newer version is left untouched, round trip | Pass | 9 tests in `tests/save.test.ts` |
+| Save tests: both legacy keys, corrupt data gives defaults, a newer version is left untouched, round trip | Pass | 12 tests in `tests/save.test.ts` |
 | Seeded random tests: same seed gives the same sequence, different seeds differ | Pass | 5 tests in `tests/rng.test.ts`, including three pinned values so the sequence can never change unnoticed |
-| 104 or more tests in total | Pass | 122 of 122 pass (91 before) |
+| 104 or more tests in total | Pass | 125 of 125 pass (91 before) |
 | Pace gate exact | Pass | 10 of 10 races at 0.000% with 0 crashes and 0 recoveries. Landing harness: 5 of 5 circuits match |
 | browser-smoke, touch-smoke and course-smoke pass on the Mac | Pending | To be run on the MacBook on this branch before merge |
 
@@ -22,9 +22,26 @@ The race flow moves out of the browser file into a `RaceSession` class that take
 - One key, `afterglow.save`, holds `{version, settings, layouts, records, career}`. Records and career are empty until the milestones that use them.
 - **First run after this update:** there is no save yet, so the power-slide setting is read from `afterglow.slide-aggression.v1` and custom layouts from `afterglow.track-layouts.v1`. Checked in a real browser with both keys seeded: the slider showed the stored 35%, the stored custom layout loaded, and after a change the new save held both while the two old keys were byte-for-byte unchanged.
 - **The old keys are never written or deleted**, so an older build still finds its data.
-- **A damaged save** falls back to defaults (plus the old keys) and is replaced on the next change. Damaged parts of an otherwise good save are replaced one by one.
-- **A save from a newer build** is never overwritten. This build uses defaults and the old keys, and changes last for that visit only.
-- **Blocked storage** (private windows): the game runs, and nothing is kept.
+- **A damaged save** falls back to defaults (plus the old keys). On the next change a copy of the damaged text is set aside under `afterglow.save.damaged`, then it is replaced. Damaged parts of an otherwise good save are replaced one by one.
+- **A save from a newer build** is never overwritten. This build uses defaults and the old keys. A settings change lasts for that visit only, and the editor says a layout could not be saved.
+- **Blocked storage** (private windows): the game runs and nothing is kept. The editor says a layout could not be saved, as it did before.
+- **Two tabs:** every change re-reads the save first and alters only its own part, so tabs do not overwrite each other, and anything in the save this build does not recognise is kept.
+- **An older build, or a tab still running one,** keeps its own keys and does not see changes made in the new save.
+
+## Independent review (B)
+
+The reviewer compared the old and new race flow line by line and found no player-visible difference. Findings and what was done:
+
+| Finding | Action |
+| --- | --- |
+| Two tabs could overwrite each other's changes, because each wrote its whole copy from page load | Fixed: each change re-reads the save and alters only its part. Test added |
+| Parts of a save this build does not recognise were dropped on the next write | Fixed: they are kept. Test added |
+| A damaged save was replaced with no copy kept | Fixed: a copy is set aside first. Test added |
+| With blocked storage or a newer save, the editor closed as if the layout was saved | Fixed: saving throws, so the editor shows its "could not save" message. Tests changed to match |
+| `Rng.int` could return one past the top with very large bounds (about 1 in 4 billion) | Fixed with a clamp. `int` now also rejects fractions and reversed bounds. Tests added |
+| `pick` and `chance` tests were thin | Tests strengthened |
+| `endRace` sets the phase before hiding touch controls (was after); lap count and difficulty are only stored once the device check passes | Declined: nothing reads those values in between |
+| Review-mode switches and the browser glue in session.ts have no unit tests | Declined for this milestone: they need a browser. The page comparison and the three smoke scripts cover them |
 
 ## Noticed, not changed
 
@@ -36,8 +53,8 @@ The countdown shows "4" for its first 0.8 seconds (it runs 3.8 s and rounds up) 
 | --- | --- | --- |
 | src/game/race-session.ts | 204 | Phases, countdown, pause, controller-disconnect pause, finish rules, the fixed-step clock |
 | src/game/session.ts | 801 | The browser around it: page, menus, controller joins, rendering, dev hooks (`window.__game` unchanged) |
-| src/save.ts | 121 | Versioned save and the legacy read |
-| src/rng.ts | 45 | Seeded random numbers |
+| src/save.ts | 162 | Versioned save and the legacy read |
+| src/rng.ts | 49 | Seeded random numbers |
 
 ## Play review (D, about 2 minutes)
 
