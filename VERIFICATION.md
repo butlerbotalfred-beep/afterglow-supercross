@@ -1,3 +1,48 @@
+# M0.3 Session, save and seeded random — 21 November 2026
+
+The race flow moves out of the browser file into a `RaceSession` class that takes its clock, input and screen from outside, so whole races now run in tests. A versioned save replaces the two separate storage keys. `PHYSICS_VERSION = 1` and a seeded random generator are in place for later milestones. No gameplay change.
+
+| Completion box | Result | Evidence |
+| --- | --- | --- |
+| 12 or more new session tests: setup to countdown to racing to results, pause and resume, restart, pause on controller disconnect, the 60-second finish timeout, practice never ending | Pass | 17 tests in `tests/session.test.ts`. Each named case has its own test, and the races in them are real: the test rides a full lap on Dusk Valley with the physics running |
+| Save tests: both legacy keys, corrupt data gives defaults, a newer version is left untouched, round trip | Pass | 9 tests in `tests/save.test.ts` |
+| Seeded random tests: same seed gives the same sequence, different seeds differ | Pass | 5 tests in `tests/rng.test.ts`, including three pinned values so the sequence can never change unnoticed |
+| 104 or more tests in total | Pass | 122 of 122 pass (91 before) |
+| Pace gate exact | Pass | 10 of 10 races at 0.000% with 0 crashes and 0 recoveries. Landing harness: 5 of 5 circuits match |
+| browser-smoke, touch-smoke and course-smoke pass on the Mac | Pending | To be run on the MacBook on this branch before merge |
+
+## How "no gameplay change" was checked
+
+- **Page HTML at nine points** of a scripted session is identical before and after, and so is every rider's final position and the race time to full precision (119.20000000004093 s). Same nine points as M0.2.
+- **Pace gate and landing harness** are exact, as above. They use the physics directly, so this shows the physics files are untouched; the page comparison covers the race flow around them.
+- **`RaceSession.step` is the old `step` function** with its variables moved onto the class. Sounds, countdown text, the pause menu and the results table are now callbacks, called in the same order as before.
+
+## What the save does
+
+- One key, `afterglow.save`, holds `{version, settings, layouts, records, career}`. Records and career are empty until the milestones that use them.
+- **First run after this update:** there is no save yet, so the power-slide setting is read from `afterglow.slide-aggression.v1` and custom layouts from `afterglow.track-layouts.v1`. Checked in a real browser with both keys seeded: the slider showed the stored 35%, the stored custom layout loaded, and after a change the new save held both while the two old keys were byte-for-byte unchanged.
+- **The old keys are never written or deleted**, so an older build still finds its data.
+- **A damaged save** falls back to defaults (plus the old keys) and is replaced on the next change. Damaged parts of an otherwise good save are replaced one by one.
+- **A save from a newer build** is never overwritten. This build uses defaults and the old keys, and changes last for that visit only.
+- **Blocked storage** (private windows): the game runs, and nothing is kept.
+
+## Noticed, not changed
+
+The countdown shows "4" for its first 0.8 seconds (it runs 3.8 s and rounds up) before 3, 2, 1. The beeps are on 3, 2 and 1 only. This is how the game already behaved, so it is kept and the test records it.
+
+## Where the code went
+
+| File | Lines | What it holds |
+| --- | --- | --- |
+| src/game/race-session.ts | 204 | Phases, countdown, pause, controller-disconnect pause, finish rules, the fixed-step clock |
+| src/game/session.ts | 801 | The browser around it: page, menus, controller joins, rendering, dev hooks (`window.__game` unchanged) |
+| src/save.ts | 121 | Versioned save and the legacy read |
+| src/rng.ts | 45 | Seeded random numbers |
+
+## Play review (D, about 2 minutes)
+
+A custom layout saved before this update still loads, and the power-slide setting is where you left it.
+
 # M0.2 Reformat and split main.ts — 12 November 2026
 
 Prettier 3.9.10 formats `src`, `tests` and `scripts` in one commit (cfab1de, listed in `.git-blame-ignore-revs`). Then main.ts is split into modules by moving code, not rewriting it. CI now runs `format:check` and `lint:lines`.
