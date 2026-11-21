@@ -40,7 +40,9 @@ Run against the production build, served from a sub-folder address (`/games/afte
 
 ## Mac smoke run
 
-MacBook (1440 × 900, Node 22): SMOKE_TEXT
+MacBook (1440 × 900, Node 22) at the final commit b46e8b1, all on the first run: browser-smoke 19/19 (58.4 fps with 1 human + 5 NPCs, 58.3 fps with 4 humans + 4 NPCs), touch-smoke 13/13, course-smoke 5/5 at 59.3–59.7 fps with 421 geometries and 21 textures steady. The same three also passed at ff8a8c4, before the review fixes.
+
+The production build was also opened there by hand (`vite preview`): it reaches the setup screen with the loading screen gone and no console errors, a race starts, sky, dirt, crowd and jerseys are textured, and Edit track downloads and opens the editor from both the setup screen and the pause menu.
 
 ## Independent review (B)
 
