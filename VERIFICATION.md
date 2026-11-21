@@ -1,3 +1,63 @@
+# M0.5 Hosted build — 21 November 2026
+
+The game is hosted at **https://afterglow-supercross.vercel.app**. It is public, served over HTTPS, and Vercel rebuilds it on every merge to `main`. A new browser test drives a production build with a simulated gamepad, and `npm run mac:update` brings the Mac's copy level with `main` in one step. No game code changed.
+
+| Completion box | Result | Evidence |
+| --- | --- | --- |
+| The hosted link loads over HTTPS with 0 console errors and 0 failed requests | Pass | `scripts/prod-smoke.mjs` run from the MacBook against the hosted link: served over HTTPS, 0 failed requests, 0 console errors, every request on the game's own address. A plain request with no login returns 200, so the link is public |
+| A merge to main updates the hosted link automatically | Pass at set-up, confirmed again at merge | The hosted build shows BUILD 745509a, the commit `main` was at when the repository was connected; nobody uploaded it by hand. The merge of this pull request is the second proof: the stamp must change to the merge commit. That result is recorded in the build tracker |
+| A simulated gamepad joins and starts a race on the production build | Pass | Same test, on the hosted link and on a local production build: the A button joins as rider 1 and readies, the Menu button starts the race, the gate drops, and the right trigger takes the bike to 24 km/h. The Menu press leaves no stray pause |
+| After `npm run mac:update` the Mac and the hosted link show the same build stamp | Waiting on Michael | The command is tested (below), but the Mac Studio that runs the game service is not reachable from here. One command on that Mac; see the play review |
+| A layout exported on the Mac address imports and rides on the hosted address | Pass | Same test with `--layout-from`: a layout is named and exported at the MacBook's own address, then imported at the hosted link, where its name appears, a test ride starts under that name, and it is in the hosted link's save |
+| One full touch lap on the iPhone from the hosted link | Waiting on Michael | Play review |
+
+## Browser test (`scripts/prod-smoke.mjs`)
+
+Run on the MacBook (real graphics card) at commit f2a2df2:
+
+- Hosted link, `--expect-stamp 745509a --layout-from http://localhost:5182/`: 15 of 15 checks, BUILD 745509a.
+- Local production build, `--layout-from local`: 13 of 13 checks.
+- `scripts/load-smoke.mjs` (now sharing the same small server): 15 of 15 checks.
+
+The same run in the cloud against the local build also passes 13 of 13. The cloud cannot reach the hosted link (its network blocks it), so the hosted run always comes from a Mac.
+
+The gamepad is a stand-in object returned by the browser's normal gamepad call, so the game's own joining, start and riding code runs unchanged. The test refuses unknown or empty options, so a mistyped command cannot quietly skip a check.
+
+## Mac update command (`npm run mac:update`)
+
+- On a copy that is behind `main`: pulled ba4cc18 to 745509a, reinstalled packages because the lock file had changed, and printed the commit it finished on (run in a scratch copy on Linux, where there is no service to restart).
+- On a copy that is not on `main`: stopped with "this copy is on "m0.5-hosted-build", not main" and changed nothing (run on the MacBook).
+- Uncommitted edits stop it the same way. Packages are reinstalled only when the lock file changed, because reinstalling takes the running game down until it finishes.
+
+## Regular smoke tests on the MacBook (commit 294d4f9)
+
+| Test | Result |
+| --- | --- |
+| browser-smoke | 19 of 19. 58.5 fps with 1 human and 5 NPCs, 58.2 fps with 4 humans and 4 NPCs |
+| touch-smoke | 13 of 13 |
+| course-smoke | 5 of 5. 59.2 to 59.7 fps, 421 geometries and 21 textures on every sample |
+
+CI (type check, 125 tests, build with size budgets, pace gate exact, landing harness) is green on the pull request.
+
+## Code review (B)
+
+An independent review found no blocking bug and seven points, all fixed in f2a2df2:
+
+| Finding | Fix |
+| --- | --- |
+| An empty or mistyped option skipped its check and still passed | Unknown options and options with no value stop the test |
+| README commands for the test did not say Playwright is needed | They now carry the same prefix as the load test |
+| `mac:update` reinstalled packages every time, taking the game down, with no advice if that failed | Reinstalls only when the lock file changed, and says how to recover |
+| Failed requests and errors were watched on the first page only | Every page the test opens is watched |
+| A fixed-length button press could fall between two slow frames | The button is held until the game reacts |
+| The small server broke on folder names with spaces and crashed on a malformed address | Both fixed |
+| Smaller points: the gate check could pass if the race never started; a timeout printed no summary; HTTPS was demanded of local addresses; a missing service gave a raw error | All fixed |
+
+## Play review (D)
+
+1. On the iPhone, open https://afterglow-supercross.vercel.app, choose iPhone / Touch controls and ride one full lap.
+2. On the Mac Studio, in the game folder, run `npm run mac:update`. Reload the Mac's game page and compare the BUILD stamp at the top of the setup screen with the hosted link's. They should match.
+
 # M0.4 Fast load — 21 November 2026
 
 The download drops from 16.95 MB to 3.04 MB. Textures ship as WebP at their original resolution, three.js is its own file, the track editor downloads only when it is opened, and a loading screen shows until every texture is ready. No gameplay change.
