@@ -9,7 +9,7 @@ The race flow moves out of the browser file into a `RaceSession` class that take
 | Seeded random tests: same seed gives the same sequence, different seeds differ | Pass | 5 tests in `tests/rng.test.ts`, including three pinned values so the sequence can never change unnoticed |
 | 104 or more tests in total | Pass | 125 of 125 pass (91 before) |
 | Pace gate exact | Pass | 10 of 10 races at 0.000% with 0 crashes and 0 recoveries. Landing harness: 5 of 5 circuits match |
-| browser-smoke, touch-smoke and course-smoke pass on the Mac | Pending | To be run on the MacBook on this branch before merge |
+| browser-smoke, touch-smoke and course-smoke pass on the Mac | Pass | Run on the MacBook (1440×900, Node 22) at the final commit 42e7a93, all on the first run. browser-smoke 19/19: 58.4 fps with 1 human + 5 NPCs and 58.3 fps with 4 humans + 4 NPCs. touch-smoke 13/13. course-smoke 5/5 at 59.7–59.9 fps on every course, 421–422 geometries and 21 textures across four course changes. The same three also passed at fc16371, before the review fixes |
 
 ## How "no gameplay change" was checked
 
