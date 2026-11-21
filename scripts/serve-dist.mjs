@@ -3,6 +3,7 @@
 import {createServer} from 'node:http';
 import {existsSync, readFileSync, statSync} from 'node:fs';
 import {extname, join, normalize} from 'node:path';
+import {fileURLToPath} from 'node:url';
 
 const TYPES = {
   '.html': 'text/html',
@@ -15,10 +16,16 @@ const TYPES = {
 };
 /** Serves dist/ at http://127.0.0.1:<free port><folder>. Returns the address and a function that stops it. */
 export async function serveDist(folder = '/') {
-  const dist = new URL('../dist/', import.meta.url).pathname;
+  const dist = fileURLToPath(new URL('../dist/', import.meta.url));
   if (!existsSync(join(dist, 'index.html'))) throw new Error('dist/ is missing. Run npm run build first.');
   const server = createServer((request, response) => {
-    const path = decodeURIComponent(new URL(request.url, 'http://x').pathname);
+    let path;
+    try {
+      path = decodeURIComponent(new URL(request.url, 'http://x').pathname);
+    } catch {
+      response.writeHead(400).end('bad request');
+      return;
+    }
     const inside = path.startsWith(folder) ? normalize(path.slice(folder.length) || 'index.html') : null;
     const file = inside && !inside.startsWith('..') ? join(dist, inside) : null;
     if (!file || !existsSync(file) || statSync(file).isDirectory()) {

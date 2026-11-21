@@ -2,6 +2,8 @@
 // Run it after every merge:   npm run mac:update
 // It stops without changing anything if this copy has uncommitted edits or is not on main.
 import {execFileSync, spawnSync} from 'node:child_process';
+import {existsSync} from 'node:fs';
+import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -27,10 +29,38 @@ if (edits) {
 }
 const before = git('rev-parse', '--short=7', 'HEAD');
 step('1/3 Getting the latest main', 'git', ['pull', '--ff-only', 'origin', 'main']);
-step('2/3 Installing packages', 'npm', ['ci']);
-if (process.platform === 'darwin')
-  step('3/3 Restarting the game service', process.execPath, ['scripts/server-service.mjs', 'restart']);
-else console.log('\n3/3 Not a Mac, so there is no service to restart.');
+const ahead = git('rev-list', '--count', 'origin/main..HEAD');
+if (ahead !== '0')
+  console.log(
+    `Note: this copy has ${ahead} commit(s) that are not on GitHub, so its build stamp will not match the hosted link.`,
+  );
+// Packages are reinstalled only when the lock file changed (or nothing is installed yet): npm ci removes
+// node_modules first, which takes the running game down until it finishes.
+const lockChanged = git('diff', '--name-only', before, 'HEAD', '--', 'package-lock.json') !== '';
+const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+if (lockChanged || !existsSync(join(root, 'node_modules'))) {
+  console.log('\n2/3 Installing packages');
+  const install = spawnSync(npm, ['ci'], {cwd: root, stdio: 'inherit', shell: process.platform === 'win32'});
+  if (install.status !== 0) {
+    console.error(
+      'mac:update stopped: installing packages failed, and the game will not run until it succeeds.\n' +
+        'Check the network and run it again:  npm ci && npm run server:restart',
+    );
+    process.exit(install.status || 1);
+  }
+} else console.log('\n2/3 Packages unchanged, nothing to install.');
+if (process.platform === 'darwin') {
+  console.log('\n3/3 Restarting the game service');
+  const restart = spawnSync(process.execPath, ['scripts/server-service.mjs', 'restart'], {cwd: root, stdio: 'pipe'});
+  if (restart.status !== 0) {
+    console.error(
+      'mac:update stopped: the game service could not be restarted. If it was never installed, run:\n' +
+        '  npm run server:install',
+    );
+    process.exit(restart.status || 1);
+  }
+  console.log('Service restarted.');
+} else console.log('\n3/3 Not a Mac, so there is no service to restart.');
 const after = git('rev-parse', '--short=7', 'HEAD');
 console.log(
   `\nDone. ${before === after ? `Already up to date at ${after}` : `Updated ${before} to ${after}`}.` +

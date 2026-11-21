@@ -14,10 +14,29 @@ import {serveDist} from './serve-dist.mjs';
 // require() rather than import, so a globally installed Playwright is found through NODE_PATH.
 const {chromium} = createRequire(import.meta.url)('playwright');
 const args = process.argv.slice(2);
-const option = name => (args.includes(name) ? args[args.indexOf(name) + 1] : null);
-const expectStamp = option('--expect-stamp');
-const layoutFrom = option('--layout-from');
-const given = args.find((a, i) => !a.startsWith('--') && !args[i - 1]?.startsWith('--'));
+// Options take their value as the next word. Anything else starting with -- is refused, so a mistyped or
+// empty option cannot quietly skip a check.
+const OPTIONS = ['--expect-stamp', '--layout-from'];
+const usage = problem => {
+  console.error(
+    `prod-smoke: ${problem}\nUse: prod-smoke.mjs [address] [--expect-stamp abc1234] [--layout-from <address>|local]`,
+  );
+  process.exit(2);
+};
+const values = {};
+let given = null;
+for (let i = 0; i < args.length; i++) {
+  if (OPTIONS.includes(args[i])) {
+    const value = args[++i];
+    if (!value || value.startsWith('--')) usage(`${args[i - 1]} needs a value`);
+    values[args[i - 1]] = value;
+  } else if (args[i].startsWith('--')) usage(`unknown option ${args[i]}`);
+  else if (given) usage(`more than one address given: ${given} and ${args[i]}`);
+  else given = args[i];
+}
+const expectStamp = values['--expect-stamp'] || null;
+const layoutFrom = values['--layout-from'] || null;
+if (expectStamp && !/^[0-9a-f]{7}$/.test(expectStamp)) usage('--expect-stamp takes the 7-character commit hash');
 const local = given ? null : await serveDist('/');
 const url = given || local.url;
 // A second local copy at a different address stands in for "the other address" when asked for `local`.
@@ -62,62 +81,56 @@ try {
   const requested = [],
     failed = [],
     errors = [];
-  page.on('request', r => requested.push(r.url()));
-  page.on('requestfailed', r => failed.push(`${r.failure()?.errorText} ${r.url()}`));
-  page.on('response', r => r.status() >= 400 && failed.push(`${r.status()} ${r.url()}`));
-  page.on('pageerror', e => errors.push(String(e)));
-  page.on('console', m => m.type() === 'error' && errors.push(m.text()));
+  // Every page the test opens is watched for failed requests and errors.
+  const watch = p => {
+    p.on('request', r => requested.push(r.url()));
+    p.on('requestfailed', r => failed.push(`${r.failure()?.errorText} ${r.url()}`));
+    p.on('response', r => r.status() >= 400 && failed.push(`${r.status()} ${r.url()}`));
+    p.on('pageerror', e => errors.push(String(e)));
+    p.on('console', m => m.type() === 'error' && errors.push(m.text()));
+    return p;
+  };
+  watch(page);
   await page.addInitScript(fakeGamepad);
   await page.goto(url, {waitUntil: 'commit'});
   await ready(page);
   const origin = new URL(page.url()).origin;
-  if (given) check('served over HTTPS', page.url().startsWith('https://'), page.url());
-  check('loads to the setup screen with the loading screen gone', true);
+  const localAddress = /^(localhost|127\.|10\.|192\.168\.|100\.)/.test(new URL(page.url()).hostname);
+  if (given && !localAddress) check('served over HTTPS', page.url().startsWith('https://'), page.url());
+  console.log('ok   loads to the setup screen with the loading screen gone');
   const stamp = (await page.textContent('#build-stamp')).replace('BUILD', '').trim();
   check('setup screen shows a build stamp', /^[0-9a-f]{7}\+?$/.test(stamp), `BUILD ${stamp}`);
   if (expectStamp) check(`build stamp is ${expectStamp}`, stamp === expectStamp, `BUILD ${stamp}`);
 
   // Simulated gamepad: plug in, press A to join, press Menu to start, hold the right trigger to ride.
-  const press = async (button, ms = 200) => {
+  // A button is held until the game has reacted, then released, so a slow frame cannot miss the press.
+  const holdUntil = async (button, reacted) => {
     await page.evaluate(b => window.__pad.set(b, 1), button);
-    await page.waitForTimeout(ms);
-    await page.evaluate(b => window.__pad.set(b, 0), button);
-    await page.waitForTimeout(ms);
-  };
-  await page.evaluate(() => (window.__pad.plugged = true));
-  await page.waitForTimeout(500);
-  await press(0, 400);
-  const joined = await page
-    .waitForFunction(
-      () => {
-        const slot = document.querySelector('#slots [data-device="0"]');
-        return slot && slot.value.startsWith('pad-') && !document.getElementById('start').disabled;
-      },
-      null,
-      {timeout: 20000},
-    )
-    .then(
+    const ok = await page.waitForFunction(reacted, null, {timeout: 30000}).then(
       () => true,
       () => false,
     );
+    await page.evaluate(b => window.__pad.set(b, 0), button);
+    await page.waitForTimeout(300);
+    return ok;
+  };
+  await page.evaluate(() => (window.__pad.plugged = true));
+  await page.waitForTimeout(500);
+  const joined = await holdUntil(0, () => {
+    const slot = document.querySelector('#slots [data-device="0"]');
+    return slot && slot.value.startsWith('pad-') && !document.getElementById('start').disabled;
+  });
   const slotText = await page.evaluate(() => {
     const select = document.querySelector('#slots [data-device="0"]');
     return `${select?.selectedOptions[0]?.textContent}, ${document.querySelector('#slots [data-ready="0"]')?.textContent}`;
   });
   check('simulated gamepad joins as rider 1 with the A button', joined, slotText);
-  await press(9, 400);
-  const started = await page
-    .waitForFunction(
-      () =>
-        document.getElementById('setup').classList.contains('hidden') &&
-        !document.getElementById('hud').classList.contains('hidden'),
-      null,
-      {timeout: 20000},
-    )
-    .then(
-      () => true,
-      () => false,
-    );
+  const started = await holdUntil(
+    9,
+    () =>
+      document.getElementById('setup').classList.contains('hidden') &&
+      !document.getElementById('hud').classList.contains('hidden'),
+  );
   check('the Menu button starts the race', started);
   const gateDropped = await page
     .waitForFunction(() => document.getElementById('countdown').classList.contains('hidden'), null, {timeout: 240000})
@@ -127,7 +140,7 @@ try {
     );
   check(
     'the countdown runs and the gate drops',
-    gateDropped,
+    started && gateDropped,
     await page.evaluate(
       () =>
         `countdown ${document.getElementById('countdown').textContent}, pause menu ` +
@@ -161,7 +174,7 @@ try {
     // Export a layout at one address, then import and ride it at the tested address.
     // The race page is closed first so it does not compete for the graphics card.
     await page.close();
-    const source = await context.newPage();
+    const source = watch(await context.newPage());
     await source.goto(layoutUrl, {waitUntil: 'commit'});
     await ready(source);
     await click(source, '#open-editor');
@@ -179,16 +192,13 @@ try {
     ]);
     const file = join(mkdtempSync(join(tmpdir(), 'afterglow-layout-')), download.suggestedFilename());
     await download.saveAs(file);
-    check(
-      'layout exported at the other address',
-      true,
-      `${download.suggestedFilename()} from ${new URL(layoutUrl).host}`,
+    console.log(
+      `ok   layout exported at the other address: ${download.suggestedFilename()} from ${new URL(layoutUrl).host}`,
     );
     await source.close();
 
-    const target = await context.newPage();
-    const targetErrors = [];
-    target.on('pageerror', e => targetErrors.push(String(e)));
+    const [failedBefore, errorsBefore] = [failed.length, errors.length];
+    const target = watch(await context.newPage());
     await target.goto(url, {waitUntil: 'commit'});
     await ready(target);
     await click(target, '#open-editor');
@@ -229,8 +239,11 @@ try {
         layoutName,
       ),
     );
-    check('no errors while importing and riding', !targetErrors.length, targetErrors.join(' | '));
+    const later = [...failed.slice(failedBefore), ...errors.slice(errorsBefore)];
+    check('no failed requests or errors while exporting, importing and riding', !later.length, later.join(' | '));
   }
+} catch (error) {
+  check('the test ran to the end', false, String(error.message).split('\n')[0]);
 } finally {
   await browser.close();
   local?.close();

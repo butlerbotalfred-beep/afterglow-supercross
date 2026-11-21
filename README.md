@@ -8,7 +8,7 @@ A playable browser-based, third-person arcade Supercross milestone. Five selecta
 
 Saves at the hosted link are separate from saves on the Mac's addresses. See **Moving a layout between addresses** to carry a custom layout across.
 
-`npm run test:prod -- https://afterglow-supercross.vercel.app/ --expect-stamp <commit>` checks the hosted build in a real browser: clean load, a simulated gamepad joining and starting a race, and no failed requests or console errors.
+`NODE_PATH=$(npm root -g) npm run test:prod -- https://afterglow-supercross.vercel.app/ --expect-stamp <7-character commit>` (Playwright installed globally) checks the hosted build in a real browser: clean load, a simulated gamepad joining and starting a race, and no failed requests or console errors.
 
 ## Launch
 
@@ -53,7 +53,7 @@ To bring this Mac's copy up to date with `main` in one step:
 npm run mac:update
 ```
 
-It refuses to run if the folder is not on `main` or has uncommitted edits, then pulls, reinstalls packages and restarts the login service. It prints the commit it finished on, which is the **BUILD** stamp the Mac's address shows after a reload and should match the stamp at the hosted link.
+It refuses to run if the folder is not on `main` or has uncommitted edits, then pulls, reinstalls packages if they changed and restarts the login service. It prints the commit it finished on, which is the **BUILD** stamp the Mac's address shows after a reload and should match the stamp at the hosted link.
 
 Configuration: `~/Library/LaunchAgents/local.afterglow.supercross.plist`. Logs: `~/Library/Logs/Afterglow/server.log` and `server-error.log`. The service uses the current absolute Node and project paths. If either moves, rerun `server:install`. Do not start a second dev server on the same port while this service runs. To permanently remove automatic startup, run `server:stop` and remove that plist.
 
@@ -86,7 +86,7 @@ The hosted link, `localhost` and the Mac's Tailscale address each keep their own
 5. Press **Import JSON** and choose the file. The editor shows the imported layout and its name.
 6. Press **Save & return** or **Save & test ride**. Until you save, the import is only a draft.
 
-A file for a different circuit is refused with a message; pick the matching circuit first. `npm run test:prod -- --layout-from <address>` runs this export and import automatically between two addresses.
+A file for a different circuit is refused with a message; pick the matching circuit first. `NODE_PATH=$(npm root -g) npm run test:prod -- --layout-from <address>` runs this export and import automatically between two addresses.
 
 The editor allows up to 120 obstacles (240 individual mounds) and 120 route points, with dimensions bounded to keep the geometry finite. Overlaps, tight-turn jumps and crossing route segments produce warnings. Warnings do not prove a layout is unridable or guarantee it is safe: test the approach speed and nose alignment. There are no bridges, freehand terrain sculpting or automatic guarantees that an arbitrary custom route is easy for NPCs.
 
