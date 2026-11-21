@@ -1,3 +1,56 @@
+# M0.4 Fast load — 21 November 2026
+
+The download drops from 16.95 MB to 3.04 MB. Textures ship as WebP at their original resolution, three.js is its own file, the track editor downloads only when it is opened, and a loading screen shows until every texture is ready. No gameplay change.
+
+| Completion box | Result | Evidence |
+| --- | --- | --- |
+| Shipped art totals 2.0 MB or less | Pass | 1.63 MB (was 15.56 MB). `npm run build:report -- --check` |
+| dist totals 4.0 MB or less | Pass | 3.04 MB (was 16.95 MB). Same command |
+| JavaScript to reach the setup screen is 260 KB gzipped or less | Pass | 199.5 KB in 2 files (game 43.5 KB, three.js 156.0 KB). The editor's 10.0 KB arrives later. Same command |
+| No .png art requested at runtime and no /art/ absolute path in src (CI check) | Pass | The same command fails CI if src names a `.png` or an absolute `/art/` path, or if the build contains a PNG. The browser test also saw no PNG request |
+| Editor code is not downloaded until Edit track is pressed (browser test) | Pass | `scripts/load-smoke.mjs`: no `track-editor` file requested before the press, one after, and the editor opens. CI also fails if the editor is part of the startup JavaScript |
+| Loading bar shows until every texture is ready (test with a delayed network) | Pass | `scripts/load-smoke.mjs` holds every texture back and releases them one at a time. The loading screen covered the page before each release and was removed only after the last |
+| Pace gate exact | Pass | 10 of 10 races at 0.000% with 0 crashes and 0 recoveries. Landing harness 5 of 5 |
+| First load on the iPhone is at least 50% faster than the M0.1 measurement | Waiting on Michael | M0.1 measured 7 to 10 s. Timing comes from the play review below |
+
+## Texture sizes
+
+`node scripts/optimize-art.mjs` converts the PNG originals in `art-source/` to WebP in `public/art/`. Resolution is unchanged.
+
+| Texture | Size | PNG | WebP | Quality |
+| --- | --- | --- | --- | --- |
+| dusk-sky-v3 | 1774 × 887 | 1.70 MB | 0.12 MB | 90 |
+| dirt-clay-v2 | 1254 × 1254 | 4.56 MB | 0.64 MB | 82 |
+| crowd-v2 | 2172 × 724 | 3.13 MB | 0.37 MB | 82 |
+| jersey-height-v1 | 1254 × 1254 | 4.40 MB | 0.51 MB | 82 |
+| Total | | 13.79 MB | 1.63 MB | |
+
+The sky gets a higher quality because smooth gradients show compression first. `dusk-sky-v2.png` was not used by the game; it stays in `art-source/` and is no longer shipped.
+
+## Browser test (`scripts/load-smoke.mjs`, 12 of 12 checks)
+
+Run against the production build, served from a sub-folder address (`/games/afterglow/`) to prove nothing depends on the site root:
+
+- The loading screen covers the page while textures are held back, stays until the last one is released, and its bar only moves forward (20% → 36% → 68% → removed).
+- All textures are requested as WebP from the page's own folder. No PNG is requested.
+- No track-editor file is requested before Edit track is pressed. After the press it downloads and the editor opens.
+- Nothing fails to load, the console has no errors, and every request stays inside the page folder.
+
+## How "no gameplay change" was checked
+
+- **Page HTML at nine points** of a scripted session matches the pre-M0.4 build, and every rider's final position and the race time match to full precision. The one difference: the editor's empty placeholder element is no longer in the page until the editor is first opened.
+- **Pace gate and landing harness** exact, as above.
+
+## What else changed
+
+- All texture loading goes through `src/assets.ts`, which builds addresses from the page's own location (`BASE_URL`), and the build uses relative addresses throughout (`base: './'`).
+- If the editor's download fails (offline), the setup screen says so and the next press tries again.
+- New dev dependency: `sharp` 0.35.5, used only by `scripts/optimize-art.mjs`.
+
+## Play review (D, about 5 minutes)
+
+Before-and-after screenshots of the grid, a jump and a berm were captured from the same simulated moment at 2560 × 1440 (software renderer). Average pixel difference: 2.5, 3.5 and 4.7 out of 255. Question: can you see any loss of quality in the sky, dirt, crowd or jersey? Then time the first load on the iPhone again (M0.1: 7 to 10 s).
+
 # M0.3 Session, save and seeded random — 21 November 2026
 
 The race flow moves out of the browser file into a `RaceSession` class that takes its clock, input and screen from outside, so whole races now run in tests. A versioned save replaces the two separate storage keys. `PHYSICS_VERSION = 1` and a seeded random generator are in place for later milestones. No gameplay change.

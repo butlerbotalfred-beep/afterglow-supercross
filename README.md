@@ -21,6 +21,7 @@ npm run preview -- --port 4173
 npm test                  # deterministic race, input and riding tests
 node scripts/browser-smoke.mjs  # with the dev server running on 5173
 node scripts/course-smoke.mjs   # five-course selection, laps, restart, resource cleanup, left-stick air pitch
+NODE_PATH=$(npm root -g) npm run test:load   # production build: loading screen, WebP textures, editor downloaded on demand (needs npm run build and Playwright)
 ```
 
 The browser smoke script uses pinned `agent-browser@0.27.0` via npm, requires its Chrome browser installation, opens an isolated verification session, simulates inputs, and saves captures plus a JSON report in `output/`. If necessary, install its browser with `npm exec --yes --package=agent-browser@0.27.0 -- agent-browser install`. Browser verification is a developer tool, not a dependency for playing.

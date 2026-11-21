@@ -17,6 +17,8 @@
     "landing-harness": "tsx scripts/landing-harness.ts",
     "test:browser": "node scripts/browser-smoke.mjs",
     "test:touch": "node scripts/touch-smoke.mjs",
+    "test:load": "node scripts/load-smoke.mjs",
+    "art:optimize": "node scripts/optimize-art.mjs",
     "server:install": "node scripts/server-service.mjs install",
     "server:status": "node scripts/server-service.mjs status",
     "server:restart": "node scripts/server-service.mjs restart",
@@ -31,6 +33,7 @@
     "@types/node": "22.19.15",
     "@types/three": "0.183.1",
     "prettier": "3.9.10",
+    "sharp": "0.35.5",
     "tsx": "4.23.15",
     "typescript": "7.0.2",
     "vite": "8.3.8"

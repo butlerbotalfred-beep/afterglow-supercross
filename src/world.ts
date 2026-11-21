@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {loadTexture} from './assets';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import {Track} from './track';
 import {addScenery} from './scenery';
@@ -57,7 +58,7 @@ export function createWorld(track: Track) {
   );
   scene.add(sky);
   if (theme.id === 'dusk') {
-    const panorama = new THREE.TextureLoader().load('/art/dusk-sky-v3.png');
+    const panorama = loadTexture('dusk-sky-v3.webp');
     panorama.colorSpace = THREE.SRGBColorSpace;
     const dome = new THREE.SphereGeometry(1190, 48, 32),
       uv = dome.attributes.uv;

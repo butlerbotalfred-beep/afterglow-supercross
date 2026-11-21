@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {loadTexture} from './assets';
 let fabricHeight: THREE.Texture | undefined;
 /** Sculpted elliptical torso with fabric folds; UV design wraps around the back instead of floating plates. */
 export function jerseyGeometry() {
@@ -36,7 +37,7 @@ export function jerseyGeometry() {
 }
 export function gearMaterials(color: number) {
   if (!fabricHeight) {
-    fabricHeight = new THREE.TextureLoader().load('/art/jersey-height-v1.png');
+    fabricHeight = loadTexture('jersey-height-v1.webp');
     fabricHeight.wrapS = fabricHeight.wrapT = THREE.RepeatWrapping;
     fabricHeight.anisotropy = 8;
     fabricHeight.userData.persistent = true;

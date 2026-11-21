@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {loadTexture} from './assets';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import type {Track} from './track';
 
@@ -16,7 +17,7 @@ export function addStadium(scene: THREE.Scene, track: Track) {
     side: THREE.DoubleSide,
   });
   const light = new THREE.MeshBasicMaterial({color: '#ffe9ba', toneMapped: false});
-  const crowdTexture = new THREE.TextureLoader().load('/art/crowd-v2.png');
+  const crowdTexture = loadTexture('crowd-v2.webp');
   crowdTexture.colorSpace = THREE.SRGBColorSpace;
   crowdTexture.wrapS = THREE.RepeatWrapping;
   crowdTexture.anisotropy = 8;

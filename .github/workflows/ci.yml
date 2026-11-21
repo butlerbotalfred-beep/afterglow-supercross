@@ -29,8 +29,8 @@ jobs:
         run: npm run typecheck
       - name: Unit tests
         run: npm test
-      - name: Production build and sizes
-        run: npm run build:report
+      - name: Production build and size budgets
+        run: npm run build:report -- --check
       - name: Pace gate (10 AI races must match baselines exactly)
         run: npm run pace-gate -- --tolerance 0
       - name: Landing harness
