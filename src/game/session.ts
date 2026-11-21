@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import {MenuPad, MenuFocus, type MenuEvent} from '../menu-controller';
 import {obstacleMarker} from '../track-markers';
 import {Track} from '../track';
-import {TrackEditor} from '../track-editor';
+import type {TrackEditor} from '../track-editor';
 import {layoutFromTrack, type TrackLayout} from '../track-layout';
 import {COURSES, courseById} from '../courses';
 import {disposeWorld} from '../scenery';
@@ -32,6 +32,7 @@ import {devicesReady, RaceSession} from './race-session';
 import {blendPose, capturePose, pacingStats, type Pose} from '../render-interp';
 import {createRenderer, renderViews, resizeRenderer, type RenderContext} from '../render/renderer';
 import {el, setVisible} from '../ui/dom';
+import {isLoading, watchLoading} from '../ui/loading';
 import {hudHtml, updateHud, type HudContext} from '../ui/hud';
 import {pauseMessage} from '../ui/pause-menu';
 import {showResultsTable} from '../ui/results-screen';
@@ -107,27 +108,56 @@ let frameCount = 0;
 let activeLayout: TrackLayout | null = null;
 let testMarkers = new THREE.Group();
 scene.add(testMarkers);
-const editor = new TrackEditor(
-  (layout, ride) => {
-    save.saveLayout(layout); // Throw before changing the race if browser storage fails.
-    activeLayout = layout;
-    el<HTMLSelectElement>('track-layout').value = 'custom';
-    rebuildTrack(new Track(courseById(layout.courseId), layout));
-    setVisible('setup', true);
-    if (ride) {
-      setMode(true);
-      startRace();
-    }
-  },
-  () => setVisible('setup', true),
-);
-function openEditor() {
+// The track editor is downloaded the first time it is opened, so it adds nothing to the first load.
+let editor: TrackEditor | null = null,
+  editorLoading: Promise<TrackEditor> | null = null;
+const editorOpen = () => !!editor?.isOpen;
+function loadEditor() {
+  editorLoading ||= import('../track-editor').then(
+    ({TrackEditor}) =>
+      (editor = new TrackEditor(
+        (layout, ride) => {
+          save.saveLayout(layout); // Throw before changing the race if browser storage fails.
+          activeLayout = layout;
+          el<HTMLSelectElement>('track-layout').value = 'custom';
+          rebuildTrack(new Track(courseById(layout.courseId), layout));
+          setVisible('setup', true);
+          if (ride) {
+            setMode(true);
+            startRace();
+          }
+        },
+        () => setVisible('setup', true),
+      )),
+  );
+  // A failed download (offline, say) must not block the next try.
+  editorLoading.catch(() => (editorLoading = null));
+  return editorLoading;
+}
+async function openEditor() {
+  // Download first and only then leave the race, so a failed download costs nothing.
+  const from = {phase: session.phase, paused: session.paused};
+  const buttons = [el<HTMLButtonElement>('open-editor'), el<HTMLButtonElement>('pause-editor')];
+  let loaded: TrackEditor;
+  buttons.forEach(b => (b.disabled = true));
+  try {
+    loaded = await loadEditor();
+  } catch {
+    const message = 'The track editor could not be downloaded. Check the connection and try again.';
+    el('setup-status').textContent = message;
+    el('pause-message').textContent = message;
+    return;
+  } finally {
+    buttons.forEach(b => (b.disabled = false));
+  }
+  // If the player moved on while it downloaded (started a race, resumed), leave them where they are.
+  if (loaded.isOpen || session.phase !== from.phase || session.paused !== from.paused) return;
   session.reviewDrive = false;
   session.reviewFrozen = false;
   session.reviewCrashTest = '';
   toSetup();
   setVisible('setup', false);
-  editor.open(activeLayout || layoutFromTrack(track));
+  loaded.open(activeLayout || layoutFromTrack(track));
 }
 function rebuildTrack(next: Track) {
   touchControls.clear();
@@ -338,7 +368,7 @@ controllerHint.hidden = true;
 controllerHint.textContent = '↑/↓ Navigate · ←/→ Adjust · A Select · B Back · Menu Start / Resume';
 document.body.append(controllerHint);
 function menuRoot() {
-  return editor.isOpen
+  return editorOpen()
     ? el('track-editor')
     : session.paused
       ? el('pause')
@@ -352,9 +382,9 @@ function menuAction(event: MenuEvent) {
   const root = menuRoot();
   if (!root) return;
   const {action, scale} = event;
-  if (editor.isOpen) {
+  if (editorOpen()) {
     if (['previous', 'next', 'kind', 'highlight', 'moveLeft', 'moveRight', 'moveUp', 'moveDown'].includes(action)) {
-      editor.controller(action, scale);
+      editor?.controller(action, scale);
       menuFocus.focus(el('editor-object'));
       return;
     }
@@ -398,7 +428,7 @@ function pollMenus(now: number, consumed: Set<number>) {
     menuPad.update(pads, now);
     return;
   }
-  controllerHint.hidden = !root || editor.isOpen || !Array.from(pads).some(p => p && p.connected !== false);
+  controllerHint.hidden = !root || editorOpen() || !Array.from(pads).some(p => p && p.connected !== false);
   // Consume riding button edges while in menus, so B/Menu cannot reset or pause
   // the bike as the menu closes. Keyboard pause continues to work here too.
   if (root)
@@ -434,7 +464,7 @@ function pollJoins() {
     const pressed = !!p.buttons[0]?.pressed || (p.buttons[0]?.value || 0) > 0.5;
     const join = pressed && !padButtons.get(p.index);
     padButtons.set(p.index, pressed);
-    if (session.phase !== 'setup' || iphoneMode || editor.isOpen) continue;
+    if (session.phase !== 'setup' || iphoneMode || editorOpen()) continue;
     // Only visible slots count: a pad left in a hidden slot (after lowering the rider count) can still join.
     const assigned = assignments.slice(0, humanCount).findIndex(d => d?.kind === 'gamepad' && d.index === p.index);
     if ((join && (assigned < 0 || !ready[assigned])) || (waitingForController && (pressed || p.index >= 1000))) {
@@ -488,13 +518,14 @@ function frame(now: number) {
     fpsFrames.push(raw);
     if (fpsFrames.length > 600) fpsFrames.shift();
   }
-  pollMenus(now, pollJoins());
+  // Controllers do nothing until the loading screen has gone, so a race cannot start unseen.
+  if (!isLoading()) pollMenus(now, pollJoins());
   const steps = session.advance(dt, () => (prevPoses = session.riders.map(capturePose)));
   if (raw > 0 && raw < 0.5) {
     stepCounts.push(steps);
     if (stepCounts.length > 600) stepCounts.shift();
   }
-  if (editor.isOpen) {
+  if (editorOpen()) {
     audio.update(0, 0, false);
     requestAnimationFrame(frame);
     return;
@@ -606,7 +637,7 @@ el<HTMLSelectElement>('render-scale').onchange = e => {
   resize();
 };
 addEventListener('keydown', e => {
-  if (!editor.isOpen && e.code === 'KeyM' && !e.repeat && !(e.target instanceof HTMLInputElement)) toggleMute();
+  if (!editorOpen() && e.code === 'KeyM' && !e.repeat && !(e.target instanceof HTMLInputElement)) toggleMute();
 });
 addEventListener('blur', () => {
   if ((session.phase === 'racing' || session.phase === 'countdown') && !session.paused) session.togglePause();
@@ -643,6 +674,7 @@ refreshSlots();
 buildGrid();
 resize();
 requestAnimationFrame(frame);
+watchLoading();
 // Development-only deterministic controls and telemetry for repeatable local verification.
 if (import.meta.env.DEV) {
   (window as any).__game = {

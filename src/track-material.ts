@@ -1,7 +1,8 @@
 import * as THREE from 'three';
+import {loadTexture} from './assets';
 /** Locally served original texture; shallow shader grooves follow the course UVs. */
 export function dirtMaterial(ground = false, onLoad?: () => void) {
-  const dirt = new THREE.TextureLoader().load('/art/dirt-clay-v2.png', onLoad);
+  const dirt = loadTexture('dirt-clay-v2.webp', onLoad);
   dirt.colorSpace = THREE.SRGBColorSpace;
   dirt.wrapS = dirt.wrapT = THREE.RepeatWrapping;
   dirt.anisotropy = 8;

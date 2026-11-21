@@ -12,12 +12,12 @@ The fictional Afterglow title and stadium signage are original presentation elem
 
 Generated specifically for this project with the built-in image-generation tool on 21 October 2026:
 
-- `public/art/dusk-sky-v3.png` — cooler dusk panorama (v2 retained for comparison) mapped onto the stadium sky dome.
-- `public/art/dirt-clay-v2.png` — granular clay albedo and bump detail, tinted for each circuit.
-- `public/art/crowd-v2.png` — audience texture mapped onto individual stepped seating rows behind 3D railings.
+- `art-source/dusk-sky-v3.png` — cooler dusk panorama (v2 retained in `art-source/` for comparison, not shipped) mapped onto the stadium sky dome.
+- `art-source/dirt-clay-v2.png` — granular clay albedo and bump detail, tinted for each circuit.
+- `art-source/crowd-v2.png` — audience texture mapped onto individual stepped seating rows behind 3D railings.
 
-No external runtime requests are required. Full generation prompts and returned dimensions are in `output/art-review/prompts.md`. The audience uses textures, not individually animated human models. None of these textures is a supplied concept screenshot.
+The PNG originals live in `art-source/` and are not part of the build. The game ships WebP copies at the same resolution in `public/art/`, made by `node scripts/optimize-art.mjs` (quality 90 for the sky, 82 for the rest); rerun it after changing an original. No external runtime requests are required. Full generation prompts and returned dimensions are in `output/art-review/prompts.md`. The audience uses textures, not individually animated human models. None of these textures is a supplied concept screenshot.
 
 The v3 sky is an image-generation edit of v2, color-matched against the supplied stylized concept. Its original is `exec-7f71735f-e6db-4d05-b945-869a869e0c06.png` under the generated-images directory documented in the prompt log. New event screen graphics, cloth/pants/boot textures and sculpted plastics are code-generated.
 
-On 22 October 2026, `public/art/jersey-height-v1.png` was generated with the built-in image tool and applied as a shared fabric bump map to the jersey and sleeves. The 1254 × 1254 original, prompt and provenance are recorded in `output/art-review/prompts.md`. It is a material texture, not a replacement gameplay image.
+On 22 October 2026, `art-source/jersey-height-v1.png` was generated with the built-in image tool and applied as a shared fabric bump map to the jersey and sleeves. The 1254 × 1254 original, prompt and provenance are recorded in `output/art-review/prompts.md`. It is a material texture, not a replacement gameplay image.

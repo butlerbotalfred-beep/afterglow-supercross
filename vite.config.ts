@@ -13,4 +13,11 @@ function buildStamp():string {
   } catch {return 'dev';}
 }
 
-export default defineConfig({plugins:[macControllerPlugin()],define:{__BUILD_STAMP__:JSON.stringify(buildStamp())}});
+// three.js goes in its own file: it changes only when the library is upgraded, so browsers keep their copy
+// across game updates. base './' makes every address relative, so the build works from any folder or host.
+export default defineConfig({
+  base:'./',
+  plugins:[macControllerPlugin()],
+  define:{__BUILD_STAMP__:JSON.stringify(buildStamp())},
+  build:{chunkSizeWarningLimit:700,rollupOptions:{output:{manualChunks:id=>/[\\/]node_modules[\\/]three[\\/]/.test(id)?'three':undefined}}},
+});
