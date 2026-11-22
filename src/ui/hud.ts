@@ -156,6 +156,18 @@ function updateTiming(
   split.textContent = delta === null ? label : `${label}  ${formatDelta(delta)}`;
   split.className = `lap-split ${delta === null ? '' : delta < 0 ? 'faster' : 'slower'}`;
 }
+/** How long CLEAN LANDING or FLAT LANDING stays up. */
+const LANDING_CUE_SECONDS = 1.4;
+/** The notice shown just after a judged landing. */
+export function landingNotice(r: Pick<Rider, 'landingCue' | 'landingBonus'>) {
+  if (r.landingCue === 'clean') {
+    const gained = Math.round(r.landingBonus * 3.6);
+    return (
+      '<b class="clean-landing">CLEAN LANDING</b>' + `<small>${gained > 0 ? `+${gained} KM/H` : 'SPEED KEPT'}</small>`
+    );
+  }
+  return '<b class="flat-landing">FLAT LANDING</b><small>MATCH THE SLOPE TO KEEP SPEED</small>';
+}
 export function updateHud(ctx: HudContext) {
   const {track, riders, viewHud, phase, practice, lapCount, humanCount, raceTime, firstFinish, iphoneMode} = ctx;
   const ordered = ranking(riders, track);
@@ -207,7 +219,10 @@ export function updateHud(ctx: HudContext) {
                   : r.powerSlide > 0.18
                     ? `<b class="pace-label">${r.brake > 0.1 ? 'BRAKE SLIDE' : 'POWER SLIDE'}</b>` +
                       `<small>CENTER THE STICK TO REGAIN GRIP</small>`
-                    : paceNotice;
+                    : // A rhythm section coming up matters more than the landing just made.
+                      r.landingCue && r.landingCueAge < LANDING_CUE_SECONDS && !paceNotice
+                      ? landingNotice(r)
+                      : paceNotice;
     const targets = practice
       ? track.obstacles
           .map((j, index) => ({

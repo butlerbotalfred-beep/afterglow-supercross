@@ -2266,3 +2266,11 @@ footer i {
   max-height: 52vh;
   overflow-y: auto;
 }
+
+/* Landing cues (M1.2): green for a landing matched to the slope, amber for one that cost speed. */
+.rider-notice .clean-landing {
+  color: #b5f58a;
+}
+.rider-notice .flat-landing {
+  color: #ffc46b;
+}

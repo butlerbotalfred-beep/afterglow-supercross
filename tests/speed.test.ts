@@ -1,3 +1,4 @@
+import {TUNING} from '../src/config';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {Track} from '../src/track.ts';
@@ -21,7 +22,7 @@ function straight() {
   track.project = (x: number, z: number) => track.at(z, x);
   return track;
 }
-test('full throttle delivers the additional 25% acceleration increase and reaches the 182.25 km/h ceiling', () => {
+test('full throttle delivers the additional 25% acceleration increase and reaches the 169.2 km/h ceiling', () => {
   const track = straight(),
     r = makeRider(track, 0, true, 0xffffff),
     dt = 1 / 120;
@@ -30,7 +31,8 @@ test('full throttle delivers the additional 25% acceleration increase and reache
   stepRider(r, throttle, track, dt, [r]);
   assert.ok(Math.abs(r.speed / dt - 23.4375) < 1e-8, 'launch acceleration is 23.4375 m/s²');
   for (let i = 1; i < 8 / dt; i++) stepRider(r, throttle, track, dt, [r]);
-  assert.equal(r.speed, 50.625, 'sustained throttle reaches and holds 182.25 km/h');
+  assert.equal(TUNING.maxSpeed, 47, 'the ceiling is 47 m/s, 169.2 km/h');
+  assert.equal(r.speed, TUNING.maxSpeed, 'sustained throttle reaches and holds the ceiling');
   assert.ok(r.z > 300, 'the bike covers the expected faster straight-line distance');
   for (let i = 0; i < 2 / dt; i++) stepRider(r, {...idleControl(), brake: 1}, track, dt, [r]);
   assert.equal(r.speed, 0, 'brakes still stop the faster bike');
@@ -41,14 +43,21 @@ test('a jump entered at the new maximum carries momentum through a finite, recov
     r = makeRider(track, 0, true, 0xffffff),
     p = track.at(8),
     dt = 1 / 120;
-  Object.assign(r, {x: p.x, z: p.z, y: track.height(8), surface: p, heading: Math.atan2(p.tx, p.tz), speed: 50.625});
+  Object.assign(r, {
+    x: p.x,
+    z: p.z,
+    y: track.height(8),
+    surface: p,
+    heading: Math.atan2(p.tx, p.tz),
+    speed: TUNING.maxSpeed,
+  });
   let launched = false,
     landed = false,
     maxAir = 0;
   for (let frame = 0; frame < 5 / dt; frame++) {
     stepRider(r, {...idleControl(), throttle: 1, pitch: r.grounded ? 0 : -0.3}, track, dt, [r]);
     assert.ok([r.x, r.y, r.z, r.speed, r.pitch, r.vy].every(Number.isFinite));
-    assert.ok(r.speed <= 50.625);
+    assert.ok(r.speed <= TUNING.maxSpeed);
     if (!r.grounded) {
       launched = true;
       maxAir = Math.max(maxAir, r.y - track.height(r.surface.s, r.surface.lateral));

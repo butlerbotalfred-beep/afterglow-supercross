@@ -4,6 +4,9 @@
 //   npx tsx scripts/landing-harness.ts            print the table
 //   npx tsx scripts/landing-harness.ts --check    fail if any gap differs from baselines/landing.json
 //   npx tsx scripts/landing-harness.ts --write    record the current gaps as the baseline
+// Both --check and --write also hold the M1.2 targets: the rider who never pitches is at least 0.8% slower on
+// every circuit (1.5% on Dusk Valley), and the slope-matching rider is within 1.0% of the time before M1.2
+// (baselines/landing-v1.json).
 import {readFileSync, writeFileSync} from 'node:fs';
 import {soloLaps, COURSES, round} from './sim';
 
@@ -19,13 +22,31 @@ const rows = COURSES.map(course => {
   };
 });
 console.table(rows);
+const MIN_GAP_PCT: Record<string, number> = {dusk: 1.5};
+const v1: {course: string; matchS: number}[] = JSON.parse(
+  readFileSync(new URL('../baselines/landing-v1.json', import.meta.url), 'utf8'),
+).circuits;
+const missed = rows.flatMap(r => {
+  const before = v1.find(x => x.course === r.course);
+  const drift = before ? Math.abs(r.matchS / before.matchS - 1) * 100 : Infinity;
+  const need = MIN_GAP_PCT[r.course] ?? 0.8;
+  return [
+    ...(r.gapPct >= need ? [] : [`${r.course}: gap ${r.gapPct}% is under ${need}%`]),
+    ...(drift <= 1 ? [] : [`${r.course}: slope-matching time moved ${round(drift, 2)}% from before M1.2`]),
+    ...(r.crashes === 0 ? [] : [`${r.course}: ${r.crashes} crash(es)`]),
+  ];
+});
+if (missed.length) {
+  console.log(`landing-harness: targets missed\n  ${missed.join('\n  ')}`);
+  process.exit(1);
+}
 const file = new URL('../baselines/landing.json', import.meta.url);
 if (process.argv.includes('--write')) {
   writeFileSync(
     file,
     JSON.stringify(
       {
-        note: 'Time lost over 3 laps by a rider who never uses air pitch. M1.2 is expected to raise these on purpose.',
+        note: 'Time lost over 3 laps by a rider who never uses air pitch, physics version 2 (after M1.2).',
         circuits: rows,
       },
       null,

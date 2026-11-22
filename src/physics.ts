@@ -33,6 +33,12 @@ export interface Rider {
   finished: number | null;
   dnf: boolean;
   lastLanding: number;
+  /** How the last judged landing went, for the HUD: matched to the slope, or flat enough to cost speed. */
+  landingCue: '' | 'clean' | 'flat';
+  /** Seconds since landingCue was set. */
+  landingCueAge: number;
+  /** Speed the last landing added, in m/s. Never more than TUNING.landingBonusMax. */
+  landingBonus: number;
   bestAir: number;
   prevX: number;
   prevZ: number;
@@ -77,6 +83,9 @@ export function makeRider(track: Track, id: number, human: boolean, color: numbe
     finished: null,
     dnf: false,
     lastLanding: 0,
+    landingCue: '',
+    landingCueAge: 0,
+    landingBonus: 0,
     bestAir: 0,
     prevX: p.x,
     prevZ: p.z,
@@ -154,6 +163,7 @@ export function crash(r: Rider, reason: string, side = 1) {
 
 export function stepRider(r: Rider, c: Control, track: Track, dt: number, others: Rider[], slideAggression = 1) {
   r.lastLanding = 0;
+  r.landingCueAge += dt;
   r.compression *= Math.exp(-dt * 9);
   r.prevX = r.x;
   r.prevZ = r.z;
@@ -254,11 +264,7 @@ export function stepRider(r: Rider, c: Control, track: Track, dt: number, others
         alignment = Math.abs(angleDelta(r.pitch, Math.atan(slope)));
       r.lastLanding = impact;
       r.compression = clamp(impact * 0.035, 0.04, 1);
-      if (
-        impact > TUNING.landingCrashImpact ||
-        (alignment > TUNING.landingCrashAngle && impact > 5 && r.speed > 7) ||
-        (Math.abs(r.lean) > 0.95 && impact > 7)
-      ) {
+      if (impact > TUNING.landingCrashImpact || (alignment > TUNING.landingCrashAngle && impact > 5 && r.speed > 7)) {
         r.y = floor;
         r.vy = 0;
         r.grounded = true;
@@ -270,7 +276,30 @@ export function stepRider(r: Rider, c: Control, track: Track, dt: number, others
         );
         return;
       }
-      r.speed *= clamp(1 - Math.max(0, alignment - 0.3) * 0.4 - Math.max(0, impact - 12) * 0.015, 0.55, 1);
+      // Matching the bike's pitch to the landing slope keeps speed; a flat or nose-high landing scrubs it.
+      const judged = r.airTime >= TUNING.landingJudgeAir;
+      const legacy = Math.max(0, alignment - TUNING.legacyPenaltyStart) * TUNING.legacyPenaltySlope;
+      const steep = Math.max(0, alignment - TUNING.landingPenaltyStart) * TUNING.landingPenaltySlope;
+      const steepMax = r.airTime < TUNING.landingBumpAir ? TUNING.bumpPenaltyMax : TUNING.landingPenaltyMax;
+      const misaligned = Math.max(legacy, Math.min(steepMax, steep));
+      const hardHit = Math.max(0, impact - 12) * 0.015;
+      r.speed *= clamp(1 - misaligned - hardHit, 0.55, 1);
+      r.landingBonus = 0;
+      if (judged) {
+        const clean = alignment <= TUNING.landingPenaltyStart;
+        // A clean landing on a downslope carries a little extra speed out: never more than landingBonusMax,
+        // never past the top speed, and only on the track.
+        if (clean && slope < 0 && Math.abs(r.surface.lateral) <= track.halfWidth) {
+          const before = r.speed;
+          const bonus = TUNING.landingBonusMax * clamp(-slope / TUNING.landingBonusSlope, 0, 1);
+          r.speed = Math.min(Math.max(before, TUNING.maxSpeed), before + bonus);
+          // What the landing really added, which is what the pace gate holds to the cap.
+          r.landingBonus = r.speed - before;
+        }
+        // Clean means the speed was kept, so a landing hard enough to scrub speed is not called clean.
+        r.landingCue = clean ? (hardHit > 0 ? '' : 'clean') : misaligned >= 0.02 ? 'flat' : '';
+        r.landingCueAge = 0;
+      }
       r.y = floor;
       r.grounded = true;
       r.vy = r.speed * slope;
