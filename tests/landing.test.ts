@@ -47,7 +47,7 @@ test('the misaligned-landing penalty starts at 0.10 radians and is steeper than 
 test('a clean downslope landing adds speed, never more than 3 km/h', () => {
   assert.ok(Math.abs(TUNING.landingBonusMax * KMH - 3) < 1e-9);
   for (const gradient of [0.05, 0.15, 0.3, 0.6, 1.2]) {
-    for (const speed of [12, 30, 45]) {
+    for (const speed of [12, 30, 40]) {
       const {r} = land(0, {gradient, speed});
       assert.equal(r.crashes, 0);
       const gained = (r.speed - speed) * KMH;
@@ -56,6 +56,7 @@ test('a clean downslope landing adds speed, never more than 3 km/h', () => {
       assert.ok(r.landingBonus * KMH <= 3 + 1e-9);
     }
   }
+  assert.equal(land(0, {gradient: 0.3, speed: TUNING.maxSpeed}).r.speed, TUNING.maxSpeed, 'never past the top speed');
   assert.equal(land(0, {gradient: 0}).r.landingBonus, 0, 'level ground earns nothing');
   assert.equal(land(0.25, {gradient: 0.3}).r.landingBonus, 0, 'a misaligned landing earns nothing');
   assert.equal(land(0, {gradient: 0.3, airTime: 0.1}).r.landingBonus, 0, 'a bump is not a landing');
@@ -107,8 +108,8 @@ test('the bonus stays inside the top speed, on the track, and is not paid for a 
   assert.equal(heavy.landingCue, '', 'a landing that scrubbed speed on impact is not called clean');
 });
 
-test('PHYSICS_VERSION is 2 and best laps from version 1 are archived', () => {
-  assert.equal(PHYSICS_VERSION, 2);
+test('PHYSICS_VERSION is 3 and best laps from earlier versions are archived', () => {
+  assert.equal(PHYSICS_VERSION, 3);
   const values = new Map<string, string>();
   const storage = {
     getItem: (k: string) => values.get(k) ?? null,
@@ -120,7 +121,7 @@ test('PHYSICS_VERSION is 2 and best laps from version 1 are archived', () => {
   assert.equal(now.submitLap('coast', {time: 55, sectors: [14, 14, 14, 13]}), true, 'a slower lap is the new best');
   const stored = JSON.parse(values.get(SAVE_KEY)!).records;
   assert.equal(stored.archived['physics-1'].coast.time, 52.5, 'the old lap is kept in the archive');
-  assert.equal(stored.bestLaps.coast.physics, 2);
+  assert.equal(stored.bestLaps.coast.physics, PHYSICS_VERSION);
 });
 
 test('a clean landing never leaves a mid-band rider more than 2 km/h above the rhythm band', () => {

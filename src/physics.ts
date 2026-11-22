@@ -3,6 +3,7 @@ import {Track, type TrackPoint} from './track';
 import {TUNING, clamp, angleDelta} from './config';
 import {createProgress, updateProgress, restoreDeparture, trackDeferred, type Progress} from './race';
 import type {Control, Device} from './input';
+import {lipDistance, safeTakeoffSpeed} from './takeoff';
 export interface Rider {
   id: number;
   human: boolean;
@@ -364,8 +365,10 @@ export function collide(riders: Rider[], track: Track) {
       a.z -= nz * push;
       b.x += nx * push;
       b.z += nz * push;
-      a.speed *= 0.992;
-      b.speed *= 0.992;
+      // Rubbing costs momentum through the tyres. A rider in the air keeps theirs: losing it mid-flight would
+      // drop them short of the landing with nothing they could do about it.
+      if (a.grounded) a.speed *= 0.992;
+      if (b.grounded) b.speed *= 0.992;
     }
 }
 
@@ -379,6 +382,11 @@ function landingPitch(r: Rider, track: Track) {
   }
   return 0;
 }
+/** How far ahead of a takeoff the AI starts picking a speed for it. */
+const NPC_TAKEOFF_REACH = 45;
+/** The AI will not close on a rider ahead in its line faster than this, in m/s, inside NPC_FOLLOW_REACH metres. */
+const NPC_CLOSING_MAX = 5;
+const NPC_FOLLOW_REACH = 25;
 export function npcControl(r: Rider, track: Track, others: Rider[], difficulty: string): Control {
   const pace = difficulty === 'relaxed' ? 0.78 : difficulty === 'expert' ? 1.04 : 0.91;
   const ahead = 4 + r.speed * 0.32;
@@ -406,6 +414,25 @@ export function npcControl(r: Rider, track: Track, others: Rider[], difficulty: 
     }
   }
   if (Math.abs(err) > 0.6) targetSpeed = Math.min(targetSpeed, 10);
+  // Closing on a much slower rider in the same line is a contact crash: slow to a safe closing speed instead.
+  for (const o of others) {
+    // A fallen rider is no obstacle: riders pass through them, as collide() does.
+    if (o === r || o.crashTime > 0 || o.recovery > 0 || o.speed > r.speed - NPC_CLOSING_MAX) continue;
+    const gap = (o.surface.s - r.surface.s + track.length) % track.length;
+    if (gap > 0 && gap < NPC_FOLLOW_REACH && Math.abs(o.surface.lateral - r.surface.lateral) < 1.6)
+      targetSpeed = Math.min(targetSpeed, o.speed + NPC_CLOSING_MAX);
+  }
+  if (r.grounded) {
+    // Some takeoff speeds end on the face of the next jump. Aim for the fastest safe one still within reach.
+    const lip = lipDistance(track, r.surface.s, NPC_TAKEOFF_REACH);
+    if (lip !== null) {
+      const drive = Math.max(0, TUNING.acceleration - TUNING.drag * r.speed);
+      const fastest = Math.min(targetSpeed, Math.sqrt(r.speed * r.speed + 2 * drive * lip));
+      const slowest = Math.sqrt(Math.max(0, r.speed * r.speed - 2 * TUNING.braking * 0.7 * lip));
+      const safe = safeTakeoffSpeed(track, r.surface.s, NPC_TAKEOFF_REACH, slowest, fastest);
+      if (safe !== null) targetSpeed = Math.min(targetSpeed, safe);
+    }
+  }
   return {
     throttle: clamp((targetSpeed - r.speed) * 0.55, 0, 1),
     brake: clamp((r.speed - targetSpeed - 1) * 0.28, 0, 0.7),

@@ -1,39 +1,39 @@
 {
-  "note": "Time lost over 3 laps by a rider who never uses air pitch, physics version 2 (after M1.2).",
+  "note": "Time lost over 3 laps by a rider who never uses air pitch, physics version 3.",
   "circuits": [
     {
       "course": "dusk",
-      "matchS": 290.93,
-      "nopitchS": 295.56,
-      "gapPct": 1.59,
+      "matchS": 288.79,
+      "nopitchS": 294.04,
+      "gapPct": 1.82,
       "crashes": 0
     },
     {
       "course": "canyon",
-      "matchS": 190.11,
-      "nopitchS": 192.18,
-      "gapPct": 1.09,
+      "matchS": 188.68,
+      "nopitchS": 190.74,
+      "gapPct": 1.1,
       "crashes": 0
     },
     {
       "course": "alpine",
-      "matchS": 186.05,
-      "nopitchS": 189.43,
-      "gapPct": 1.81,
+      "matchS": 185.04,
+      "nopitchS": 188.58,
+      "gapPct": 1.91,
       "crashes": 0
     },
     {
       "course": "coast",
-      "matchS": 158.38,
-      "nopitchS": 159.77,
+      "matchS": 157.38,
+      "nopitchS": 158.75,
       "gapPct": 0.87,
       "crashes": 0
     },
     {
       "course": "quarry",
-      "matchS": 201.62,
-      "nopitchS": 204.3,
-      "gapPct": 1.33,
+      "matchS": 200.33,
+      "nopitchS": 202.59,
+      "gapPct": 1.13,
       "crashes": 0
     }
   ]

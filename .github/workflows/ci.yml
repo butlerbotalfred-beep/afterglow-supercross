@@ -35,3 +35,5 @@ jobs:
         run: npm run pace-gate -- --tolerance 0
       - name: Landing harness
         run: npm run landing-harness -- --check
+      - name: Field check (60 AI races, 4 to 8 riders, every difficulty, no crashes)
+        run: npm run field-check -- --check
