@@ -1,0 +1,95 @@
+{
+  "note": "AI race winner times, 3 laps, 4 NPC riders, 120 Hz, physics version 2. Regenerate only with sign-off. pace-v1.json holds the times before M1.2.",
+  "races": [
+    {
+      "course": "dusk",
+      "difficulty": "club",
+      "winner": 289.767,
+      "crashes": 0,
+      "recoveries": 0,
+      "finishers": 4,
+      "maxBonusKmh": 2.654
+    },
+    {
+      "course": "canyon",
+      "difficulty": "club",
+      "winner": 190.425,
+      "crashes": 0,
+      "recoveries": 0,
+      "finishers": 4,
+      "maxBonusKmh": 1.921
+    },
+    {
+      "course": "alpine",
+      "difficulty": "club",
+      "winner": 185.333,
+      "crashes": 0,
+      "recoveries": 0,
+      "finishers": 4,
+      "maxBonusKmh": 3
+    },
+    {
+      "course": "coast",
+      "difficulty": "club",
+      "winner": 158.017,
+      "crashes": 0,
+      "recoveries": 0,
+      "finishers": 4,
+      "maxBonusKmh": 2.597
+    },
+    {
+      "course": "quarry",
+      "difficulty": "club",
+      "winner": 201.408,
+      "crashes": 0,
+      "recoveries": 0,
+      "finishers": 4,
+      "maxBonusKmh": 2.752
+    },
+    {
+      "course": "dusk",
+      "difficulty": "expert",
+      "winner": 273.633,
+      "crashes": 0,
+      "recoveries": 0,
+      "finishers": 4,
+      "maxBonusKmh": 2.046
+    },
+    {
+      "course": "canyon",
+      "difficulty": "expert",
+      "winner": 176.55,
+      "crashes": 0,
+      "recoveries": 0,
+      "finishers": 4,
+      "maxBonusKmh": 1.006
+    },
+    {
+      "course": "alpine",
+      "difficulty": "expert",
+      "winner": 170.083,
+      "crashes": 0,
+      "recoveries": 0,
+      "finishers": 4,
+      "maxBonusKmh": 2.79
+    },
+    {
+      "course": "coast",
+      "difficulty": "expert",
+      "winner": 144.6,
+      "crashes": 0,
+      "recoveries": 0,
+      "finishers": 4,
+      "maxBonusKmh": 1.885
+    },
+    {
+      "course": "quarry",
+      "difficulty": "expert",
+      "winner": 187.283,
+      "crashes": 0,
+      "recoveries": 0,
+      "finishers": 4,
+      "maxBonusKmh": 1.921
+    }
+  ]
+}

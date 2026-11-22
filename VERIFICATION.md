@@ -1,3 +1,13 @@
+# Speed and acceleration retune (physics version 3) — 22 November 2026
+
+At Michael's request the top speed drops from 169 to 162 km/h (`maxSpeed` 45 m/s) and acceleration rises 15% (`acceleration` 26.953125 m/s²). The physics version is 3, so best laps from versions 1 and 2 are archived.
+
+- **AI fix.** With the extra acceleration, back-row AI riders on Pine Summit sped up between the jumps of the first rhythm lane and landed on the next face (HARD LANDING, 2 crashes per race). An AI rider below 70% of a lane's pace now holds 70% for the rest of the lane. The lane the start line sits in is exempt. `tests/npc.test.ts` covers both.
+- **Race times.** `npm run pace-gate -- --baseline baselines/pace-v1.json`: all ten races are 0.4% to 1.6% faster than version 1, with 0 crashes and 0 recoveries. `baselines/pace.json` is regenerated with Michael's approval; the version 2 files are kept as `pace-v2.json` and `landing-v2.json`.
+- **Landing reward.** `npm run landing-harness`: the rider who never pitches loses 2.19% on Dusk Valley, 1.35% on Red Canyon, 3.25% on Pine Summit, 1.47% on Saltwind Coast and 1.95% on the quarry, 0 crashes. All are above the M1.2 targets (1.5% Dusk, 0.8% elsewhere). Part of the rise is the AI fix: the scripted rider who loses the rhythm now rolls the lane.
+- **Retired check.** M1.2 required the slope-matching rider to stay within 1.0% of the time before M1.2. A quicker bike cannot hold that (Red Canyon moves 1.07%), so the check was removed from `scripts/landing-harness.ts` with Michael's approval on 22 November 2026. The gap targets and the zero-crash check remain.
+- **Tests.** 152 pass.
+
 # M1.2 Landing skill — 22 November 2026
 
 Matching the bike to the landing now matters. A landing more than 0.10 radians off the slope costs speed (it used to be free up to 0.30), a clean downslope landing adds up to 3 km/h, and the HUD says CLEAN LANDING or FLAT LANDING. The lean crash check that could never fire is gone, and the physics version is 2, so best laps from version 1 are archived. At Michael's request the top speed also drops from 182 to 169 km/h; the fastest any circuit lets the Expert AI go is about 164 km/h, so no race time changes.
