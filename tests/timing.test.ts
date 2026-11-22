@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {TUNING} from '../src/config.ts';
 import {npcControl} from '../src/physics.ts';
-import {CHECKPOINT_COUNT, createProgress, restoreDeparture, updateProgress} from '../src/race.ts';
-import {recordKey, SAVE_KEY, SaveStore} from '../src/save.ts';
+import {CHECKPOINT_COUNT, createProgress, restoreDeparture, trackDeferred, updateProgress} from '../src/race.ts';
+import {lapCountsForRecord, recordKey, SAVE_KEY, SaveStore} from '../src/save.ts';
 import {createTiming, formatDelta, formatLap, recordStep, SECTOR_COUNT, type LapTime} from '../src/timing.ts';
 import {courseById} from '../src/courses.ts';
 import {Track} from '../src/track.ts';
@@ -223,4 +223,136 @@ test('lap times and differences are written to a thousandth of a second', () => 
   assert.equal(formatLap(59.9996), '1:00.000');
   assert.equal(formatDelta(-0.0871), '−0.087');
   assert.equal(formatDelta(0.214), '+0.214');
+});
+
+test('a line crossed while briefly off the track is timed when it was crossed, not on the way back in', () => {
+  // Steady 30 m/s, so every lap after the first takes exactly 1600 / 30 s. On lap 2 the rider runs wide 10 m
+  // before the line and rejoins 15 m after it: allowed, but the line was passed long before the rejoin.
+  const speed = 30;
+  const progress = createProgress(-7.3);
+  const timing = createTiming();
+  const laps: LapTime[] = [];
+  let time = 0;
+  for (let i = 1; laps.length < 3; i++) {
+    const distance = -7.3 + speed * i * STEP;
+    const wide = distance > LENGTH * 2 - 10 && distance < LENGTH * 2 + 15;
+    updateProgress(progress, ((distance % LENGTH) + LENGTH) % LENGTH, wide ? 9 : 0, LENGTH, 5, STEP);
+    const lap = recordStep(timing, progress, time, STEP, null);
+    if (lap) laps.push(lap);
+    time += STEP;
+  }
+  assert.equal(progress.shortcuts, 0, 'the excursion was short enough to be forgiven');
+  for (const lap of laps.slice(1)) {
+    assert.ok(Math.abs(lap.time - LENGTH / speed) < 0.001, `lap ${lap.time} vs ${LENGTH / speed}`);
+    assert.equal(lap.valid, true);
+  }
+});
+
+test('a line crossed during a crash slide is timed when it was crossed, not when the slide ends', () => {
+  // The bike crosses the line 3 m into a 1.5 s slide. Physics follows the slide step by step and gives the
+  // credit only when it ends, so the lap must still end at the moment of crossing.
+  const progress = createProgress(-7.3);
+  const timing = createTiming();
+  const laps: LapTime[] = [];
+  let time = 0;
+  let s = -7.3;
+  const timed = () => {
+    const lap = recordStep(timing, progress, time, STEP, null);
+    if (lap) laps.push(lap);
+    time += STEP;
+  };
+  while (s + 30 * STEP < LENGTH - 3) {
+    s += 30 * STEP;
+    updateProgress(progress, s, 0, LENGTH, 5, STEP);
+    timed();
+  }
+  const slideStart = time;
+  const startS = s;
+  let speed = 30;
+  let crossedAt = -1;
+  const steps = Math.round(1.5 / STEP);
+  for (let i = 1; i <= steps; i++) {
+    const before = s;
+    speed = Math.max(0, speed - 18 * STEP);
+    s += speed * STEP;
+    if (crossedAt < 0 && s >= LENGTH) crossedAt = time + ((LENGTH - before) / (s - before)) * STEP;
+    if (i < steps) trackDeferred(progress, s % LENGTH, LENGTH, STEP);
+    else updateProgress(progress, s % LENGTH, 0, LENGTH, 5, STEP);
+    timed();
+  }
+  assert.ok(s - startS > 10 && crossedAt > slideStart);
+  assert.equal(laps.length, 1);
+  assert.ok(Math.abs(laps[0].time - crossedAt) < 0.001, `lap ${laps[0].time} vs crossing at ${crossedAt}`);
+  assert.ok(time - crossedAt > 1, 'the credit arrived more than a second after the crossing');
+});
+
+test('only a person riding a clean lap unaided can set the saved best', () => {
+  const clean = {valid: true};
+  assert.equal(lapCountsForRecord(clean, {human: true}, false), true);
+  assert.equal(lapCountsForRecord({valid: false}, {human: true}, false), false, 'a shortcut lap');
+  assert.equal(lapCountsForRecord(clean, {human: false}, false), false, 'a computer rider');
+  assert.equal(lapCountsForRecord(clean, {human: true}, true), false, 'autopilot or test overrides');
+});
+
+test('a custom layout keeps its record when only its name, highlights or file wording change', () => {
+  const layout = {...layoutFromTrack(new Track(courseById('coast'))), name: 'Coast Custom'};
+  const key = recordKey('coast', layout);
+  const jumps = layout.jumps.map(j => ({...j}));
+  assert.equal(recordKey('coast', {...layout, name: 'Renamed'}), key);
+  assert.equal(recordKey('coast', {...layout, jumps: jumps.map(j => ({...j, highlight: true}))}), key);
+  assert.equal(recordKey('coast', {...layout, jumps: jumps.map(j => ({...j, highlight: false}))}), key);
+  // The same jump written with its properties in another order, as an imported file might have them.
+  const reordered = jumps.map(j => Object.fromEntries(Object.entries(j).reverse()) as typeof j);
+  assert.equal(recordKey('coast', {...layout, jumps: reordered}), key);
+  const {bermHeights: _berms, ...plain} = layout;
+  const allAutomatic = {...plain, bermHeights: layout.points.map(() => null)};
+  assert.equal(recordKey('coast', allAutomatic), recordKey('coast', plain), 'automatic berms written out or not');
+  const taller = jumps.map((j, i) => (i === 0 ? {...j, height: j.height + 0.5} : j));
+  assert.notEqual(recordKey('coast', {...layout, jumps: taller}), key, 'a real change still starts a fresh record');
+});
+
+test('an old tab cannot put away a record from a newer physics version', () => {
+  const values = new Map<string, string>();
+  const storage = {
+    getItem: (k: string) => values.get(k) ?? null,
+    setItem: (k: string, v: string) => void values.set(k, v),
+  };
+  const newer = new SaveStore(storage, 2);
+  assert.equal(newer.submitLap('coast', {time: 50, sectors: [12, 13, 12, 13]}), true);
+  const stale = new SaveStore(storage, 1);
+  assert.equal(stale.bestLap('coast'), null, 'the old build does not compare against the newer lap');
+  stale.submitLap('coast', {time: 40, sectors: [10, 10, 10, 10]});
+  assert.equal(new SaveStore(storage, 2).bestLap('coast')?.time, 50, 'the newer build still finds its record');
+});
+
+test('a best lap the browser refuses to store still counts for this visit, and only once', () => {
+  const values = new Map<string, string>();
+  let full = false;
+  const storage = {
+    getItem: (k: string) => values.get(k) ?? null,
+    setItem: (k: string, v: string) => {
+      if (full) throw new Error('QuotaExceededError');
+      values.set(k, v);
+    },
+  };
+  const save = new SaveStore(storage);
+  assert.equal(save.submitLap('coast', {time: 60, sectors: [15, 15, 15, 15]}), true);
+  full = true;
+  assert.equal(save.submitLap('coast', {time: 50, sectors: [12, 13, 12, 13]}), true);
+  assert.equal(save.bestLap('coast')?.time, 50);
+  assert.equal(save.submitLap('coast', {time: 55, sectors: [14, 14, 14, 13]}), false, '55 does not beat 50');
+});
+
+test('saving everything from a stale tab keeps a faster lap another tab stored', () => {
+  const values = new Map<string, string>();
+  const storage = {
+    getItem: (k: string) => values.get(k) ?? null,
+    setItem: (k: string, v: string) => void values.set(k, v),
+  };
+  const first = new SaveStore(storage);
+  first.submitLap('coast', {time: 60, sectors: [15, 15, 15, 15]});
+  const second = new SaveStore(storage);
+  second.submitLap('coast', {time: 50, sectors: [12, 13, 12, 13]});
+  first.write();
+  assert.equal(new SaveStore(storage).bestLap('coast')?.time, 50);
 });

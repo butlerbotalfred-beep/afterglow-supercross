@@ -1,3 +1,59 @@
+# M1.1 Lap and sector timing — 22 November 2026
+
+Every rider's laps are now timed to a thousandth of a second, split into four sectors. The HUD shows the running lap, last lap, best lap and a green or red difference at each sector; the results screen lists every rider's laps; and the best lap for each circuit and each custom layout is saved. Nothing about how the bike moves changed: the pace gate still matches exactly.
+
+| Completion box | Result | Evidence |
+| --- | --- | --- |
+| Four sector times add up to the lap time within 0.001 s | Pass | `tests/timing.test.ts`, "four sector times add up": 3 laps each at 11.7, 30 and 48.9 m/s, largest difference under 0.000000001 s. Also checked for every rider of a whole simulated race |
+| A mid-step gate crossing at 30 m/s is timed within 0.001 s | Pass | Same file, "a mid-step gate crossing at 30 m/s": measured error under 0.000000001 s against the exact answer, where one physics step is 0.0083 s |
+| Laps are timed correctly across the start/finish seam | Pass | Same file, "laps are timed correctly across the start/finish seam": 3 laps, each 1600 m / 30 m/s = 53.333 s within 0.001 s. Two more tests cover a line crossed while briefly off the track and during a crash slide |
+| A record is only replaced by a faster valid lap and survives a reload | Pass | Same file, "a record is only replaced by a faster lap and survives a reload", plus "only a person riding a clean lap unaided can set the saved best" |
+| Editing a custom layout starts a fresh record for it | Pass | Same file, "editing a custom layout starts a fresh record for it"; renaming it, or toggling a jump's highlight, keeps the record |
+| Changing PHYSICS_VERSION archives old records | Pass | Same file, "changing PHYSICS_VERSION archives old records": the old lap moves to `archived` and is no longer the time to beat |
+| Timing display doesn't overlap any HUD element in four layouts | Pass | `npm run test:hud` (`scripts/hud-layout-check.mjs`): 1, 2 and 4 riders at 1280 x 720 and a phone at 844 x 390 are all clear, 138 box comparisons in total, including the busiest HUD (below) |
+| pace-gate at 0% still matches exactly | Pass | `npm run pace-gate -- --tolerance 0`: 10 of 10 races at 0.000% with 0 crashes and 0 recoveries |
+
+## Commands and results (final commit)
+
+- `npm test`: 142 of 142 tests pass (17 of them in `tests/timing.test.ts`).
+- `npm run pace-gate -- --tolerance 0`: 10 of 10 exact. `npm run landing-harness -- --check`: 5 of 5 circuits match.
+- `npm run build:report -- --check`: every size budget passes.
+- `npm run test:hud`: 4 of 4 layouts clear, in the cloud and on the Mac Studio.
+
+## HUD layouts
+
+Screenshots from the layout check are in the project files folder under `afterglow/m1.1/` (`hud-1-rider.png`, `hud-2-riders.png`, `hud-4-riders.png`, `hud-phone.png`, `results.png`). The check compares the timing panel's box with every other visible HUD element twice per layout: once as the game draws it after a lap, and once with the busiest HUD written in (times of ten minutes or more, a lap result with its difference, a crash notice and a practice target).
+
+## Smoke tests on the Mac Studio (Apple M4 Max)
+
+SMOKE_PENDING
+
+## Code review (B)
+
+An independent review found one blocking bug and nine smaller points. All are fixed in this pull request.
+
+| Finding | Fix |
+| --- | --- |
+| Blocking: a line crossed while briefly off the track, or during a crash slide, was timed when the rider got back, not when it was crossed. A lap could come out about a second short and be saved as the best | Held-back movement is now followed step by step, so each line is timed at the moment it was passed. Two new tests, which fail on the old code |
+| An old tab could put away a best lap saved by a newer physics version | Only laps from an older version are archived; a newer one is left alone |
+| A custom layout's record was reset by toggling a jump's highlight or by how the file was written | The record name is made only from what shapes the ground, in a fixed order |
+| When the browser refused to store a lap, it was reported as a new best but forgotten | It now counts for the rest of the visit |
+| Saving everything from a stale tab could undo another tab's faster lap | The faster lap is kept |
+| The rule for which laps may be saved was untested | It is its own function with a test |
+| The layout check missed the widest and busiest HUD states | It now measures those too |
+| Results marked a shortcut lap as a rider's best or the race's fastest | Only valid laps are marked |
+| The time to beat was not refreshed when another tab already held a faster lap | It is reloaded |
+| `mac:update` could reinstall packages on every run if npm reported harmless extras | Only a missing or wrong-version package triggers it |
+
+Not changed: all riders on one screen share one saved best per track, and practice laps count. Both are intended.
+
+## Play review (D, about 5 minutes)
+
+On the Mac, ride 3 laps of Saltwind Coast.
+
+1. Are the times easy to read at speed?
+2. After reloading the page, is your best lap still shown?
+
 # M0.5 Hosted build — 21 November 2026
 
 The game is hosted at **https://afterglow-supercross.vercel.app**. It is public, served over HTTPS, and Vercel rebuilds it on every merge to `main`. A new browser test drives a production build with a simulated gamepad, and `npm run mac:update` brings the Mac's copy level with `main` in one step. No game code changed.

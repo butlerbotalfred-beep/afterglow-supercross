@@ -44,11 +44,11 @@ export function showResultsTable(
     `${lapCount} ${lapCount === 1 ? 'lap' : 'laps'} · ${riders.length} riders · ${formatTime(raceTime)} session`;
   const winner = ordered[0]?.finished ?? null;
   // The fastest lap of the race, by anyone, is marked as well as each rider's own best.
-  const fastest = Math.min(...timing.flatMap(t => t.laps.map(lap => lap.time)));
+  const fastest = Math.min(...timing.flatMap(t => t.laps.filter(lap => lap.valid).map(lap => lap.time)));
   el('results-table').innerHTML = ordered
     .map((r, i) => {
       const laps = timing[riders.indexOf(r)]?.laps || [];
-      const best = Math.min(...laps.map(lap => lap.time));
+      const best = Math.min(...laps.filter(lap => lap.valid).map(lap => lap.time));
       const gap =
         r.finished === null
           ? 'DNF'

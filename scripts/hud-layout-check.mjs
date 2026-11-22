@@ -52,7 +52,22 @@ const setUp = async ({humans, phone}) => {
   return {laps: g.timing()[0].laps.length, phase: g.snapshot().phase};
 };
 /** Runs in the page: every visible HUD element's box, by viewport. */
-const measure = () => {
+const measure = worst => {
+  if (worst) {
+    // The widest and busiest the HUD gets, written in just before measuring (the game redraws it next frame):
+    // times of ten minutes or more, a lap result with its difference, a crash notice and a practice target.
+    for (const view of document.querySelectorAll('.viewport-hud')) {
+      view.querySelector('.lap-now').textContent = '12:34.5';
+      view.querySelector('.lap-last').textContent = '12:34.567';
+      view.querySelector('.lap-best').textContent = '12:34.567';
+      const split = view.querySelector('.lap-split');
+      split.textContent = 'LAP 12:34.567  −12.345';
+      split.className = 'lap-split faster';
+      view.querySelector('.rider-notice').innerHTML =
+        '<b class="crash-label">CRASH / AWKWARD LANDING</b><small>REMOUNT IN 2.1s · GETTING BACK UP</small>';
+      view.querySelector('.test-target').textContent = '★ O12 · TABLETOP · 188 m ahead';
+    }
+  }
   const box = node => {
     const r = node.getBoundingClientRect();
     return {x: r.left, y: r.top, right: r.right, bottom: r.bottom};
@@ -112,24 +127,25 @@ try {
     await page.goto(url, {waitUntil: 'commit'});
     await page.waitForFunction(() => window.__game && !document.getElementById('loading'), null, {timeout: 0});
     const state = await page.evaluate(setUp, layout);
-    const views = await page.evaluate(measure);
+    const views = await page.evaluate(measure, false);
+    const busiest = await page.evaluate(measure, true);
     const problems = [];
-    for (const v of views) {
+    for (const v of [...views, ...busiest.map(b => ({...b, worst: true}))]) {
+      const where = `rider ${v.index + 1}${v.worst ? ' (busiest HUD)' : ''}`;
       if (
         v.timing.x < v.view.x - 0.5 ||
         v.timing.right > v.view.right + 0.5 ||
         v.timing.y < v.view.y - 0.5 ||
         v.timing.bottom > v.view.bottom + 0.5
       )
-        problems.push(`rider ${v.index + 1}: timing panel leaves its view`);
-      for (const other of v.others)
-        if (overlaps(v.timing, other)) problems.push(`rider ${v.index + 1}: overlaps ${other.name}`);
+        problems.push(`${where}: timing panel leaves its view`);
+      for (const other of v.others) if (overlaps(v.timing, other)) problems.push(`${where}: overlaps ${other.name}`);
     }
     if (state.laps < 1) problems.push('no lap was completed, so the panel was not showing a lap time');
     failures += problems.length;
     console.log(
       `${problems.length ? 'FAIL' : 'ok  '} ${layout.name} ${layout.width} x ${layout.height}: ${views.length} view(s), ` +
-        `${views.reduce((n, v) => n + v.others.length, 0)} elements compared, panel reads "${views[0].text}"` +
+        `${[...views, ...busiest].reduce((n, v) => n + v.others.length, 0)} comparisons, panel reads "${views[0].text}"` +
         (problems.length ? `\n     ${problems.join('\n     ')}` : ''),
     );
     await page.screenshot({path: `${folder}/hud-${layout.name}.png`, timeout: 0});

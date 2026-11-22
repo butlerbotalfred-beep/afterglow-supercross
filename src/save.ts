@@ -5,7 +5,7 @@
 import {PHYSICS_VERSION} from './config';
 import type {CourseId} from './courses';
 import {loadSlideAggression, normalizeSlideAggression} from './handling-settings';
-import {COURSE_IDS, loadLayout, validateLayout, type TrackLayout} from './track-layout';
+import {COURSE_IDS, loadLayout, obstacleType, validateLayout, type TrackLayout} from './track-layout';
 
 export const SAVE_KEY = 'afterglow.save';
 export const SAVE_VERSION = 1;
@@ -36,11 +36,26 @@ export interface LapRecord {
  */
 export function recordKey(courseId: CourseId, layout?: TrackLayout | null) {
   if (!layout) return courseId;
-  const {name: _name, ...shape} = layout;
+  // Only what changes the ground is hashed, in a fixed order, so the same shape always gives the same name
+  // however the file was written: a jump's editor highlight, an absent optional value and the order of
+  // properties make no difference.
+  const berms = layout.bermHeights?.some(h => h !== null) ? layout.bermHeights : null;
+  const shape = [
+    layout.points,
+    layout.jumps.map(j => [j.position, j.height, j.rise, j.flat, j.fall, obstacleType(j), j.gap || 0]),
+    berms,
+  ];
   const text = JSON.stringify(shape);
   let hash = 0x811c9dc5;
   for (let i = 0; i < text.length; i++) hash = Math.imul(hash ^ text.charCodeAt(i), 0x01000193) >>> 0;
   return `${courseId}/custom-${hash.toString(16).padStart(8, '0')}`;
+}
+/**
+ * Whether a finished lap may become the saved best: only a person's own clean lap. Not a computer rider, not
+ * a lap with a shortcut return, not one ridden by the review autopilot or with test overrides switched on.
+ */
+export function lapCountsForRecord(lap: {valid: boolean}, rider: {human: boolean}, assisted: boolean) {
+  return rider.human && lap.valid && !assisted;
 }
 function asLapRecord(v: unknown): LapRecord | null {
   if (!isObject(v) || typeof v.time !== 'number' || !(v.time > 0) || !Number.isFinite(v.time)) return null;
@@ -49,14 +64,15 @@ function asLapRecord(v: unknown): LapRecord | null {
   return {time: v.time, sectors: v.sectors, physics: v.physics, date: typeof v.date === 'string' ? v.date : ''};
 }
 /**
- * Moves best laps ridden on another physics version out of `bestLaps` into `archived`, grouped by version.
- * They are kept for reference and never shown as the time to beat. Changes `records` in place.
+ * Moves best laps ridden on an older physics version out of `bestLaps` into `archived`, grouped by version.
+ * They are kept for reference and never shown as the time to beat. A lap from a newer version is left alone:
+ * it belongs to a newer build, and an old tab must not put it away. Changes `records` in place.
  */
 function archiveOldLaps(records: Record<string, any>, physics: number) {
   if (!isObject(records.bestLaps)) return;
   for (const [key, value] of Object.entries(records.bestLaps)) {
     const record = asLapRecord(value);
-    if (!record || record.physics === physics) continue;
+    if (!record || record.physics >= physics) continue;
     if (!isObject(records.archived)) records.archived = {};
     const group = `physics-${record.physics}`;
     if (!isObject(records.archived[group])) records.archived[group] = {};
@@ -171,10 +187,24 @@ export class SaveStore {
     this.storage.setItem(SAVE_KEY, JSON.stringify(stored));
     this.data = fromStored(stored, this.physics);
   }
-  /** Stores records and career as they stand in `data`. Throws if the browser refuses the write. */
+  /**
+   * Stores records and career as they stand in `data`. A faster best lap another tab stored meanwhile is kept.
+   * Throws if the browser refuses the write.
+   */
   write() {
     const {records, career} = this.data;
-    this.update(stored => Object.assign(stored, {records, career}));
+    this.update(stored => {
+      const theirs = isObject(stored.records) && isObject(stored.records.bestLaps) ? stored.records.bestLaps : {};
+      Object.assign(stored, {records: JSON.parse(JSON.stringify(records)), career});
+      for (const [key, value] of Object.entries(theirs)) {
+        const other = asLapRecord(value);
+        if (!other) continue;
+        if (!isObject(stored.records.bestLaps)) stored.records.bestLaps = {};
+        const ours = asLapRecord(stored.records.bestLaps[key]);
+        if (!ours || other.physics > ours.physics || (other.physics === ours.physics && other.time < ours.time))
+          stored.records.bestLaps[key] = other;
+      }
+    });
   }
   get slideAggression() {
     return this.data.settings.slideAggression;
@@ -206,7 +236,8 @@ export class SaveStore {
       archiveOldLaps(records, this.physics);
       if (!isObject(records.bestLaps)) records.bestLaps = {};
       const kept = asLapRecord(records.bestLaps[key]);
-      if (kept && kept.time <= record.time) return false;
+      // A lap already there from a newer build stays; this one then counts for this visit only.
+      if (kept && (kept.physics > record.physics || kept.time <= record.time)) return false;
       records.bestLaps[key] = record;
       return true;
     };
@@ -216,7 +247,10 @@ export class SaveStore {
         if (!isObject(save.records)) save.records = {};
         stored = offer(save.records);
       });
-    } catch {}
+    } catch {
+      // The browser refused the write (storage full): nothing was kept, so fall through to this visit only.
+      stored = null;
+    }
     // Not stored (blocked storage, or a save from a newer version): keep it for this visit.
     return stored ?? offer(this.data.records);
   }

@@ -27,7 +27,7 @@ import {
 } from '../input';
 import {npcControl, idleControl, type Rider} from '../physics';
 import {TUNING} from '../config';
-import {browserStorage, recordKey, SaveStore} from '../save';
+import {browserStorage, lapCountsForRecord, recordKey, SaveStore} from '../save';
 import {devicesReady, RaceSession} from './race-session';
 import {blendPose, capturePose, pacingStats, type Pose} from '../render-interp';
 import {createRenderer, renderViews, resizeRenderer, type RenderContext} from '../render/renderer';
@@ -81,9 +81,10 @@ const session = new RaceSession(input, {
     audio.update(0, 0, false);
   },
   lap(rider, lap) {
-    // Only a human's own clean lap can become the saved best: not autopilot, not a lap with a shortcut return.
-    if (!rider.human || !lap.valid || session.reviewDrive || session.override.size) return;
+    if (!lapCountsForRecord(lap, rider, session.reviewDrive || session.override.size > 0)) return;
+    // When another tab already holds a faster lap, show that one as the time to beat.
     if (save.submitLap(recordKey(track.course.id, activeLayout), lap)) session.personalBest = lap;
+    else loadPersonalBest();
   },
   results() {
     touchControls.show(false);
