@@ -181,6 +181,11 @@ function meterBackground(call: JumpCall) {
   }
   return paint;
 }
+/** Inside this many metres of a new lane's first lip, the callout matters more than the landing just made. */
+const CALL_OVER_LANDING = 45;
+/** The landing cue gets its moment, also between the jumps of a lane, unless a new lane is nearly here. */
+export const callOutranksLanding = (call: JumpCall | null) =>
+  !!call && call.distance > 0 && call.distance < CALL_OVER_LANDING;
 /** What the rider should do about their speed for the jumps coming up. */
 export function takeoffVerdict(call: JumpCall, speed: number) {
   const zone = call.zones[Math.max(0, Math.min(call.zones.length - 1, Math.round((speed - call.from) / call.step)))];
@@ -258,8 +263,7 @@ export function updateHud(ctx: HudContext) {
                   : r.powerSlide > 0.18
                     ? `<b class="pace-label">${r.brake > 0.1 ? 'BRAKE SLIDE' : 'POWER SLIDE'}</b>` +
                       `<small>CENTER THE STICK TO REGAIN GRIP</small>`
-                    : // A rhythm section coming up matters more than the landing just made.
-                      r.landingCue && r.landingCueAge < LANDING_CUE_SECONDS && !paceNotice
+                    : r.landingCue && r.landingCueAge < LANDING_CUE_SECONDS && !callOutranksLanding(call)
                       ? landingNotice(r)
                       : paceNotice;
     const targets = practice
