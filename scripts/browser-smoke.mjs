@@ -39,6 +39,7 @@ const stage1 = await evaluate(`(async()=>{
  const before=g.snapshot().raceTime;window.dispatchEvent(new KeyboardEvent('keydown',{code:'Escape'}));await wait(100);window.dispatchEvent(new KeyboardEvent('keyup',{code:'Escape'}));assert(g.snapshot().paused,'keyboard pause');await wait(100);assert(g.snapshot().raceTime<before+.05,'shared pause freezes simulation');
  document.querySelector('#setup-pause').click();document.querySelector('#race-mode').click();document.querySelector('#laps').value='1';document.querySelector('#npcs').value='5';document.querySelector('#start').click();g.step(3.9);
  window.__driver=setInterval(()=>g.drive(0),8);g.clearPerf();await wait(10000);
+ for(let i=0;i<40&&g.snapshot().riders[0].air<=.4;i++)await wait(250);
  assert(!g.snapshot().riders[0].broken,'steering inputs follow validated course');assert(g.snapshot().riders[0].air>.4,'terrain jump');
  return {checks:['solo practice','keyboard throttle / brake / steering','checkpoint reset delay','keyboard shared pause','jump'],performance:g.snapshot(),environment:{userAgent:navigator.userAgent,dpr:devicePixelRatio,gpu:(()=>{const gl=document.querySelector('canvas').getContext('webgl2'),ext=gl.getExtension('WEBGL_debug_renderer_info');return gl.getParameter(ext.UNMASKED_RENDERER_WEBGL);})()}};
 })()`);

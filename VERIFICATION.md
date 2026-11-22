@@ -26,7 +26,19 @@ Screenshots from the layout check are in the project files folder under `aftergl
 
 ## Smoke tests on the Mac Studio (Apple M4 Max)
 
-SMOKE_PENDING
+Run in a separate copy at commit 3eb55e1, the code as merged apart from this write-up and the smoke-test change below. The live game was not touched.
+
+| Test | Result |
+| --- | --- |
+| `npm test` | 142 of 142 |
+| browser-smoke | 19 of 19. 58.2 fps with 1 human and 5 NPCs, 57.6 fps with 4 humans and 4 NPCs |
+| touch-smoke | 13 of 13 |
+| course-smoke | 5 of 5. 59.2 to 59.6 fps on all five circuits |
+| hud-layout-check | 4 of 4 layouts clear, 138 comparisons |
+| load-smoke, on a production build | 15 of 15 |
+| prod-smoke with a layout export and import | 13 of 13, BUILD 3eb55e1 |
+
+One browser-smoke run failed its "terrain jump" check and passed on the next run. Repeating it showed this is not from this change: 6 of 6 passes on this branch and 5 of 6 on `main` before it. The check read the best jump height once after 10 seconds of riding, which comes out between 0.399 and 0.421 m depending on frame timing, against a mark of 0.4 m. It now keeps riding for up to 10 more seconds until a jump clears the mark. The mark itself is unchanged.
 
 ## Code review (B)
 
