@@ -44,6 +44,15 @@ test('contact uses closing impact velocity, allowing gentle same-direction rubbi
   collide([c, d], t);
   assert.equal(c.crashes + d.crashes, 0);
   assert.ok(Math.hypot(c.x - d.x, c.z - d.z) >= 0.849);
+  assert.ok(c.speed < 45 && d.speed < 45, 'rubbing on the ground costs momentum');
+  const e = makeRider(t, 4, true, 1),
+    f = makeRider(t, 5, true, 2);
+  Object.assign(e, {x: 0, z: 0, y: 3, heading: 0, speed: 30, grounded: false});
+  Object.assign(f, {x: 0.6, z: 0, y: 3, heading: 0, speed: 30});
+  collide([e, f], t);
+  assert.equal(e.speed, 30, 'a rider in the air keeps their speed');
+  assert.ok(f.speed < 30, 'the rider on the ground does not');
+  assert.ok(Math.hypot(e.x - f.x, e.z - f.z) >= 0.849, 'and both are still pushed apart');
 });
 test('swept high-speed crossings crash even when the final positions do not overlap', () => {
   const t = flat(),

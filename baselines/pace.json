@@ -4,25 +4,25 @@
     {
       "course": "dusk",
       "difficulty": "club",
-      "winner": 285.992,
+      "winner": 287.8,
       "crashes": 0,
       "recoveries": 0,
       "finishers": 4,
-      "maxBonusKmh": 2.585
+      "maxBonusKmh": 2.587
     },
     {
       "course": "canyon",
       "difficulty": "club",
-      "winner": 188.258,
+      "winner": 188.783,
       "crashes": 0,
       "recoveries": 0,
       "finishers": 4,
-      "maxBonusKmh": 1.753
+      "maxBonusKmh": 3
     },
     {
       "course": "alpine",
       "difficulty": "club",
-      "winner": 183.95,
+      "winner": 184.383,
       "crashes": 0,
       "recoveries": 0,
       "finishers": 4,
@@ -31,65 +31,65 @@
     {
       "course": "coast",
       "difficulty": "club",
-      "winner": 156.758,
+      "winner": 157.033,
       "crashes": 0,
       "recoveries": 0,
       "finishers": 4,
-      "maxBonusKmh": 2.475
+      "maxBonusKmh": 2.478
     },
     {
       "course": "quarry",
       "difficulty": "club",
-      "winner": 200.567,
+      "winner": 199.842,
       "crashes": 0,
       "recoveries": 0,
       "finishers": 4,
-      "maxBonusKmh": 3
+      "maxBonusKmh": 2.56
     },
     {
       "course": "dusk",
       "difficulty": "expert",
-      "winner": 269.333,
+      "winner": 271.55,
       "crashes": 0,
       "recoveries": 0,
       "finishers": 4,
-      "maxBonusKmh": 2.053
+      "maxBonusKmh": 2.589
     },
     {
       "course": "canyon",
       "difficulty": "expert",
-      "winner": 174.1,
-      "crashes": 0,
-      "recoveries": 0,
-      "finishers": 4,
-      "maxBonusKmh": 1.017
-    },
-    {
-      "course": "alpine",
-      "difficulty": "expert",
-      "winner": 168.358,
-      "crashes": 0,
-      "recoveries": 0,
-      "finishers": 4,
-      "maxBonusKmh": 2.802
-    },
-    {
-      "course": "coast",
-      "difficulty": "expert",
-      "winner": 143.183,
-      "crashes": 0,
-      "recoveries": 0,
-      "finishers": 4,
-      "maxBonusKmh": 1.677
-    },
-    {
-      "course": "quarry",
-      "difficulty": "expert",
-      "winner": 185.35,
+      "winner": 174.5,
       "crashes": 0,
       "recoveries": 0,
       "finishers": 4,
       "maxBonusKmh": 3
+    },
+    {
+      "course": "alpine",
+      "difficulty": "expert",
+      "winner": 169.033,
+      "crashes": 0,
+      "recoveries": 0,
+      "finishers": 4,
+      "maxBonusKmh": 3
+    },
+    {
+      "course": "coast",
+      "difficulty": "expert",
+      "winner": 143.783,
+      "crashes": 0,
+      "recoveries": 0,
+      "finishers": 4,
+      "maxBonusKmh": 2.468
+    },
+    {
+      "course": "quarry",
+      "difficulty": "expert",
+      "winner": 185.433,
+      "crashes": 0,
+      "recoveries": 0,
+      "finishers": 4,
+      "maxBonusKmh": 2.84
     }
   ]
 }

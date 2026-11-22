@@ -15,6 +15,7 @@
     "test": "tsx --test tests/*.test.ts",
     "pace-gate": "tsx scripts/pace-gate.ts",
     "landing-harness": "tsx scripts/landing-harness.ts",
+    "field-check": "tsx scripts/field-check.ts",
     "test:browser": "node scripts/browser-smoke.mjs",
     "test:touch": "node scripts/touch-smoke.mjs",
     "test:load": "node scripts/load-smoke.mjs",

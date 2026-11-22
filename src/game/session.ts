@@ -26,6 +26,7 @@ import {
   controllerJoinSlot,
 } from '../input';
 import {npcControl, idleControl, type Rider} from '../physics';
+import {prepareTakeoffAdvice} from '../takeoff';
 import {TUNING} from '../config';
 import {browserStorage, lapCountsForRecord, recordKey, SaveStore} from '../save';
 import {devicesReady, RaceSession} from './race-session';
@@ -52,6 +53,7 @@ app.innerHTML = appShellHtml();
 const {renderer, lightWorld} = createRenderer(el<HTMLCanvasElement>('game'));
 let track = new Track(),
   scene = lightWorld(createWorld(track));
+prepareTakeoffAdvice(track);
 let reviewPad: GamepadLike | null = null;
 const menuGamepads = () => (reviewPad ? [reviewPad] : readBrowserGamepads());
 const input = new InputManager(undefined, menuGamepads, () => touchControls.input.read()),
@@ -171,6 +173,7 @@ function rebuildTrack(next: Track) {
   disposeWorld(scene);
   models = [];
   track = next;
+  prepareTakeoffAdvice(track);
   scene = lightWorld(createWorld(track));
   dust = new Dust(scene);
   testMarkers = new THREE.Group();

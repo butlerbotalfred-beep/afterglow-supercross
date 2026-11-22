@@ -2,11 +2,20 @@
 
 At Michael's request the top speed drops from 169 to 162 km/h (`maxSpeed` 45 m/s) and acceleration rises 15% (`acceleration` 26.953125 m/s²). The physics version is 3, so best laps from versions 1 and 2 are archived.
 
-- **AI fix.** With the extra acceleration, back-row AI riders on Pine Summit sped up between the jumps of the first rhythm lane and landed on the next face (HARD LANDING, 2 crashes per race). An AI rider below 70% of a lane's pace now holds 70% for the rest of the lane. The lane the start line sits in is exempt. `tests/npc.test.ts` covers both.
-- **Race times.** `npm run pace-gate -- --baseline baselines/pace-v1.json`: all ten races are 0.4% to 1.6% faster than version 1, with 0 crashes and 0 recoveries. `baselines/pace.json` is regenerated with Michael's approval; the version 2 files are kept as `pace-v2.json` and `landing-v2.json`.
-- **Landing reward.** `npm run landing-harness`: the rider who never pitches loses 2.19% on Dusk Valley, 1.35% on Red Canyon, 3.25% on Pine Summit, 1.47% on Saltwind Coast and 1.95% on the quarry, 0 crashes. All are above the M1.2 targets (1.5% Dusk, 0.8% elsewhere). Part of the rise is the AI fix: the scripted rider who loses the rhythm now rolls the lane.
-- **Retired check.** M1.2 required the slope-matching rider to stay within 1.0% of the time before M1.2. A quicker bike cannot hold that (Red Canyon moves 1.07%), so the check was removed from `scripts/landing-harness.ts` with Michael's approval on 22 November 2026. The gap targets and the zero-crash check remain.
-- **Tests.** 152 pass.
+The extra acceleration alone broke three things, each fixed here:
+
+- **AI riders landing on the next face.** A rider who entered a rhythm lane short of its pace now sped up into the band of takeoff speeds that comes up short (25 to 31 m/s on a 34 m double). `src/takeoff.ts` works out, for every jump, the hardest landing at each takeoff speed, with the same step and rules as the physics. The AI aims for the fastest safe speed it can still reach before the lip, and stays 2 m/s clear of any crashing speed.
+- **AI contact crashes.** The AI will not close on a much slower rider in its line at more than 5 m/s inside 25 m. Riders who rub in the air are pushed apart but keep their speed; before, a long brush in flight bled enough speed to drop a rider short of the landing.
+- **Landing reward shrinking.** A missed landing is recovered faster with more acceleration, so the gap fell under the M1.2 targets (Dusk Valley 1.43%, Saltwind Coast 0.65%). `landingPenaltySlope` goes from 1.0 to 1.4 and `landingPenaltyMax` from 0.26 to 0.29, which puts the gaps back where M1.2 left them.
+
+Results:
+
+- **Field check (new, in CI).** `npm run field-check -- --check`: 60 all-AI races, 4, 5, 6 and 8 riders, relaxed, club and expert, all five circuits: 60 of 60 with no crash, no recovery and every rider finishing. The pace gate alone (four riders, club and expert) missed crashes in larger fields.
+- **Race times.** `npm run pace-gate -- --baseline baselines/pace-v1.json`: all ten races are 0.4% to 1.2% faster than version 1, with 0 crashes and 0 recoveries. `baselines/pace.json` is regenerated with Michael's approval; the version 2 files are kept as `pace-v2.json` and `landing-v2.json`.
+- **Landing reward.** `npm run landing-harness`: the rider who never pitches loses 1.82% on Dusk Valley, 1.10% on Red Mesa, 1.91% on Pine Summit, 0.87% on Saltwind Coast and 1.13% on Iron Quarry, 0 crashes. All meet the M1.2 targets (1.5% Dusk, 0.8% elsewhere).
+- **Retired check.** M1.2 required the slope-matching rider to stay within 1.0% of the time before M1.2. A quicker bike cannot hold that, so the check was removed from `scripts/landing-harness.ts` with Michael's approval on 22 November 2026. The gap targets and the zero-crash check remain.
+- **Tests.** 154 pass. `tests/npc.test.ts` fails without the takeoff and closing rules.
+- **Review B.** The first version used a simpler rule (an AI rider off the pace rolled the lane). The independent review showed it slowed on-pace riders on Iron Quarry, caused contact crashes in 8-rider fields and left crashes in 5 and 6 rider fields, so it was replaced by the rules above.
 
 # M1.2 Landing skill — 22 November 2026
 

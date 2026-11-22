@@ -3,6 +3,7 @@ import {Track, type TrackPoint} from './track';
 import {TUNING, clamp, angleDelta} from './config';
 import {createProgress, updateProgress, restoreDeparture, trackDeferred, type Progress} from './race';
 import type {Control, Device} from './input';
+import {lipDistance, safeTakeoffSpeed} from './takeoff';
 export interface Rider {
   id: number;
   human: boolean;
@@ -364,8 +365,10 @@ export function collide(riders: Rider[], track: Track) {
       a.z -= nz * push;
       b.x += nx * push;
       b.z += nz * push;
-      a.speed *= 0.992;
-      b.speed *= 0.992;
+      // Rubbing costs momentum through the tyres. A rider in the air keeps theirs: losing it mid-flight would
+      // drop them short of the landing with nothing they could do about it.
+      if (a.grounded) a.speed *= 0.992;
+      if (b.grounded) b.speed *= 0.992;
     }
 }
 
@@ -379,11 +382,11 @@ function landingPitch(r: Rider, track: Track) {
   }
   return 0;
 }
-/**
- * An AI rider below this share of a rhythm lane's pace has lost the rhythm, and holds this share for the rest of
- * the lane. One value for both: 0.75 already lets riders reach the next face on Pine Summit.
- */
-const NPC_RHYTHM_ROLL = 0.7;
+/** How far ahead of a takeoff the AI starts picking a speed for it. */
+const NPC_TAKEOFF_REACH = 45;
+/** The AI will not close on a rider ahead in its line faster than this, in m/s, inside NPC_FOLLOW_REACH metres. */
+const NPC_CLOSING_MAX = 5;
+const NPC_FOLLOW_REACH = 25;
 export function npcControl(r: Rider, track: Track, others: Rider[], difficulty: string): Control {
   const pace = difficulty === 'relaxed' ? 0.78 : difficulty === 'expert' ? 1.04 : 0.91;
   const ahead = 4 + r.speed * 0.32;
@@ -403,12 +406,7 @@ export function npcControl(r: Rider, track: Track, others: Rider[], difficulty: 
   let targetSpeed = clamp(46.875 - curvature * 460, 11.8, 45) * pace;
   for (const rhythm of track.rhythms) {
     const entrySpeed = rhythm.pace * (difficulty === 'relaxed' ? 0.98 : difficulty === 'expert' ? 1.02 : 1);
-    // The lane the start line sits in is exempt: every rider is below its pace there, launching from rest.
-    const lostRhythm = rhythm.start > 0 && r.speed < entrySpeed * NPC_RHYTHM_ROLL;
-    if (r.surface.s >= rhythm.start && r.surface.s < rhythm.end)
-      // A rider who has lost the rhythm rolls the rest of the lane: speeding up between the jumps would throw
-      // them short of a landing and into the next face.
-      targetSpeed = Math.min(targetSpeed, lostRhythm ? entrySpeed * NPC_RHYTHM_ROLL : entrySpeed);
+    if (r.surface.s >= rhythm.start && r.surface.s < rhythm.end) targetSpeed = Math.min(targetSpeed, entrySpeed);
     else {
       const distance = (rhythm.start - r.surface.s + track.length) % track.length;
       if (distance < 90)
@@ -416,6 +414,24 @@ export function npcControl(r: Rider, track: Track, others: Rider[], difficulty: 
     }
   }
   if (Math.abs(err) > 0.6) targetSpeed = Math.min(targetSpeed, 10);
+  // Closing on a much slower rider in the same line is a contact crash: slow to a safe closing speed instead.
+  for (const o of others) {
+    if (o === r || o.speed > r.speed - NPC_CLOSING_MAX) continue;
+    const gap = (o.surface.s - r.surface.s + track.length) % track.length;
+    if (gap > 0 && gap < NPC_FOLLOW_REACH && Math.abs(o.surface.lateral - r.surface.lateral) < 1.6)
+      targetSpeed = Math.min(targetSpeed, o.speed + NPC_CLOSING_MAX);
+  }
+  if (r.grounded) {
+    // Some takeoff speeds end on the face of the next jump. Aim for the fastest safe one still within reach.
+    const lip = lipDistance(track, r.surface.s, NPC_TAKEOFF_REACH);
+    if (lip !== null) {
+      const drive = Math.max(0, TUNING.acceleration - TUNING.drag * r.speed);
+      const fastest = Math.min(targetSpeed, Math.sqrt(r.speed * r.speed + 2 * drive * lip));
+      const slowest = Math.sqrt(Math.max(0, r.speed * r.speed - 2 * TUNING.braking * 0.7 * lip));
+      const safe = safeTakeoffSpeed(track, r.surface.s, NPC_TAKEOFF_REACH, slowest, fastest);
+      if (safe !== null) targetSpeed = Math.min(targetSpeed, safe);
+    }
+  }
   return {
     throttle: clamp((targetSpeed - r.speed) * 0.55, 0, 1),
     brake: clamp((r.speed - targetSpeed - 1) * 0.28, 0, 0.7),

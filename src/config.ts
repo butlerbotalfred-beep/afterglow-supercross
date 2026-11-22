@@ -23,13 +23,14 @@ export const TUNING = {
   landingCrashAngle: 0.95,
   /** Radians between the bike's pitch and the landing slope before a landing starts to cost speed. */
   landingPenaltyStart: 0.1,
-  /** Share of speed lost per radian beyond landingPenaltyStart. */
-  landingPenaltySlope: 1,
+  /** Share of speed lost per radian beyond landingPenaltyStart. 1.0 in physics version 2. */
+  landingPenaltySlope: 1.4,
   /**
    * Where the steep penalty levels off, as a share of speed. Past it a landing costs what it did before M1.2
    * (legacyPenaltyStart and legacyPenaltySlope), so a landing is never cheaper than it used to be.
    */
-  landingPenaltyMax: 0.26,
+  // 0.26 in physics version 2.
+  landingPenaltyMax: 0.29,
   /**
    * A touchdown after less than this many seconds in the air is a rebound or a bump, too quick to pitch for.
    * The steep penalty levels off much sooner for it (bumpPenaltyMax), so a bad landing that bounces is not

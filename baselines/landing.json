@@ -3,37 +3,37 @@
   "circuits": [
     {
       "course": "dusk",
-      "matchS": 287.17,
-      "nopitchS": 293.46,
-      "gapPct": 2.19,
+      "matchS": 288.79,
+      "nopitchS": 294.04,
+      "gapPct": 1.82,
       "crashes": 0
     },
     {
       "course": "canyon",
-      "matchS": 188.15,
-      "nopitchS": 190.69,
-      "gapPct": 1.35,
+      "matchS": 188.68,
+      "nopitchS": 190.74,
+      "gapPct": 1.1,
       "crashes": 0
     },
     {
       "course": "alpine",
-      "matchS": 184.63,
-      "nopitchS": 190.63,
-      "gapPct": 3.25,
+      "matchS": 185.04,
+      "nopitchS": 188.58,
+      "gapPct": 1.91,
       "crashes": 0
     },
     {
       "course": "coast",
-      "matchS": 157.11,
-      "nopitchS": 159.43,
-      "gapPct": 1.47,
+      "matchS": 157.38,
+      "nopitchS": 158.75,
+      "gapPct": 0.87,
       "crashes": 0
     },
     {
       "course": "quarry",
-      "matchS": 200.44,
-      "nopitchS": 204.35,
-      "gapPct": 1.95,
+      "matchS": 200.33,
+      "nopitchS": 202.59,
+      "gapPct": 1.13,
       "crashes": 0
     }
   ]
