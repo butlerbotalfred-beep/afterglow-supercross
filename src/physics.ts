@@ -379,6 +379,11 @@ function landingPitch(r: Rider, track: Track) {
   }
   return 0;
 }
+/**
+ * An AI rider below this share of a rhythm lane's pace has lost the rhythm, and holds this share for the rest of
+ * the lane. One value for both: 0.75 already lets riders reach the next face on Pine Summit.
+ */
+const NPC_RHYTHM_ROLL = 0.7;
 export function npcControl(r: Rider, track: Track, others: Rider[], difficulty: string): Control {
   const pace = difficulty === 'relaxed' ? 0.78 : difficulty === 'expert' ? 1.04 : 0.91;
   const ahead = 4 + r.speed * 0.32;
@@ -398,7 +403,12 @@ export function npcControl(r: Rider, track: Track, others: Rider[], difficulty: 
   let targetSpeed = clamp(46.875 - curvature * 460, 11.8, 45) * pace;
   for (const rhythm of track.rhythms) {
     const entrySpeed = rhythm.pace * (difficulty === 'relaxed' ? 0.98 : difficulty === 'expert' ? 1.02 : 1);
-    if (r.surface.s >= rhythm.start && r.surface.s < rhythm.end) targetSpeed = Math.min(targetSpeed, entrySpeed);
+    // The lane the start line sits in is exempt: every rider is below its pace there, launching from rest.
+    const lostRhythm = rhythm.start > 0 && r.speed < entrySpeed * NPC_RHYTHM_ROLL;
+    if (r.surface.s >= rhythm.start && r.surface.s < rhythm.end)
+      // A rider who has lost the rhythm rolls the rest of the lane: speeding up between the jumps would throw
+      // them short of a landing and into the next face.
+      targetSpeed = Math.min(targetSpeed, lostRhythm ? entrySpeed * NPC_RHYTHM_ROLL : entrySpeed);
     else {
       const distance = (rhythm.start - r.surface.s + track.length) % track.length;
       if (distance < 90)

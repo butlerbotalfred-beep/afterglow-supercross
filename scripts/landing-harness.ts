@@ -46,7 +46,7 @@ if (process.argv.includes('--write')) {
     file,
     JSON.stringify(
       {
-        note: 'Time lost over 3 laps by a rider who never uses air pitch, physics version 2 (after M1.2).',
+        note: 'Time lost over 3 laps by a rider who never uses air pitch, physics version 3.',
         circuits: rows,
       },
       null,

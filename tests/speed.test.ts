@@ -22,16 +22,16 @@ function straight() {
   track.project = (x: number, z: number) => track.at(z, x);
   return track;
 }
-test('full throttle delivers the additional 25% acceleration increase and reaches the 169.2 km/h ceiling', () => {
+test('full throttle delivers 26.953125 m/s² and reaches the 162 km/h ceiling', () => {
   const track = straight(),
     r = makeRider(track, 0, true, 0xffffff),
     dt = 1 / 120;
   Object.assign(r, {x: 0, z: 0, y: 0, heading: 0, surface: track.at(0)});
   const throttle = {...idleControl(), throttle: 1};
   stepRider(r, throttle, track, dt, [r]);
-  assert.ok(Math.abs(r.speed / dt - 23.4375) < 1e-8, 'launch acceleration is 23.4375 m/s²');
+  assert.ok(Math.abs(r.speed / dt - 26.953125) < 1e-8, 'launch acceleration is 26.953125 m/s², 15% up on 23.4375');
   for (let i = 1; i < 8 / dt; i++) stepRider(r, throttle, track, dt, [r]);
-  assert.equal(TUNING.maxSpeed, 47, 'the ceiling is 47 m/s, 169.2 km/h');
+  assert.equal(TUNING.maxSpeed, 45, 'the ceiling is 45 m/s, 162 km/h');
   assert.equal(r.speed, TUNING.maxSpeed, 'sustained throttle reaches and holds the ceiling');
   assert.ok(r.z > 300, 'the bike covers the expected faster straight-line distance');
   for (let i = 0; i < 2 / dt; i++) stepRider(r, {...idleControl(), brake: 1}, track, dt, [r]);

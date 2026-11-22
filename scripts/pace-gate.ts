@@ -48,7 +48,7 @@ if (write) {
     JSON.stringify(
       {
         note:
-          'AI race winner times, 3 laps, 4 NPC riders, 120 Hz, physics version 2. Regenerate only with sign-off. ' +
+          'AI race winner times, 3 laps, 4 NPC riders, 120 Hz, physics version 3. Regenerate only with sign-off. ' +
           'pace-v1.json holds the times before M1.2.',
         races: results,
       },

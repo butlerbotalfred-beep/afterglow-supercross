@@ -2,16 +2,17 @@
  * Bump this whenever a change alters how a bike moves for the same inputs. Saved times and replays carry the
  * number, so results from different physics are never compared.
  */
-export const PHYSICS_VERSION = 2;
+export const PHYSICS_VERSION = 3;
 /** Metres, seconds, radians. See README for handling/camera tuning. */
 export const TUNING = {
   step: 1 / 120,
   maxFrame: 0.1,
-  acceleration: 23.4375,
+  /** 15% more than the 23.4375 it was until physics version 3. */
+  acceleration: 26.953125,
   braking: 36,
   drag: 0.34,
-  /** 169.2 km/h. It was 182 until M1.2; no circuit lets even the Expert AI pass 164 km/h. */
-  maxSpeed: 47,
+  /** 162 km/h. It was 182 until M1.2 and 169.2 in physics version 2. The AI already aimed no higher than this. */
+  maxSpeed: 45,
   turnRate: 1.48,
   gravity: 22,
   trackHalfWidth: 4.8,
