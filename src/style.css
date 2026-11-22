@@ -1389,7 +1389,7 @@ footer i {
 }
 .iphone-session .hud-bottom {
   left: auto;
-  right: 130px;
+  right: 172px;
 }
 .iphone-session .identity {
   display: none;
@@ -2149,4 +2149,120 @@ footer i {
   header {
     gap: 16px;
   }
+}
+/* Lap timing (M1.1): a panel under the lap counter, and lap times on the results screen. */
+.timing {
+  position: absolute;
+  right: 30px;
+  top: 146px;
+  display: grid;
+  grid-template-columns: auto auto;
+  column-gap: 12px;
+  row-gap: 2px;
+  justify-items: end;
+  padding: 6px 12px 7px;
+  background: #18202bd9;
+  border-radius: 2px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: #adb2bc;
+  font-variant-numeric: tabular-nums;
+}
+.timing b {
+  color: #f5efdf;
+  font-size: 12px;
+  letter-spacing: 0.5px;
+}
+.timing .lap-now {
+  grid-column: 1 / -1;
+  font-family: 'Barlow Condensed', Impact, sans-serif;
+  font-size: 26px;
+  font-style: italic;
+  line-height: 1;
+}
+.timing .lap-split {
+  grid-column: 1 / -1;
+  font-style: normal;
+  font-size: 12px;
+  min-height: 15px;
+  color: #f5efdf;
+  white-space: pre;
+}
+.timing .lap-split.faster {
+  color: #7fe07a;
+}
+.timing .lap-split.slower {
+  color: #ff7d6b;
+}
+.compact .timing {
+  right: 20px;
+  top: 74px;
+  padding: 4px 9px 5px;
+  font-size: 7px;
+  column-gap: 8px;
+}
+.compact .timing b {
+  font-size: 10px;
+}
+.compact .timing .lap-now {
+  font-size: 19px;
+}
+.compact .timing .lap-split {
+  font-size: 10px;
+  min-height: 12px;
+}
+.compact:first-child .timing,
+.compact:nth-child(2) .timing {
+  top: 99px;
+}
+.iphone-session .timing {
+  right: auto;
+  left: calc(22px + env(safe-area-inset-left));
+  top: 112px;
+  padding: 4px 9px 5px;
+  font-size: 7px;
+}
+.iphone-session .timing b {
+  font-size: 10px;
+}
+.iphone-session .timing .lap-now {
+  font-size: 20px;
+}
+.iphone-session .timing .lap-split {
+  font-size: 10px;
+  min-height: 12px;
+}
+.result-row {
+  flex-wrap: wrap;
+}
+.result-laps {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  padding: 2px 0 4px 54px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: #adb2bc;
+}
+.result-laps small {
+  margin-right: 5px;
+  font-size: 8px;
+  letter-spacing: 1px;
+  opacity: 0.7;
+}
+.result-laps .best-lap {
+  color: #f5efdf;
+  font-weight: 700;
+}
+.result-laps .fastest-lap {
+  color: #7fe07a;
+}
+.result-time {
+  font-variant-numeric: tabular-nums;
+}
+#results-table {
+  max-height: 52vh;
+  overflow-y: auto;
 }

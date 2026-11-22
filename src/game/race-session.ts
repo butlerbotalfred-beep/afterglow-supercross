@@ -3,6 +3,7 @@
 import {COLORS, TUNING} from '../config';
 import {uniqueDevices, type Control, type Device} from '../input';
 import {collide, idleControl, makeRider, npcControl, stepRider, type Rider} from '../physics';
+import {createTiming, fasterLap, recordStep, type LapTime, type RiderTiming} from '../timing';
 import type {Track} from '../track';
 
 export type Phase = 'setup' | 'countdown' | 'racing' | 'results';
@@ -24,6 +25,8 @@ export interface SessionScreen {
   landing(impact: number): void;
   /** The shared pause was switched on or off. `missing` is a human whose controller has gone. */
   pause(paused: boolean, missing: Rider | undefined): void;
+  /** A rider finished a lap. Optional, so simple screens can ignore it. */
+  lap?(rider: Rider, lap: LapTime): void;
   /** The race is over and riders are classified. */
   results(): void;
 }
@@ -57,6 +60,10 @@ export class RaceSession {
   countdown = COUNTDOWN_SECONDS;
   firstFinish: number | null = null;
   riders: Rider[] = [];
+  /** Lap and sector timing, one entry per rider in the same order as `riders`. */
+  timing: RiderTiming[] = [];
+  /** The saved best lap for this track, which human riders' sector times are compared with. */
+  personalBest: LapTime | null = null;
   /** Seconds of frame time not yet turned into physics steps. */
   accumulator = 0;
   /** Power-slide aggression for human riders; can change while paused. */
@@ -85,6 +92,7 @@ export class RaceSession {
     this.riders.forEach((r, i) => {
       if (!r.human) r.name = NPC_NAMES[(i - humanCount) % NPC_NAMES.length];
     });
+    this.timing = this.riders.map(() => createTiming());
   }
   /** Starts the countdown for the riders already on the grid. */
   start({lapCount, difficulty}: RaceConfig) {
@@ -98,6 +106,11 @@ export class RaceSession {
     this.lastTickSound = 4;
     this.accumulator = 0;
     this.override.clear();
+    this.timing = this.riders.map(() => createTiming());
+  }
+  /** The lap a rider's sector times are compared with: the saved best (humans only) or their best this session. */
+  referenceLap(index: number) {
+    return fasterLap(this.riders[index].human ? this.personalBest : null, this.timing[index].best);
   }
   toSetup() {
     this.reviewCrashTest = '';
@@ -169,7 +182,7 @@ export class RaceSession {
       return;
     }
     this.raceTime += dt;
-    for (const r of riders) {
+    for (const [index, r] of riders.entries()) {
       const humanControl = r.human
         ? this.reviewDrive
           ? npcControl(r, track, riders, 'club')
@@ -186,6 +199,11 @@ export class RaceSession {
       }
       if (this.reviewCrashTest === 'Rider contact') Object.assign(c, idleControl());
       stepRider(r, c, track, dt, riders, r.human ? this.slideAggression : 1);
+      // Laps are timed until the rider takes the flag; the cool-down lap after it is not.
+      if (r.finished === null || this.practice) {
+        const lap = recordStep(this.timing[index], r.progress, this.raceTime - dt, dt, this.referenceLap(index));
+        if (lap) screen.lap?.(r, lap);
+      } else r.progress.crossings.length = 0;
       if (r.lastLanding > 3 && r.human) screen.landing(r.lastLanding);
       if (!this.practice && r.finished === null && r.progress.lap >= this.lapCount) {
         r.finished = this.raceTime;

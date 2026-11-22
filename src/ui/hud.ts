@@ -2,6 +2,7 @@
 import {CSS_COLORS, TUNING} from '../config';
 import type {Device} from '../input';
 import type {Rider} from '../physics';
+import {currentLapTime, formatDelta, formatLap, type LapTime, type RiderTiming} from '../timing';
 import type {Track} from '../track';
 import {obstacleLength, obstacleType} from '../track-layout';
 import {el} from './dom';
@@ -18,7 +19,13 @@ export type HudContext = {
   raceTime: number;
   firstFinish: number | null;
   iphoneMode: boolean;
+  /** Lap timing per rider, in the same order as `riders`. */
+  timing: RiderTiming[];
+  /** The lap each rider's times are compared with (their saved or session best), or null. */
+  referenceLap: (index: number) => LapTime | null;
 };
+/** How long a finished sector or lap stays on screen, in seconds of race time. */
+const SPLIT_SECONDS = 4;
 
 export function raceChromeHtml() {
   return (
@@ -68,6 +75,9 @@ export function hudHtml(
           `<strong>01<span>/ ${riders.length}</span></strong></div>` +
           `<span class="identity">P${i + 1}<small>${deviceLabel(assignments[i])}</small></span>` +
           `<div class="lap">LAP <b>1</b><small>/ ${practice ? '∞' : lapCount}</small></div></div>` +
+          `<div class="timing"><b class="lap-now">0:00.0</b>` +
+          `<span>LAST <b class="lap-last">–</b></span><span>BEST <b class="lap-best">–</b></span>` +
+          `<i class="lap-split"></i></div>` +
           `<div class="rider-notice"></div><div class="test-target"></div><div class="hud-bottom">` +
           `<div class="mini-map"><canvas width="150" height="130"></canvas>` +
           `<span class="sector">FINISH STRAIGHT</span></div><div class="speed"><strong>00</strong>` +
@@ -117,6 +127,35 @@ export function drawMap(canvas: HTMLCanvasElement, r: Rider, track: Track, rider
   const p = track.at(0);
   c.fillRect(x(p.x) - 3, z(p.z) - 1, 6, 2);
 }
+/** Fills one rider's lap timing panel: the running lap, last and best laps, and the newest sector or lap result. */
+function updateTiming(
+  h: HTMLElement,
+  t: RiderTiming | undefined,
+  best: LapTime | null,
+  raceTime: number,
+  done: boolean,
+) {
+  if (!t) return;
+  const last = t.laps[t.laps.length - 1];
+  // The running clock shows tenths: thousandths change too fast to read. It stops when the rider has finished.
+  h.querySelector('.lap-now')!.textContent =
+    done && last ? formatLap(last.time) : formatLap(currentLapTime(t, raceTime)).slice(0, -2);
+  h.querySelector('.lap-last')!.textContent = last ? formatLap(last.time) : '–';
+  h.querySelector('.lap-best')!.textContent = best ? formatLap(best.time) : '–';
+  const split = h.querySelector<HTMLElement>('.lap-split')!;
+  const s = t.split;
+  if (!s || raceTime - s.at > SPLIT_SECONDS) {
+    split.textContent = '';
+    split.className = 'lap-split';
+    return;
+  }
+  // A sector that ended the lap shows the whole lap; any other shows the sector.
+  const lapEnded = s.lapDelta !== undefined && last;
+  const delta = lapEnded ? (s.lapDelta ?? null) : s.delta;
+  const label = lapEnded ? `LAP ${formatLap(last.time)}` : `S${s.sector + 1} ${s.time.toFixed(3)}`;
+  split.textContent = delta === null ? label : `${label}  ${formatDelta(delta)}`;
+  split.className = `lap-split ${delta === null ? '' : delta < 0 ? 'faster' : 'slower'}`;
+}
 export function updateHud(ctx: HudContext) {
   const {track, riders, viewHud, phase, practice, lapCount, humanCount, raceTime, firstFinish, iphoneMode} = ctx;
   const ordered = ranking(riders, track);
@@ -127,6 +166,7 @@ export function updateHud(ctx: HudContext) {
     h.querySelector('.lap b')!.textContent = String(
       practice ? r.progress.lap + 1 : Math.min(lapCount, r.progress.lap + 1),
     );
+    updateTiming(h, ctx.timing[i], ctx.referenceLap(i), raceTime, r.finished !== null && !practice);
     h.querySelector('.speed strong')!.textContent = String(Math.round(r.speed * 3.6)).padStart(2, '0');
     (h.querySelector('.speed-track i') as HTMLElement).style.width = `${(r.speed / TUNING.maxSpeed) * 100}%`;
     h.querySelector('.sector')!.textContent = track.sector(r.surface.s);

@@ -8,7 +8,17 @@ interface Excursion {
   forward: number;
 }
 
+/** A timing plane crossed during one physics step, and how far through the step it happened (0 to 1). */
+export interface GateCrossing {
+  gate: number;
+  fraction: number;
+}
+
 export interface Progress {
+  /** Planes credited since lap timing last read them. Timing empties the list; nothing else depends on it. */
+  crossings: GateCrossing[];
+  /** How many times the rider has been off the route for long enough to be sent back (a shortcut attempt). */
+  shortcuts: number;
   lap: number;
   nextCheckpoint: number;
   lastS: number;
@@ -26,6 +36,8 @@ const shortestDelta = (from: number, to: number, length: number) => wrap(to - fr
 /** initialS may be negative for riders staged just behind the start line. */
 export function createProgress(initialS = 0): Progress {
   return {
+    crossings: [],
+    shortcuts: 0,
     lap: 0,
     nextCheckpoint: 1,
     lastS: initialS,
@@ -76,7 +88,10 @@ export function updateProgress(
   const exit = progress.excursion;
   if (exit) {
     exit.forward += delta;
-    if (teleport || exit.forward > OFF_TRACK_FORWARD_LIMIT) progress.routeBroken = true;
+    if ((teleport || exit.forward > OFF_TRACK_FORWARD_LIMIT) && !progress.routeBroken) {
+      progress.routeBroken = true;
+      progress.shortcuts += 1;
+    }
     if (progress.routeBroken) {
       // Returning to the departure point under your own power is also valid.
       if (!progress.offTrack && Math.abs(shortestDelta(exit.s, currentS, trackLength)) < 1) {
@@ -99,6 +114,15 @@ export function updateProgress(
   if (distanceToPlane < 1e-7) distanceToPlane = trackLength;
   while (distanceToPlane <= creditDelta + 1e-7 && progress.distanceSinceCheckpoint >= spacing - 1e-5) {
     progress.distanceSinceCheckpoint -= spacing;
+    // Where in this step the plane was crossed. Credit carried over from a forgiven excursion counts as
+    // crossed at the start of the step that brought the rider back.
+    const intoStep = distanceToPlane - (creditDelta - delta);
+    // Tools that step riders without reading lap times must not let the list grow for ever.
+    if (progress.crossings.length >= CHECKPOINT_COUNT * 2) progress.crossings.shift();
+    progress.crossings.push({
+      gate: progress.nextCheckpoint,
+      fraction: delta > 0 ? Math.max(0, Math.min(1, intoStep / delta)) : 0,
+    });
     if (progress.nextCheckpoint === 0) {
       progress.lap += 1;
       progress.nextCheckpoint = 1;

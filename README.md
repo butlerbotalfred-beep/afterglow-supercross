@@ -131,6 +131,18 @@ One player gets a full viewport; two get stacked views; three/four use a 2×2 gr
 
 Sixteen ordered timing gates and forward start/finish crossings validate laps. Shortcuts and reverse crossings cannot award laps. The race ends once every human finishes, or 60 seconds after the first human finishes. The HUD shows the remaining time; all unfinished riders are classified DNF. Finished riders coast under NPC control. Practice continues until you return to setup. Restart clears timing, progress, recovery and results.
 
+## Lap and sector timing
+
+Every rider is timed. The sixteen timing gates are grouped into four sectors per lap, and each crossing is timed to the point inside the physics step where it happened, so times are exact to well under a thousandth of a second. Lap 1 runs from the gate drop; later laps run line to line.
+
+- **During a ride**, a panel under the lap counter shows the running lap, your **LAST** lap and your **BEST**. As you finish each sector it shows the sector time for four seconds with the difference to your best lap's same sector: green when faster, red when slower. Finishing a lap shows the lap time and its difference the same way.
+- **On the results screen**, every rider's lap times are listed. Each rider's own best lap is brighter, the fastest lap of the race is green, and riders behind the winner show their gap.
+- **Best laps are saved** per circuit, and separately for each custom layout. Editing a custom layout's shape starts a fresh best for it; renaming it does not. Free practice laps count too.
+- A lap in which you were sent back to the track after a shortcut cannot become a best lap. NPC riders and development autopilot never set one.
+- Best laps carry the physics version they were ridden on. When a later update changes how the bike handles, older bests are moved to an archive inside the save and a new best starts, so times are only ever compared like for like.
+
+`npm run test:hud` (dev server running, Playwright available) checks that the timing panel overlaps nothing in four layouts: 1, 2 and 4 riders at 1280 × 720, and a phone at 844 × 390.
+
 ## Circuit selection
 
 Choose a circuit in pre-race setup. Each has its own centerline, jump sequence and scenery; selection is retained on restart. Returning to setup and changing circuit rebuilds the environment and releases its previous graphics resources.
@@ -181,6 +193,7 @@ The camera maintains a stable horizon, smooths heading and position, stays above
 - `src/main.ts`: session lifecycle, UI integration and one shared simulation/render loop.
 - `src/courses.ts`, `src/scenery.ts`: five course definitions, terrain themes and scenery resource cleanup.
 - `src/physics.ts`, `src/track.ts`, `src/race.ts`: movement, terrain and validated race progression.
+- `src/timing.ts`: lap and sector times from the timing gates; `src/save.ts`: the one versioned save, including best laps.
 - `src/input.ts`: isolated keyboard/gamepad/touch routing and edge-triggered actions.
 - `src/touch-input.ts`, `src/touch-controls.ts`: multi-touch pointer ownership and the explicitly selected iPhone overlay.
 - `src/bike-model.ts`, `src/world.ts`, `src/dust.ts`: procedural visuals and animation.

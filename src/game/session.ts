@@ -27,7 +27,7 @@ import {
 } from '../input';
 import {npcControl, idleControl, type Rider} from '../physics';
 import {TUNING} from '../config';
-import {browserStorage, SaveStore} from '../save';
+import {browserStorage, recordKey, SaveStore} from '../save';
 import {devicesReady, RaceSession} from './race-session';
 import {blendPose, capturePose, pacingStats, type Pose} from '../render-interp';
 import {createRenderer, renderViews, resizeRenderer, type RenderContext} from '../render/renderer';
@@ -80,12 +80,17 @@ const session = new RaceSession(input, {
     el('pause-message').textContent = pauseMessage(missing);
     audio.update(0, 0, false);
   },
+  lap(rider, lap) {
+    // Only a human's own clean lap can become the saved best: not autopilot, not a lap with a shortcut return.
+    if (!rider.human || !lap.valid || session.reviewDrive || session.override.size) return;
+    if (save.submitLap(recordKey(track.course.id, activeLayout), lap)) session.personalBest = lap;
+  },
   results() {
     touchControls.show(false);
     setVisible('results', true);
     setVisible('countdown', false);
     audio.update(0, 0, false);
-    showResultsTable(track, session.riders, session.lapCount, session.raceTime);
+    showResultsTable(track, session.riders, session.lapCount, session.raceTime, session.timing);
   },
 });
 session.slideAggression = save.slideAggression;
@@ -261,7 +266,13 @@ function buildGrid() {
   cameras = Array.from({length: humanCount}, () => new ChaseCamera());
   syncModels(0);
 }
+/** Loads the saved best lap for the track about to be ridden, for the HUD to compare against. */
+function loadPersonalBest() {
+  const record = save.bestLap(recordKey(track.course.id, activeLayout));
+  session.personalBest = record ? {time: record.time, sectors: record.sectors, valid: true} : null;
+}
 function buildHud(lapCount: number) {
+  loadPersonalBest();
   el('hud').innerHTML = hudHtml(humanCount, session.riders, assignments, practice, lapCount);
   viewHud = [...el('hud').querySelectorAll<HTMLElement>('.viewport-hud')];
 }
@@ -337,7 +348,20 @@ function syncModels(dt: number) {
 }
 function hudContext(): HudContext {
   const {riders, phase, lapCount, raceTime, firstFinish} = session;
-  return {track, riders, viewHud, phase, practice, lapCount, humanCount, raceTime, firstFinish, iphoneMode};
+  return {
+    track,
+    riders,
+    viewHud,
+    phase,
+    practice,
+    lapCount,
+    humanCount,
+    raceTime,
+    firstFinish,
+    iphoneMode,
+    timing: session.timing,
+    referenceLap: index => session.referenceLap(index),
+  };
 }
 function renderContext(): RenderContext {
   return {
@@ -682,6 +706,7 @@ if (import.meta.env.DEV) {
       return track;
     },
     riders: () => session.riders,
+    timing: () => session.timing,
     snapshot: () => ({
       course: track.course.id,
       phase: session.phase,
