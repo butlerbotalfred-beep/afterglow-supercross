@@ -20,7 +20,17 @@ Matching the bike to the landing now matters. A landing more than 0.10 radians o
 
 ## Mac Studio smoke tests
 
-Recorded below once run on the final code.
+Run in a separate copy at commit e2e2b0e, the code as merged apart from this write-up. The live game was not touched.
+
+| Test | Result |
+| --- | --- |
+| `npm test` | 150 of 150 |
+| browser-smoke | 19 of 19. 58.2 fps with 1 human and 5 NPCs, 57.6 fps with 4 humans and 4 NPCs |
+| touch-smoke | 13 of 13 |
+| course-smoke | 5 of 5. 59.3 to 59.6 fps on all five circuits |
+| hud-layout-check | 4 of 4 layouts clear |
+| load-smoke, on a production build | 15 of 15 |
+| prod-smoke with a layout export and import | 13 of 13, BUILD e2e2b0e |
 
 ## Code review (B)
 
