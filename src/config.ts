@@ -24,8 +24,20 @@ export const TUNING = {
   landingPenaltyStart: 0.1,
   /** Share of speed lost per radian beyond landingPenaltyStart. */
   landingPenaltySlope: 1,
-  /** Most speed one misaligned landing can cost, as a share. The same as the worst case before M1.2. */
+  /**
+   * Where the steep penalty levels off, as a share of speed. Past it a landing costs what it did before M1.2
+   * (legacyPenaltyStart and legacyPenaltySlope), so a landing is never cheaper than it used to be.
+   */
   landingPenaltyMax: 0.26,
+  /**
+   * A touchdown after less than this many seconds in the air is a rebound or a bump, too quick to pitch for.
+   * The steep penalty levels off much sooner for it (bumpPenaltyMax), so a bad landing that bounces is not
+   * charged in full a second time.
+   */
+  landingBumpAir: 0.1,
+  bumpPenaltyMax: 0.05,
+  legacyPenaltyStart: 0.3,
+  legacyPenaltySlope: 0.4,
   /** Most speed a clean downslope landing can add, in m/s (3 km/h). */
   landingBonusMax: 3 / 3.6,
   /** Downslope gradient at which a clean landing earns the whole bonus. */

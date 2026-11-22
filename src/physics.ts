@@ -278,20 +278,26 @@ export function stepRider(r: Rider, c: Control, track: Track, dt: number, others
       }
       // Matching the bike's pitch to the landing slope keeps speed; a flat or nose-high landing scrubs it.
       const judged = r.airTime >= TUNING.landingJudgeAir;
-      const misaligned = Math.min(
-        TUNING.landingPenaltyMax,
-        Math.max(0, alignment - TUNING.landingPenaltyStart) * TUNING.landingPenaltySlope,
-      );
-      r.speed *= clamp(1 - misaligned - Math.max(0, impact - 12) * 0.015, 0.55, 1);
+      const legacy = Math.max(0, alignment - TUNING.legacyPenaltyStart) * TUNING.legacyPenaltySlope;
+      const steep = Math.max(0, alignment - TUNING.landingPenaltyStart) * TUNING.landingPenaltySlope;
+      const steepMax = r.airTime < TUNING.landingBumpAir ? TUNING.bumpPenaltyMax : TUNING.landingPenaltyMax;
+      const misaligned = Math.max(legacy, Math.min(steepMax, steep));
+      const hardHit = Math.max(0, impact - 12) * 0.015;
+      r.speed *= clamp(1 - misaligned - hardHit, 0.55, 1);
       r.landingBonus = 0;
       if (judged) {
         const clean = alignment <= TUNING.landingPenaltyStart;
-        // A clean landing on a downslope carries a little extra speed out, never more than landingBonusMax.
-        if (clean && slope < 0) {
-          r.landingBonus = TUNING.landingBonusMax * clamp(-slope / TUNING.landingBonusSlope, 0, 1);
-          r.speed += r.landingBonus;
+        // A clean landing on a downslope carries a little extra speed out: never more than landingBonusMax,
+        // never past the top speed, and only on the track.
+        if (clean && slope < 0 && Math.abs(r.surface.lateral) <= track.halfWidth) {
+          const before = r.speed;
+          const bonus = TUNING.landingBonusMax * clamp(-slope / TUNING.landingBonusSlope, 0, 1);
+          r.speed = Math.min(Math.max(before, TUNING.maxSpeed), before + bonus);
+          // What the landing really added, which is what the pace gate holds to the cap.
+          r.landingBonus = r.speed - before;
         }
-        r.landingCue = clean ? 'clean' : misaligned >= 0.02 ? 'flat' : '';
+        // Clean means the speed was kept, so a landing hard enough to scrub speed is not called clean.
+        r.landingCue = clean ? (hardHit > 0 ? '' : 'clean') : misaligned >= 0.02 ? 'flat' : '';
         r.landingCueAge = 0;
       }
       r.y = floor;

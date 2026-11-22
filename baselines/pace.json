@@ -85,11 +85,11 @@
     {
       "course": "quarry",
       "difficulty": "expert",
-      "winner": 187.442,
+      "winner": 187.283,
       "crashes": 0,
       "recoveries": 0,
       "finishers": 4,
-      "maxBonusKmh": 1.979
+      "maxBonusKmh": 1.921
     }
   ]
 }

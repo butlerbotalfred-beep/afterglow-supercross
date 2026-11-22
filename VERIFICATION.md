@@ -1,25 +1,48 @@
 # M1.2 Landing skill — 22 November 2026
 
-Matching the bike to the landing now matters. A landing more than 0.10 radians off the slope costs speed (it used to be free up to 0.30), a clean downslope landing adds up to 3 km/h, and the HUD says CLEAN LANDING or FLAT LANDING. The lean crash check that could never fire is gone, and the physics version is 2, so best laps from version 1 are archived. At Michael's request the top speed also drops from 182 to 169 km/h; no circuit lets even the Expert AI pass 164 km/h, so no race time changes.
+Matching the bike to the landing now matters. A landing more than 0.10 radians off the slope costs speed (it used to be free up to 0.30), a clean downslope landing adds up to 3 km/h, and the HUD says CLEAN LANDING or FLAT LANDING. The lean crash check that could never fire is gone, and the physics version is 2, so best laps from version 1 are archived. At Michael's request the top speed also drops from 182 to 169 km/h; the fastest any circuit lets the Expert AI go is about 164 km/h, so no race time changes.
 
 | Completion box | Result | Evidence |
 | --- | --- | --- |
-| A rider who never uses air pitch is at least 0.8% slower on every circuit, 1.5% on Dusk Valley | Pass | `npm run landing-harness -- --check`, 3 laps: Dusk Valley 1.90%, Red Mesa 1.09%, Pine Summit 1.81%, Saltwind Coast 0.87%, Iron Quarry 1.42%. Before: 0.03 to 0.12%. The check fails if any circuit drops under its target |
+| A rider who never uses air pitch is at least 0.8% slower on every circuit, 1.5% on Dusk Valley | Pass | `npm run landing-harness -- --check`, 3 laps: Dusk Valley 1.59%, Red Mesa 1.09%, Pine Summit 1.81%, Saltwind Coast 0.87%, Iron Quarry 1.33%. Before: 0.03 to 0.12%. The check fails if any circuit drops under its target |
 | Slope-matching rider's 3-lap time is within 1.0% of baseline on every circuit | Pass | Same command, against `baselines/landing-v1.json`: Dusk Valley +0.31%, Red Mesa -0.04%, Pine Summit -0.08%, Saltwind Coast -0.02%, Iron Quarry +0.02% |
 | pace-gate at 1.0% passes with 0 AI crashes and 0 recoveries | Pass | `npm run pace-gate -- --tolerance 1 --baseline baselines/pace-v1.json`: 10 of 10, largest change +0.32% (Dusk Valley, Club), 0 crashes, 0 recoveries |
-| The bonus never exceeds +3 km/h on any landing | Pass | The pace gate records the largest bonus in each of the ten AI races and fails above the cap: largest 3.000 km/h. `tests/landing.test.ts` sweeps gradients from 0.05 to 1.2 at three speeds |
-| A clean landing never puts a mid-band rider more than 2 km/h above the rhythm band | Pass | `tests/landing.test.ts`, last test: two laps of every circuit, every rhythm section. The fastest speed straight after a clean landing is 114.7 km/h, in a section whose band tops out at 131 km/h |
-| The dead lean check is gone and every existing crash test still passes | Pass | `src/physics.ts` no longer has it; `tests/landing.test.ts` forces lean 0.99 with an impact over 7 and the rider stays up; `tests/crash.test.ts` passes unchanged |
+| The bonus never exceeds +3 km/h on any landing | Pass | The pace gate records the most speed any landing really added in each of the ten AI races and fails above the cap: largest 3.000 km/h. `tests/landing.test.ts` sweeps gradients from 0.05 to 1.2 at three speeds, and checks the bonus cannot pass the top speed or be earned off the track |
+| A clean landing never puts a mid-band rider more than 2 km/h above the rhythm band | Pass | `tests/landing.test.ts`, last test: in each of the 25 rhythm sections a rider at the section's pace lands cleanly on its steepest downslope. The most any gains is 3 km/h, against the 7 km/h allowed (5 to the top of the band, plus 2) |
+| The dead lean check is gone and every existing crash test still passes | Pass | `src/physics.ts` no longer has it; `tests/landing.test.ts` forces lean past 0.95 at touchdown with an impact over 7 and the rider stays up; `tests/crash.test.ts` passes unchanged |
 | PHYSICS_VERSION is 2 and old records are archived | Pass | `tests/landing.test.ts`: a version 1 lap is no longer the time to beat and sits under `archived` |
 
 ## Tuning
 
-- Penalty: starts at 0.10 rad, 1.0 of speed per radian beyond that, capped at 26% for one landing (the worst case of the old rule). At 1.1 per radian the rider who never pitches comes up short and crashes once a lap in Pine Summit's rhythm run, so 1.0 is the steepest value that punishes without wrecking.
-- Bonus: only after 0.3 s or more in the air, only within 0.10 rad of the slope, growing with the downslope and reaching the full 3 km/h at a gradient of 0.3.
+- Penalty: starts at 0.10 rad and costs 1.0 of speed per radian beyond that. It levels off at 26% for one landing, which is the most the old rule ever charged, and is never less than the old rule. At 1.1 per radian the rider who never pitches comes up short and crashes once a lap in Pine Summit's rhythm run, so 1.0 is the steepest value that punishes without wrecking.
+- Rebounds: a touchdown after less than 0.1 s in the air is a bounce, too quick to pitch for. The steep penalty levels off at 5% for it, so a bad landing is not charged in full a second time. Before this the review measured one bounce costing 22%.
+- Bonus: only after 0.3 s or more in the air, only within 0.10 rad of the slope, only on the track, growing with the downslope and reaching the full 3 km/h at a gradient of 0.3. It cannot push the bike past its top speed.
+
+## Mac Studio smoke tests
+
+Recorded below once run on the final code.
+
+## Code review (B)
+
+An independent review found no blocking bug and nine points. All are addressed.
+
+| Finding | Fix |
+| --- | --- |
+| A nose-high landing was charged again in full on its two-frame rebound, up to 22% for one bounce | Rebounds are limited to 5% (see Tuning). The harness targets still hold |
+| The lean test would have passed with the old check still in place | It now forces lean past 0.95 at touchdown and asserts it |
+| The rhythm-band test never had a rider at mid-band, and skipped a section per circuit | Rewritten: all 25 sections, a rider at the section's pace on its steepest downslope |
+| The landing cue hid the rhythm pace hint on approach | The pace hint now wins |
+| The pace gate checked the capped value, not the speed really gained | The rider records the speed the landing added, and that is what the gate checks |
+| The bonus could pass the top speed for one frame, and was paid just off the track | Clamped to the top speed; on-track only |
+| CLEAN LANDING / SPEED KEPT showed even when a heavy impact scrubbed speed | Such a landing gets no cue |
+| `pace-gate` ignored or misread mistyped options, and `--write` skipped the crash and bonus checks | Unknown or incomplete options stop the run; `--write` refuses an unfit result |
+| "No circuit lets the Expert AI pass 164 km/h" was a rounding short | Reworded to about 164 km/h |
+
+Not changed: a landing that is nose-down past the slope is also called FLAT LANDING. Its advice, match the slope, is still right.
 
 ## Rhythm pace hints (re-checked)
 
-A Club rider was ridden through all 25 rhythm sections before and after. Entry speeds moved by 0.4 km/h at most and mean speeds by 0.7 km/h at most, with one exception, so no pace hint was changed. The exception is Dusk Valley's Deep Whoops, where the AI lands slightly nose-high after the long first hop and now loses about 5 km/h on average through the section. A rider who matches that landing does not.
+A Club rider was ridden through all 25 rhythm sections before and after. Entry speeds moved by 0.4 km/h at most and mean speeds by 0.7 km/h at most, with one exception, so no pace hint was changed. The exception is Dusk Valley's Deep Whoops, where the AI lands slightly nose-high after the long first hop and now loses a few km/h on average through the section. A rider who matches that landing does not.
 
 ## Baselines
 

@@ -219,7 +219,8 @@ export function updateHud(ctx: HudContext) {
                   : r.powerSlide > 0.18
                     ? `<b class="pace-label">${r.brake > 0.1 ? 'BRAKE SLIDE' : 'POWER SLIDE'}</b>` +
                       `<small>CENTER THE STICK TO REGAIN GRIP</small>`
-                    : r.landingCue && r.landingCueAge < LANDING_CUE_SECONDS
+                    : // A rhythm section coming up matters more than the landing just made.
+                      r.landingCue && r.landingCueAge < LANDING_CUE_SECONDS && !paceNotice
                       ? landingNotice(r)
                       : paceNotice;
     const targets = practice

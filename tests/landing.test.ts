@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {PHYSICS_VERSION, TUNING} from '../src/config.ts';
 import {COURSES} from '../src/courses.ts';
-import {idleControl, makeRider, npcControl, stepRider} from '../src/physics.ts';
+import {idleControl, makeRider, stepRider} from '../src/physics.ts';
 import {SAVE_KEY, SaveStore} from '../src/save.ts';
 import {Track} from '../src/track.ts';
 import {landingNotice} from '../src/ui/hud.ts';
@@ -40,7 +40,8 @@ test('the misaligned-landing penalty starts at 0.10 radians and is steeper than 
   assert.ok(off < 0.95, 'a landing the old rule let through for free now costs speed');
   assert.ok(land(0.3).kept < off, 'further off costs more');
   const worst = land(0.9, {sink: 1}).kept;
-  assert.ok(worst >= 1 - TUNING.landingPenaltyMax - 0.005, `the loss is capped, kept ${worst}`);
+  assert.ok(worst >= 1 - TUNING.landingPenaltyMax - 0.005, `the loss levels off, kept ${worst}`);
+  assert.ok(worst <= 1 - (0.9 - 0.3) * 0.4 + 0.005, 'and is never less than the old rule charged');
 });
 
 test('a clean downslope landing adds speed, never more than 3 km/h', () => {
@@ -74,10 +75,36 @@ test('landings are called CLEAN or FLAT on the HUD', () => {
 
 test('the old lean check is gone: lean alone never crashes a landing', () => {
   // The removed rule needed lean above 0.95 with an impact above 7. Lean cannot pass 0.64 in play, so it never
-  // fired; here it is forced, with an impact of about 9, and the rider stays up.
-  const {r} = land(0, {lean: 0.99, sink: 9});
+  // fired. Here lean is forced high enough to still be past 0.95 at touchdown, with an impact of about 9.
+  const {r} = land(0, {lean: 1.3, sink: 9});
+  assert.ok(Math.abs(r.lean) > 0.95, `lean at touchdown ${r.lean}`);
   assert.ok(r.lastLanding > 7, `impact ${r.lastLanding}`);
   assert.equal(r.crashes, 0);
+});
+
+test('a rebound is charged far less than the landing that caused it', () => {
+  const landing = land(0.3).kept;
+  const rebound = land(0.3, {airTime: 0.02}).kept;
+  assert.ok(1 - landing > 0.15, `the landing itself costs ${1 - landing}`);
+  assert.ok(1 - rebound <= TUNING.bumpPenaltyMax + 0.005, `the bounce after it costs ${1 - rebound}`);
+  assert.ok(land(0.9, {sink: 1}).kept <= land(0.9, {sink: 1, airTime: 0.02}).kept);
+});
+
+test('the bonus stays inside the top speed, on the track, and is not paid for a heavy hit', () => {
+  const fast = land(0, {gradient: 0.3, speed: TUNING.maxSpeed}).r;
+  assert.ok(fast.speed <= TUNING.maxSpeed, `speed ${fast.speed}`);
+  assert.ok(fast.landingBonus < 0.1, `at top speed there is no room for a bonus, got ${fast.landingBonus}`);
+  const t = ramp(0.3),
+    wide = makeRider(t, 0, true, 0xffffff);
+  const at = t.at(1, t.halfWidth + 1);
+  Object.assign(wide, {x: at.x, z: 1, y: t.height(1) + 0.005, surface: at, grounded: false, heading: 0});
+  Object.assign(wide, {pitch: Math.atan(-0.3), vy: -0.3 * 30 - 2, speed: 30, airTime: 1});
+  stepRider(wide, idleControl(), t, TUNING.step, [wide]);
+  assert.equal(wide.grounded, true);
+  assert.equal(wide.landingBonus, 0, 'no bonus off the track');
+  const heavy = land(0, {sink: 16}).r;
+  assert.ok(heavy.lastLanding > 12 && heavy.crashes === 0, `impact ${heavy.lastLanding}`);
+  assert.equal(heavy.landingCue, '', 'a landing that scrubbed speed on impact is not called clean');
 });
 
 test('PHYSICS_VERSION is 2 and best laps from version 1 are archived', () => {
@@ -97,31 +124,32 @@ test('PHYSICS_VERSION is 2 and best laps from version 1 are archived', () => {
 });
 
 test('a clean landing never leaves a mid-band rider more than 2 km/h above the rhythm band', () => {
-  // The Club rider holds each section's pace, the middle of the band shown on the HUD (pace ± 5 km/h), and
-  // matches every landing. Two laps on every circuit, every rhythm section.
-  let landings = 0;
+  // In every rhythm section of every circuit: a rider at the section's pace, the middle of the band the HUD
+  // shows (pace ± 5 km/h), lands cleanly on the steepest downslope in the section.
+  let sections = 0;
   for (const course of COURSES) {
-    const track = new Track(course),
-      r = makeRider(track, 0, false, 0xffffff);
-    const seen = new Set<number>();
-    for (let f = 0; f < 120 * 400 && r.progress.lap < 2; f++) {
-      const before = r.speed;
-      stepRider(r, npcControl(r, track, [r], 'club'), track, TUNING.step, [r]);
-      if (r.landingCue !== 'clean' || r.landingCueAge !== 0) continue;
-      track.rhythms.forEach((section, index) => {
-        if (r.surface.s < section.start || r.surface.s >= section.end) return;
-        seen.add(index);
-        landings++;
-        const limit = section.pace * KMH + 5 + 2;
-        assert.ok(
-          r.speed * KMH <= limit,
-          `${course.id} ${section.name}: ${(r.speed * KMH).toFixed(1)} km/h after a clean landing, limit ${limit}`,
-        );
-        assert.ok(r.speed - before <= TUNING.landingBonusMax + 1e-9);
-      });
+    const track = new Track(course);
+    for (const section of track.rhythms) {
+      let steepest = {s: section.start, gradient: 0};
+      for (let s = section.start; s < section.end; s += 0.25) {
+        const gradient = (track.height(s + 0.42, 0) - track.height(s, 0)) / 0.42;
+        if (gradient < steepest.gradient) steepest = {s, gradient};
+      }
+      assert.ok(steepest.gradient < -0.05, `${course.id} ${section.name} has a downslope to land on`);
+      const r = makeRider(track, 0, true, 0xffffff),
+        p = track.at(steepest.s, 0);
+      Object.assign(r, {x: p.x, z: p.z, y: track.height(steepest.s, 0) + 0.005, surface: p, grounded: false});
+      Object.assign(r, {heading: Math.atan2(p.tx, p.tz), pitch: Math.atan(steepest.gradient), airTime: 1});
+      Object.assign(r, {speed: section.pace, vy: steepest.gradient * section.pace - 2});
+      stepRider(r, idleControl(), track, TUNING.step, [r]);
+      const name = `${course.id} ${section.name}`;
+      assert.equal(r.grounded, true, `${name}: landed`);
+      assert.equal(r.landingCue, 'clean', `${name}: the landing was clean`);
+      assert.ok(r.landingBonus > 0, `${name}: the downslope paid a bonus`);
+      const limit = section.pace * KMH + 5 + 2;
+      assert.ok(r.speed * KMH <= limit, `${name}: ${(r.speed * KMH).toFixed(1)} km/h, limit ${limit.toFixed(1)}`);
+      sections++;
     }
-    assert.equal(r.crashes, 0, `${course.id}: no crashes`);
-    assert.ok(seen.size >= track.rhythms.length - 1, `${course.id}: clean landings in ${seen.size} sections`);
   }
-  assert.ok(landings >= 25, `${landings} clean landings checked`);
+  assert.equal(sections, 25, 'every rhythm section of the five circuits');
 });

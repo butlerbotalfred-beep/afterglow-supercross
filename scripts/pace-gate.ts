@@ -9,24 +9,40 @@ import {TUNING} from '../src/config';
 import {aiRace, COURSES, type RaceResult} from './sim';
 
 const args = process.argv.slice(2);
-const tolArg = args.indexOf('--tolerance');
-const tolerance = tolArg >= 0 ? Number(args[tolArg + 1]) : 0;
+/** Options are `--name value`. Anything else, or a missing value, stops the run instead of being ignored. */
+const options: Record<string, string> = {};
+let write = false;
+for (let i = 0; i < args.length; i++) {
+  if (args[i] === '--write') write = true;
+  else if ((args[i] === '--tolerance' || args[i] === '--baseline') && args[i + 1] && !args[i + 1].startsWith('--'))
+    options[args[i]] = args[++i];
+  else {
+    console.error(`pace-gate: cannot use "${args[i]}". Options: --tolerance <percent>, --baseline <file>, --write`);
+    process.exit(2);
+  }
+}
+const tolerance = Number(options['--tolerance'] ?? 0);
 if (!Number.isFinite(tolerance) || tolerance < 0) {
   console.error('--tolerance must be a non-negative percent');
   process.exit(2);
 }
-const baseArg = args.indexOf('--baseline');
-if (baseArg >= 0 && (!args[baseArg + 1] || args.includes('--write'))) {
-  console.error('--baseline needs a file, and cannot be combined with --write');
+if (write && options['--baseline']) {
+  console.error('--baseline cannot be combined with --write');
   process.exit(2);
 }
-const file = baseArg >= 0 ? args[baseArg + 1] : new URL('../baselines/pace.json', import.meta.url);
+const file = options['--baseline'] ?? new URL('../baselines/pace.json', import.meta.url);
 const bonusCapKmh = TUNING.landingBonusMax * 3.6;
 
 const results: RaceResult[] = [];
 for (const difficulty of ['club', 'expert']) for (const course of COURSES) results.push(aiRace(course, difficulty));
 
-if (args.includes('--write')) {
+if (write) {
+  const unfit = results.filter(r => r.crashes || r.recoveries || (r.maxBonusKmh ?? 0) > bonusCapKmh + 1e-9);
+  if (unfit.length) {
+    console.table(unfit);
+    console.error('pace-gate: not written. A baseline needs 0 crashes, 0 recoveries and every bonus within the cap.');
+    process.exit(1);
+  }
   writeFileSync(
     file,
     JSON.stringify(

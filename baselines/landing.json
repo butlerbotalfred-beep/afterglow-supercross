@@ -4,8 +4,8 @@
     {
       "course": "dusk",
       "matchS": 290.93,
-      "nopitchS": 296.46,
-      "gapPct": 1.9,
+      "nopitchS": 295.56,
+      "gapPct": 1.59,
       "crashes": 0
     },
     {
@@ -32,8 +32,8 @@
     {
       "course": "quarry",
       "matchS": 201.62,
-      "nopitchS": 204.48,
-      "gapPct": 1.42,
+      "nopitchS": 204.3,
+      "gapPct": 1.33,
       "crashes": 0
     }
   ]
