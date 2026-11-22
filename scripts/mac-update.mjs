@@ -38,7 +38,15 @@ if (ahead !== '0')
 // node_modules first, which takes the running game down until it finishes.
 const lockChanged = git('diff', '--name-only', before, 'HEAD', '--', 'package-lock.json') !== '';
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-if (lockChanged || !existsSync(join(root, 'node_modules'))) {
+// Also reinstall when what is installed does not match the lock file, as happens when someone ran git pull
+// by hand before this command (first seen on the Mac Studio, 22 November 2026).
+// Only a missing or wrong-version package counts. npm ls also complains about extra packages and peer
+// warnings, and those must not take the game down for a reinstall on every update.
+const installedMatches = () => {
+  const ls = spawnSync(npm, ['ls', '--depth=0'], {cwd: root, encoding: 'utf8', shell: process.platform === 'win32'});
+  return ls.status === 0 || !/\b(missing|invalid)\b/i.test(`${ls.stdout}\n${ls.stderr}`);
+};
+if (lockChanged || !existsSync(join(root, 'node_modules')) || !installedMatches()) {
   console.log('\n2/3 Installing packages');
   const install = spawnSync(npm, ['ci'], {cwd: root, stdio: 'inherit', shell: process.platform === 'win32'});
   if (install.status !== 0) {
@@ -48,7 +56,7 @@ if (lockChanged || !existsSync(join(root, 'node_modules'))) {
     );
     process.exit(install.status || 1);
   }
-} else console.log('\n2/3 Packages unchanged, nothing to install.');
+} else console.log('\n2/3 Packages already match, nothing to install.');
 if (process.platform === 'darwin') {
   console.log('\n3/3 Restarting the game service');
   const restart = spawnSync(process.execPath, ['scripts/server-service.mjs', 'restart'], {cwd: root, stdio: 'pipe'});

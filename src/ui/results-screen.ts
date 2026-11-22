@@ -2,6 +2,7 @@
 import {CSS_COLORS} from '../config';
 import type {Rider} from '../physics';
 import {progressDistance} from '../race';
+import {formatLap, type RiderTiming} from '../timing';
 import type {Track} from '../track';
 import {el} from './dom';
 
@@ -30,18 +31,45 @@ export function formatTime(t: number) {
     .toString()
     .padStart(2, '0')}:${(t % 60).toFixed(1).padStart(4, '0')}`;
 }
-export function showResultsTable(track: Track, riders: Rider[], lapCount: number, raceTime: number) {
+export function showResultsTable(
+  track: Track,
+  riders: Rider[],
+  lapCount: number,
+  raceTime: number,
+  timing: RiderTiming[] = [],
+) {
   el('results').querySelector('.eyebrow')!.textContent = track.course.name.toUpperCase() + ' / OFFICIAL CLASSIFICATION';
   const ordered = ranking(riders, track);
   el('results-subtitle').textContent =
     `${lapCount} ${lapCount === 1 ? 'lap' : 'laps'} · ${riders.length} riders · ${formatTime(raceTime)} session`;
+  const winner = ordered[0]?.finished ?? null;
+  // The fastest lap of the race, by anyone, is marked as well as each rider's own best.
+  const fastest = Math.min(...timing.flatMap(t => t.laps.filter(lap => lap.valid).map(lap => lap.time)));
   el('results-table').innerHTML = ordered
-    .map(
-      (r, i) =>
+    .map((r, i) => {
+      const laps = timing[riders.indexOf(r)]?.laps || [];
+      const best = Math.min(...laps.filter(lap => lap.valid).map(lap => lap.time));
+      const gap =
+        r.finished === null
+          ? 'DNF'
+          : i === 0 || winner === null
+            ? formatTime(r.finished)
+            : `+${(r.finished - winner).toFixed(3)}`;
+      const lapList = laps
+        .map(
+          (lap, n) =>
+            `<span class="${lap.time === best ? 'best-lap' : ''}${lap.time === fastest ? ' fastest-lap' : ''}">` +
+            `<small>L${n + 1}</small>${formatLap(lap.time)}</span>`,
+        )
+        .join('');
+      return (
         `<div class="result-row"><b>${String(i + 1).padStart(2, '0')}</b>` +
         `<span style="color:${CSS_COLORS[r.id]}">●</span>` +
         `<strong>${r.name}<small>${r.human ? 'HUMAN' : 'NPC'}</small></strong>` +
-        `<span>${r.finished === null ? 'DNF' : formatTime(r.finished)}</span></div>`,
-    )
+        `<span class="result-time">${gap}</span>` +
+        (lapList ? `<div class="result-laps">${lapList}</div>` : '') +
+        `</div>`
+      );
+    })
     .join('');
 }

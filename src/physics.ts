@@ -1,7 +1,7 @@
 import {normalizeSlideAggression} from './handling-settings';
 import {Track, type TrackPoint} from './track';
 import {TUNING, clamp, angleDelta} from './config';
-import {createProgress, updateProgress, restoreDeparture, type Progress} from './race';
+import {createProgress, updateProgress, restoreDeparture, trackDeferred, type Progress} from './race';
 import type {Control, Device} from './input';
 export interface Rider {
   id: number;
@@ -173,7 +173,7 @@ export function stepRider(r: Rider, c: Control, track: Track, dt: number, others
     if (r.crashTime === 0) {
       updateProgress(r.progress, r.surface.s, r.surface.lateral, track.length, track.halfWidth + 0.45, dt);
       recover(r, track, others);
-    }
+    } else trackDeferred(r.progress, r.surface.s, track.length, dt);
     return;
   }
   if (c.reset) recover(r, track, others);
