@@ -416,7 +416,8 @@ export function npcControl(r: Rider, track: Track, others: Rider[], difficulty: 
   if (Math.abs(err) > 0.6) targetSpeed = Math.min(targetSpeed, 10);
   // Closing on a much slower rider in the same line is a contact crash: slow to a safe closing speed instead.
   for (const o of others) {
-    if (o === r || o.speed > r.speed - NPC_CLOSING_MAX) continue;
+    // A fallen rider is no obstacle: riders pass through them, as collide() does.
+    if (o === r || o.crashTime > 0 || o.recovery > 0 || o.speed > r.speed - NPC_CLOSING_MAX) continue;
     const gap = (o.surface.s - r.surface.s + track.length) % track.length;
     if (gap > 0 && gap < NPC_FOLLOW_REACH && Math.abs(o.surface.lateral - r.surface.lateral) < 1.6)
       targetSpeed = Math.min(targetSpeed, o.speed + NPC_CLOSING_MAX);

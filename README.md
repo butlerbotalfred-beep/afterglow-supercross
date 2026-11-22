@@ -172,7 +172,7 @@ Primary values live in `src/config.ts`. Units are metres, seconds and radians.
 | Setting | Default | Effect |
 |---|---:|---|
 | Simulation step | 1/120 s | Shared fixed-step physics; accumulated frame time is capped at 0.1 s |
-| Acceleration / braking | 26.953125 / 24 m/s² | Throttle and brake response |
+| Acceleration / braking | 26.953125 / 36 m/s² | Throttle and brake response |
 | Drag coefficient | 0.34/s | Coast-down and top-end resistance |
 | Speed cap | 45 m/s (162 km/h) | Arcade maximum, the fastest the AI ever aims for |
 | Steering rate | 1.48 rad/s | Scaled at low speed and to 36% in the air |

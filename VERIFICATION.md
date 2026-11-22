@@ -14,8 +14,9 @@ Results:
 - **Race times.** `npm run pace-gate -- --baseline baselines/pace-v1.json`: all ten races are 0.4% to 1.2% faster than version 1, with 0 crashes and 0 recoveries. `baselines/pace.json` is regenerated with Michael's approval; the version 2 files are kept as `pace-v2.json` and `landing-v2.json`.
 - **Landing reward.** `npm run landing-harness`: the rider who never pitches loses 1.82% on Dusk Valley, 1.10% on Red Mesa, 1.91% on Pine Summit, 0.87% on Saltwind Coast and 1.13% on Iron Quarry, 0 crashes. All meet the M1.2 targets (1.5% Dusk, 0.8% elsewhere).
 - **Retired check.** M1.2 required the slope-matching rider to stay within 1.0% of the time before M1.2. A quicker bike cannot hold that, so the check was removed from `scripts/landing-harness.ts` with Michael's approval on 22 November 2026. The gap targets and the zero-crash check remain.
-- **Tests.** 154 pass. `tests/npc.test.ts` fails without the takeoff and closing rules.
-- **Review B.** The first version used a simpler rule (an AI rider off the pace rolled the lane). The independent review showed it slowed on-pace riders on Iron Quarry, caused contact crashes in 8-rider fields and left crashes in 5 and 6 rider fields, so it was replaced by the rules above.
+- **Tests.** 156 pass. `tests/npc.test.ts` fails without the takeoff and closing rules.
+- **Review B, second round.** Nothing blocking. Fixed: the takeoff advice is now worked out lane by lane, a few milliseconds per frame (it froze for up to 11 s on a 240-jump custom layout when built in one go); a rhythm lane may run across the finish line; the AI no longer slows for a fallen rider; no advice below the slowest tabulated speed. Baselines did not change.
+- **Review B, first round.** The first version used a simpler rule (an AI rider off the pace rolled the lane). The independent review showed it slowed on-pace riders on Iron Quarry, caused contact crashes in 8-rider fields and left crashes in 5 and 6 rider fields, so it was replaced by the rules above.
 
 # M1.2 Landing skill — 22 November 2026
 

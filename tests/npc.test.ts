@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {TUNING} from '../src/config.ts';
 import {COURSES} from '../src/courses.ts';
 import {makeRider, npcControl, stepRider} from '../src/physics.ts';
-import {hardestLanding, lipDistance, safeTakeoffSpeed} from '../src/takeoff.ts';
+import {hardestLanding, lipDistance, prepareTakeoffAdvice, safeTakeoffSpeed} from '../src/takeoff.ts';
 import {Track} from '../src/track.ts';
 
 const course = (id: string) => new Track(COURSES.find(c => c.id === id)!);
@@ -29,11 +29,16 @@ test('the advised takeoff speed is never a crashing one, on any jump of any circ
       for (let fastest = 8; fastest <= TUNING.maxSpeed; fastest += 1.5) {
         const advised = safeTakeoffSpeed(track, s, 45, Math.max(0, fastest - 6), fastest);
         assert.ok(advised !== null, `${c.id} jump at ${jump.start}: some speed is always safe`);
-        const impact = hardestLanding(track, jump, advised);
-        assert.ok(
-          impact < TUNING.landingCrashImpact,
-          `${c.id} jump at ${jump.start}: ${advised} m/s lands at ${impact}`,
-        );
+        // Safe for this jump and for every jump after it in the same rhythm lane.
+        for (let lane = jump; lane;) {
+          const impact = hardestLanding(track, lane, advised);
+          assert.ok(
+            impact < TUNING.landingCrashImpact,
+            `${c.id} jump at ${lane.start}: ${advised} m/s lands at ${impact}`,
+          );
+          const lip = lane.start + lane.rise;
+          lane = track.jumps.find(j => j.start + j.rise > lip && j.start + j.rise - lip <= 40)!;
+        }
       }
     }
   }
@@ -68,4 +73,27 @@ test('an AI rider does not close fast on a much slower rider in its line', () =>
   const c = npcControl(r, track, [r, near], 'club');
   assert.equal(c.throttle, 0);
   assert.ok(c.brake > 0.3, `brakes for the slow rider, got ${c.brake}`);
+});
+
+test('takeoff advice can be prepared a little at a time and gives the same answers', () => {
+  const lazy = course('dusk'),
+    warmed = course('dusk');
+  let calls = 1;
+  while (!prepareTakeoffAdvice(warmed, 0)) calls++;
+  assert.ok(calls > 1, 'a zero budget still makes progress, one lane per call');
+  assert.equal(prepareTakeoffAdvice(warmed, 0), true);
+  for (const jump of lazy.jumps)
+    assert.equal(safeTakeoffSpeed(lazy, jump.start, 45, 10, 40), safeTakeoffSpeed(warmed, jump.start, 45, 10, 40));
+  assert.equal(
+    safeTakeoffSpeed(lazy, lazy.jumps[0].start, 45, 0, 4),
+    null,
+    'no advice below the slowest tabulated speed',
+  );
+});
+
+test('the AI does not slow for a fallen rider', () => {
+  const track = course('alpine');
+  const r = place(track, 0, 300, 30);
+  const fallen = Object.assign(place(track, 1, 312, 0), {crashTime: 1});
+  assert.equal(npcControl(r, track, [r, fallen], 'club').brake, 0);
 });

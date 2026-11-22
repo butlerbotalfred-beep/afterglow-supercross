@@ -53,7 +53,11 @@ app.innerHTML = appShellHtml();
 const {renderer, lightWorld} = createRenderer(el<HTMLCanvasElement>('game'));
 let track = new Track(),
   scene = lightWorld(createWorld(track));
-prepareTakeoffAdvice(track);
+/** Works out the AI's takeoff advice a few milliseconds at a time, so a long custom layout never stalls a frame. */
+function warmTakeoffAdvice(t: Track) {
+  if (t === track && !prepareTakeoffAdvice(t, 6)) setTimeout(() => warmTakeoffAdvice(t), 0);
+}
+warmTakeoffAdvice(track);
 let reviewPad: GamepadLike | null = null;
 const menuGamepads = () => (reviewPad ? [reviewPad] : readBrowserGamepads());
 const input = new InputManager(undefined, menuGamepads, () => touchControls.input.read()),
@@ -173,7 +177,7 @@ function rebuildTrack(next: Track) {
   disposeWorld(scene);
   models = [];
   track = next;
-  prepareTakeoffAdvice(track);
+  warmTakeoffAdvice(track);
   scene = lightWorld(createWorld(track));
   dust = new Dust(scene);
   testMarkers = new THREE.Group();
