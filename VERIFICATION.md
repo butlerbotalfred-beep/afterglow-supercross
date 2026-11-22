@@ -1,3 +1,13 @@
+# Jump callout and takeoff speed meter — 22 November 2026
+
+Michael asked for a signal of what kind of jump is coming and a meter showing the right takeoff speed. Not in build plan v2; added at his request between M1.2 and M1.3. No physics or AI change: the pace gate, landing harness and field check match their baselines untouched.
+
+- **Callout.** From 90 m out the HUD names the lane (TABLETOP, SINGLE, DOUBLE, TRIPLE, RHYTHM ×N, WHOOPS) and the distance in 5 m steps. Between the jumps of a lane it keeps the same call.
+- **Meter.** A bar from 40 km/h to the top speed. Red speeds crash, amber land harder than 12 m/s, green is the ideal band, and a white marker shows the rider's speed. The line under it reads BUILD SPEED, ON PACE, EASE OFF, TOO SLOW · COMES UP SHORT or TOO FAST · OVERSHOOTS, with the band in km/h.
+- **Where the numbers come from.** `jumpCall` in `src/takeoff.ts` reuses the table the AI rides by. The ideal band is the smoothest three to six neighbouring speeds above the band that comes up short. On Dusk Valley: doubles 112 to 130 km/h, the triple 119 to 130, tabletops 115 to 137, whoops 76 to 94.
+- **Replaces** the old "RHYTHM 125–135 KM/H" hint, which used one fixed pace per section.
+- **Tests.** 161 pass; `tests/jump-call.test.ts` checks the kinds, that every ideal band lands its jump on all five circuits, the verdicts and the notice markup.
+
 # Speed and acceleration retune (physics version 3) — 22 November 2026
 
 At Michael's request the top speed drops from 169 to 162 km/h (`maxSpeed` 45 m/s) and acceleration rises 15% (`acceleration` 26.953125 m/s²). The physics version is 3, so best laps from versions 1 and 2 are archived.

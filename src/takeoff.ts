@@ -166,3 +166,121 @@ export function safeTakeoffSpeed(track: Track, s: number, reach: number, slowest
   return null;
 }
 export const lipDistance = (track: Track, s: number, reach: number) => nextLip(track, s, reach)?.distance ?? null;
+
+/** What the HUD tells a rider about the jumps coming up. Speeds are in m/s. */
+export interface JumpCall {
+  /** TABLETOP, SINGLE, DOUBLE, TRIPLE, RHYTHM ×N or WHOOPS. */
+  kind: string;
+  /** Metres to the first lip of the lane, 0 once the rider is in it. */
+  distance: number;
+  /** The takeoff speeds that land the whole lane most smoothly. */
+  ideal: [number, number];
+  /** The first tabulated speed and the step between them, for drawing `zones`. */
+  from: number;
+  step: number;
+  /** One entry per tabulated speed: lands hard enough to crash, lands roughly, or lands well. */
+  zones: ('crash' | 'rough' | 'good')[];
+}
+/** Below this a rider is rolling the jumps, which is never the speed to aim for. */
+const ROLLING_SPEED = 20;
+const calls = new WeakMap<Advice, Omit<JumpCall, 'distance'>>();
+
+function describeLane(track: Track, advice: Advice[], first: number) {
+  const cached = calls.get(advice[first]);
+  if (cached) return cached;
+  let count = 1;
+  for (let at = first; count < Math.min(advice.length, LANE_JUMPS); count++) {
+    const following = (at + 1) % advice.length;
+    const gap = (((advice[following].lip - advice[at].lip) % track.length) + track.length) % track.length;
+    if (gap > LANE_SPACING) break;
+    at = following;
+  }
+  const jump = advice[first].jump;
+  const kind =
+    jump.flat >= 6
+      ? 'TABLETOP'
+      : jump.rise <= 6 && count >= 3
+        ? 'WHOOPS'
+        : count === 1
+          ? 'SINGLE'
+          : count === 2
+            ? 'DOUBLE'
+            : count === 3
+              ? 'TRIPLE'
+              : `RHYTHM ×${count}`;
+  const impact = laneImpact(track, advice, first);
+  const limit = TUNING.landingCrashImpact * SAFE_IMPACT_SHARE;
+  const speed = (i: number) => SPEED_MIN + i * SPEED_STEP;
+  const crash = (i: number) => i >= 0 && i < impact.length && impact[i] > limit;
+  const clear = (i: number) => ![i - 2, i - 1, i, i + 1, i + 2].some(crash);
+  const score = (i: number) => (impact[i - 1] + impact[i] + impact[i + 1]) / 3;
+  let best = -1,
+    bestScore = Infinity;
+  // Most lanes have a band of speeds that comes up short. The speed to race at is above it: the smoothest three
+  // neighbouring speeds there that are not next to a crashing speed.
+  const short = impact.findIndex((_, i) => crash(i));
+  if (short >= 0) {
+    let cleared = short;
+    while (crash(cleared + 1)) cleared++;
+    for (let i = cleared + 2; i <= impact.length - 2; i++)
+      if (clear(i) && score(i) < bestScore) {
+        best = i;
+        bestScore = score(i);
+      }
+  }
+  // Otherwise (a tabletop, or nothing safe above the short band): the fastest three that land without scrubbing
+  // speed and are not rolling pace, or failing that the smoothest three.
+  if (best < 0)
+    for (let i = impact.length - 2; i >= 1 && speed(i - 1) >= ROLLING_SPEED; i--) {
+      if (!clear(i)) continue;
+      if (score(i) < bestScore) {
+        best = i;
+        bestScore = score(i);
+      }
+      if (score(i) <= ROUGH_IMPACT) break;
+    }
+  // No such window (a very awkward custom jump): fall back to the gentlest single speed.
+  if (best < 0) best = impact.indexOf(Math.min(...impact));
+  let low = best,
+    high = best;
+  const smooth = (i: number) => i >= 0 && i < impact.length && !crash(i) && impact[i] <= bestScore + 2;
+  while (high - low < IDEAL_WIDTH && smooth(high + 1) && !crash(high + 2)) high++;
+  while (high - low < IDEAL_WIDTH && smooth(low - 1) && !crash(low - 2)) low--;
+  const call = {
+    kind,
+    ideal: [speed(low), speed(high)] as [number, number],
+    from: SPEED_MIN,
+    step: SPEED_STEP,
+    zones: impact.map(hit => (hit > limit ? 'crash' : hit > ROUGH_IMPACT ? 'rough' : 'good')) as JumpCall['zones'],
+  };
+  calls.set(advice[first], call);
+  return call;
+}
+/** The widest ideal band, in tabulated steps. */
+const IDEAL_WIDTH = 5;
+/** A landing harder than this, in m/s into the ground, starts to scrub speed. */
+const ROUGH_IMPACT = 12;
+
+/**
+ * The lane of jumps the rider is in or coming up to within `reach` metres, or null. A rider between two jumps
+ * of a lane still gets the call for the whole lane, so the advice does not change halfway through it.
+ */
+export function jumpCall(track: Track, s: number, reach: number): JumpCall | null {
+  const advice = table(track);
+  const lip = nextLip(track, s, reach);
+  if (!lip) return null;
+  // Walk back to the first jump of the lane this lip belongs to.
+  let first = lip.index,
+    inside = false;
+  for (let k = 1; k < Math.min(advice.length, LANE_JUMPS); k++) {
+    const before = (first - 1 + advice.length) % advice.length;
+    const gap = (((advice[first].lip - advice[before].lip) % track.length) + track.length) % track.length;
+    if (gap > LANE_SPACING) break;
+    first = before;
+    inside = true;
+  }
+  // "Inside" only if the rider is really past the lane's first lip, not just nearer a later one.
+  const toFirst = (((advice[first].lip - s) % track.length) + track.length) % track.length;
+  inside = inside && toFirst > lip.distance && toFirst > track.length / 2;
+  return {...describeLane(track, advice, first), distance: inside ? 0 : toFirst};
+}

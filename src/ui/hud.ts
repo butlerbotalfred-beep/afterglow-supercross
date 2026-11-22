@@ -2,6 +2,7 @@
 import {CSS_COLORS, TUNING} from '../config';
 import type {Device} from '../input';
 import type {Rider} from '../physics';
+import {jumpCall, type JumpCall} from '../takeoff';
 import {currentLapTime, formatDelta, formatLap, type LapTime, type RiderTiming} from '../timing';
 import type {Track} from '../track';
 import {obstacleLength, obstacleType} from '../track-layout';
@@ -156,6 +157,50 @@ function updateTiming(
   split.textContent = delta === null ? label : `${label}  ${formatDelta(delta)}`;
   split.className = `lap-split ${delta === null ? '' : delta < 0 ? 'faster' : 'slower'}`;
 }
+/** How far ahead of a lane of jumps the callout appears, in metres. */
+const JUMP_CALL_REACH = 90;
+/** The takeoff meter runs from 40 km/h to the top speed. */
+const METER_FROM = 40 / 3.6;
+const meterShare = (speed: number) =>
+  Math.max(0, Math.min(1, (speed - METER_FROM) / (TUNING.maxSpeed - METER_FROM))) * 100;
+const ZONE_COLOR = {crash: '#e5484d', rough: '#d9a23c', good: '#55606e', ideal: '#6fdc8c'};
+const meterPaint = new WeakMap<JumpCall['zones'], string>();
+/** The meter's background: one stripe per tabulated takeoff speed, green over the ideal band. */
+function meterBackground(call: JumpCall) {
+  let paint = meterPaint.get(call.zones);
+  if (!paint) {
+    const stops = call.zones.map((zone, i) => {
+      const speed = call.from + i * call.step;
+      const color = ZONE_COLOR[speed >= call.ideal[0] && speed <= call.ideal[1] ? 'ideal' : zone];
+      const from = meterShare(speed - call.step / 2).toFixed(1),
+        to = meterShare(speed + call.step / 2).toFixed(1);
+      return `${color} ${from}% ${to}%`;
+    });
+    paint = `linear-gradient(90deg,${stops.join(',')})`;
+    meterPaint.set(call.zones, paint);
+  }
+  return paint;
+}
+/** What the rider should do about their speed for the jumps coming up. */
+export function takeoffVerdict(call: JumpCall, speed: number) {
+  const zone = call.zones[Math.max(0, Math.min(call.zones.length - 1, Math.round((speed - call.from) / call.step)))];
+  if (speed < call.ideal[0]) return zone === 'crash' ? 'TOO SLOW · COMES UP SHORT' : 'BUILD SPEED';
+  if (speed > call.ideal[1]) return zone === 'crash' ? 'TOO FAST · OVERSHOOTS' : 'EASE OFF';
+  return 'ON PACE';
+}
+/** The notice for the jumps coming up: what they are, how far, and a meter of takeoff speed against the ideal. */
+export function jumpNotice(call: JumpCall, speed: number) {
+  const verdict = takeoffVerdict(call, speed);
+  const state = verdict === 'ON PACE' ? 'on-pace' : verdict.startsWith('TOO') ? 'danger' : 'off-pace';
+  const where = call.distance > 0 ? ` · ${Math.round(call.distance / 5) * 5} M` : '';
+  const band = `${Math.round(call.ideal[0] * 3.6)}–${Math.round(call.ideal[1] * 3.6)} KM/H`;
+  return (
+    `<b class="pace-label">${call.kind}${where}</b>` +
+    `<span class="takeoff-meter ${state}" style="background:${meterBackground(call)}">` +
+    `<u style="left:${meterShare(speed).toFixed(1)}%"></u></span>` +
+    `<small class="takeoff-${state}">${verdict} · ${band}</small>`
+  );
+}
 /** How long CLEAN LANDING or FLAT LANDING stays up. */
 const LANDING_CUE_SECONDS = 1.4;
 /** The notice shown just after a judged landing. */
@@ -182,14 +227,8 @@ export function updateHud(ctx: HudContext) {
     h.querySelector('.speed strong')!.textContent = String(Math.round(r.speed * 3.6)).padStart(2, '0');
     (h.querySelector('.speed-track i') as HTMLElement).style.width = `${(r.speed / TUNING.maxSpeed) * 100}%`;
     h.querySelector('.sector')!.textContent = track.sector(r.surface.s);
-    const approach = track.rhythms.find(section => (section.start - r.surface.s + track.length) % track.length < 55);
-    const pace = approach ? approach.pace * 3.6 : 0;
-    const paceNotice =
-      approach && phase === 'racing'
-        ? `<b class="pace-label">RHYTHM ${Math.round(pace - 5)}–${Math.round(pace + 5)} KM/H</b>` +
-          `<small>${r.speed * 3.6 > pace + 5 ? 'EASE OFF' : r.speed * 3.6 < pace - 5 ? 'BUILD SPEED' : 'HOLD YOUR PACE'}` +
-          `</small>`
-        : '';
+    const call = phase === 'racing' ? jumpCall(track, r.surface.s, JUMP_CALL_REACH) : null;
+    const paceNotice = call ? jumpNotice(call, r.speed) : '';
     const remaining =
       firstFinish === null
         ? ''
