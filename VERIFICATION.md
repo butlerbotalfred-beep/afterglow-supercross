@@ -1,3 +1,38 @@
+# M1.2 Landing skill — 22 November 2026
+
+Matching the bike to the landing now matters. A landing more than 0.10 radians off the slope costs speed (it used to be free up to 0.30), a clean downslope landing adds up to 3 km/h, and the HUD says CLEAN LANDING or FLAT LANDING. The lean crash check that could never fire is gone, and the physics version is 2, so best laps from version 1 are archived. At Michael's request the top speed also drops from 182 to 169 km/h; no circuit lets even the Expert AI pass 164 km/h, so no race time changes.
+
+| Completion box | Result | Evidence |
+| --- | --- | --- |
+| A rider who never uses air pitch is at least 0.8% slower on every circuit, 1.5% on Dusk Valley | Pass | `npm run landing-harness -- --check`, 3 laps: Dusk Valley 1.90%, Red Mesa 1.09%, Pine Summit 1.81%, Saltwind Coast 0.87%, Iron Quarry 1.42%. Before: 0.03 to 0.12%. The check fails if any circuit drops under its target |
+| Slope-matching rider's 3-lap time is within 1.0% of baseline on every circuit | Pass | Same command, against `baselines/landing-v1.json`: Dusk Valley +0.31%, Red Mesa -0.04%, Pine Summit -0.08%, Saltwind Coast -0.02%, Iron Quarry +0.02% |
+| pace-gate at 1.0% passes with 0 AI crashes and 0 recoveries | Pass | `npm run pace-gate -- --tolerance 1 --baseline baselines/pace-v1.json`: 10 of 10, largest change +0.32% (Dusk Valley, Club), 0 crashes, 0 recoveries |
+| The bonus never exceeds +3 km/h on any landing | Pass | The pace gate records the largest bonus in each of the ten AI races and fails above the cap: largest 3.000 km/h. `tests/landing.test.ts` sweeps gradients from 0.05 to 1.2 at three speeds |
+| A clean landing never puts a mid-band rider more than 2 km/h above the rhythm band | Pass | `tests/landing.test.ts`, last test: two laps of every circuit, every rhythm section. The fastest speed straight after a clean landing is 114.7 km/h, in a section whose band tops out at 131 km/h |
+| The dead lean check is gone and every existing crash test still passes | Pass | `src/physics.ts` no longer has it; `tests/landing.test.ts` forces lean 0.99 with an impact over 7 and the rider stays up; `tests/crash.test.ts` passes unchanged |
+| PHYSICS_VERSION is 2 and old records are archived | Pass | `tests/landing.test.ts`: a version 1 lap is no longer the time to beat and sits under `archived` |
+
+## Tuning
+
+- Penalty: starts at 0.10 rad, 1.0 of speed per radian beyond that, capped at 26% for one landing (the worst case of the old rule). At 1.1 per radian the rider who never pitches comes up short and crashes once a lap in Pine Summit's rhythm run, so 1.0 is the steepest value that punishes without wrecking.
+- Bonus: only after 0.3 s or more in the air, only within 0.10 rad of the slope, growing with the downslope and reaching the full 3 km/h at a gradient of 0.3.
+
+## Rhythm pace hints (re-checked)
+
+A Club rider was ridden through all 25 rhythm sections before and after. Entry speeds moved by 0.4 km/h at most and mean speeds by 0.7 km/h at most, with one exception, so no pace hint was changed. The exception is Dusk Valley's Deep Whoops, where the AI lands slightly nose-high after the long first hop and now loses about 5 km/h on average through the section. A rider who matches that landing does not.
+
+## Baselines
+
+`baselines/pace.json` and `baselines/landing.json` now hold the version 2 numbers and CI compares against them exactly. The numbers from before this change are kept as `baselines/pace-v1.json` and `baselines/landing-v1.json`.
+
+## Play review (D, about 10 minutes)
+
+Ride 3 laps of Dusk Valley matching your landings, then 3 laps ignoring air pitch.
+
+1. Is your best lap at least 1 second faster when you land well?
+2. Does a clean landing feel rewarded?
+3. Did any rhythm section become harder to ride cleanly than before?
+
 # M1.1 Lap and sector timing — 22 November 2026
 
 Every rider's laps are now timed to a thousandth of a second, split into four sectors. The HUD shows the running lap, last lap, best lap and a green or red difference at each sector; the results screen lists every rider's laps; and the best lap for each circuit and each custom layout is saved. Nothing about how the bike moves changed: the pace gate still matches exactly.

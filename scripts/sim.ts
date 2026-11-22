@@ -14,6 +14,8 @@ export interface RaceResult {
   crashes: number;
   recoveries: number;
   finishers: number;
+  /** The largest speed any single landing added in the race, in km/h. */
+  maxBonusKmh?: number;
 }
 
 /** Four NPC riders race three laps; returns the winning time in seconds. */
@@ -22,11 +24,13 @@ export function aiRace(course: Course, difficulty: string, riderCount = 4, maxSe
   const riders = Array.from({length: riderCount}, (_, id) => makeRider(track, id, false, 0xffffff));
   const times = new Map<number, number>();
   let recoveries = 0;
+  let maxBonus = 0;
   for (let f = 0; f < maxSeconds / STEP && times.size < riderCount; f++) {
     for (const r of riders) {
       const before = r.recovery;
       stepRider(r, npcControl(r, track, riders, difficulty), track, STEP, riders);
       if (!before && r.recovery > 0) recoveries++;
+      maxBonus = Math.max(maxBonus, r.landingBonus);
       if (r.progress.lap >= LAPS && !times.has(r.id)) times.set(r.id, (f + 1) * STEP);
     }
     collide(riders, track);
@@ -38,6 +42,7 @@ export function aiRace(course: Course, difficulty: string, riderCount = 4, maxSe
     crashes: riders.reduce((n, r) => n + r.crashes, 0),
     recoveries,
     finishers: times.size,
+    maxBonusKmh: round(maxBonus * 3.6),
   };
 }
 
