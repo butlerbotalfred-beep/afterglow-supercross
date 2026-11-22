@@ -27,19 +27,31 @@ interface Advice {
   impact: number[] | null;
 }
 const tables = new WeakMap<Track, Advice[]>();
+/** Lips whose lane the HUD description has been worked out for. */
+const described = new WeakSet<Advice>();
 
-/** The hardest landing a rider meets between the foot of `jump` and the ground beyond it, entering at `speed`. */
-export function hardestLanding(track: Track, jump: Jump, speed: number) {
+/**
+ * One ride along the centre line from the foot of `jump`, entering at `speed`, to `through` metres past it, by
+ * the same step and the same takeoff and landing rules as physics.ts. With `holding` the rider behaves like one
+ * who holds the entry speed: hard landings scrub speed and the throttle wins it back, as in the game.
+ */
+function ride(track: Track, jump: Jump, speed: number, through: number, holding: boolean) {
   const dt = TUNING.step,
-    end = jump.start + jump.rise + jump.flat + jump.fall;
+    end = jump.start + jump.rise + jump.flat + jump.fall + through,
+    steps = (holding ? 14 : 6) / dt;
   let s = jump.start - 1,
     y = track.height(s),
     vy = 0,
     v = speed,
     grounded = true,
-    hardest = 0;
-  for (let step = 0; step < 6 / dt; step++) {
+    hardest = 0,
+    step = 0;
+  for (; step < steps; step++) {
     const prevY = y;
+    if (holding && grounded) {
+      const throttle = Math.max(0, Math.min(1, (speed - v) * 0.55));
+      v = Math.min(TUNING.maxSpeed, v + (TUNING.acceleration * throttle - TUNING.drag * v) * dt);
+    }
     s += v * dt;
     const floor = track.height(s);
     if (grounded) {
@@ -59,15 +71,25 @@ export function hardestLanding(track: Track, jump: Jump, speed: number) {
       y += vy * dt;
       if (y <= floor) {
         const slope = (track.height(s + 0.42) - floor) / 0.42;
-        hardest = Math.max(hardest, Math.abs(vy - v * slope) / Math.sqrt(1 + slope * slope));
+        const impact = Math.abs(vy - v * slope) / Math.sqrt(1 + slope * slope);
+        hardest = Math.max(hardest, impact);
         grounded = true;
         y = floor;
         vy = 0;
+        if (holding) {
+          if (impact > TUNING.landingCrashImpact) return {hardest, seconds: Infinity};
+          v *= Math.max(0.55, 1 - Math.max(0, impact - ROUGH_IMPACT) * 0.015);
+        }
       }
     }
   }
-  return hardest;
+  return {hardest, seconds: step < steps ? step * dt : Infinity};
 }
+/** The hardest landing a rider meets between the foot of `jump` and the ground beyond it, entering at `speed`. */
+export const hardestLanding = (track: Track, jump: Jump, speed: number) => ride(track, jump, speed, 0, false).hardest;
+/** Seconds to ride from the foot of `jump` to `through` metres past it holding `speed`; Infinity on a crash. */
+export const laneSeconds = (track: Track, jump: Jump, speed: number, through: number) =>
+  ride(track, jump, speed, through, true).seconds;
 /** The lips of a track in order, with each jump's own landings worked out only when first needed. */
 function table(track: Track) {
   let advice = tables.get(track);
@@ -122,6 +144,15 @@ export function prepareTakeoffAdvice(track: Track, budgetMs = Infinity) {
     laneImpact(track, advice, i);
     worked = true;
   }
+  // Then what the HUD says about each lane.
+  for (const a of advice) {
+    const s = (a.lip - 1 + track.length) % track.length;
+    if (described.has(a)) continue;
+    if (worked && performance.now() - started >= budgetMs) return false;
+    jumpCall(track, s, 2);
+    described.add(a);
+    worked = true;
+  }
   return true;
 }
 /** The nearest lip within `reach` metres ahead of `s`, as an index into the table and a distance. */
@@ -166,3 +197,121 @@ export function safeTakeoffSpeed(track: Track, s: number, reach: number, slowest
   return null;
 }
 export const lipDistance = (track: Track, s: number, reach: number) => nextLip(track, s, reach)?.distance ?? null;
+
+/** What the HUD tells a rider about the jumps coming up. Speeds are in m/s. */
+export interface JumpCall {
+  /** TABLETOP, SINGLE, DOUBLE, TRIPLE, RHYTHM ×N or WHOOPS. */
+  kind: string;
+  /** Metres to the first lip of the lane, 0 once the rider is in it. */
+  distance: number;
+  /** The takeoff speeds that land the whole lane most smoothly. */
+  ideal: [number, number];
+  /** The first tabulated speed and the step between them, for drawing `zones`. */
+  from: number;
+  step: number;
+  /** One entry per tabulated speed: lands hard enough to crash, lands roughly, or lands well. */
+  zones: ('crash' | 'rough' | 'good')[];
+}
+/** Below this a rider is rolling the jumps, which is never the speed to aim for. */
+const ROLLING_SPEED = 20;
+const calls = new WeakMap<Advice, Omit<JumpCall, 'distance'>>();
+
+function describeLane(track: Track, advice: Advice[], first: number) {
+  const cached = calls.get(advice[first]);
+  if (cached) return cached;
+  let count = 1;
+  for (let at = first; count < Math.min(advice.length, LANE_JUMPS); count++) {
+    const following = (at + 1) % advice.length;
+    const gap = (((advice[following].lip - advice[at].lip) % track.length) + track.length) % track.length;
+    if (gap > LANE_SPACING) break;
+    at = following;
+  }
+  const jump = advice[first].jump;
+  const kind =
+    jump.flat >= 6
+      ? 'TABLETOP'
+      : jump.rise <= 6 && count >= 3
+        ? 'WHOOPS'
+        : count === 1
+          ? 'SINGLE'
+          : count === 2
+            ? 'DOUBLE'
+            : count === 3
+              ? 'TRIPLE'
+              : `RHYTHM ×${count}`;
+  // One ride through the whole lane at each speed, holding it as a rider would.
+  const last = advice[(first + count - 1) % advice.length].jump;
+  const lane = (((last.start - jump.start) % track.length) + track.length) % track.length;
+  const through = lane + last.rise + last.flat + last.fall - (jump.rise + jump.flat + jump.fall) + LANE_RUN_OUT;
+  const rides: ReturnType<typeof ride>[] = [];
+  for (let v = SPEED_MIN; v <= TUNING.maxSpeed + 1e-9; v += SPEED_STEP) rides.push(ride(track, jump, v, through, true));
+  const limit = TUNING.landingCrashImpact * SAFE_IMPACT_SHARE;
+  const speed = (i: number) => SPEED_MIN + i * SPEED_STEP;
+  const crash = (i: number) => i >= 0 && i < rides.length && rides[i].hardest > limit;
+  /** Not a crashing speed, nor within CLEAR_STEPS of one. */
+  const clear = (i: number) => {
+    for (let k = i - CLEAR_STEPS; k <= i + CLEAR_STEPS; k++) if (crash(k)) return false;
+    return true;
+  };
+  // The speed to aim for is the one that gets through the lane soonest without being near a crashing speed.
+  let best = -1;
+  for (let i = rides.length - 1; i >= 0 && speed(i) >= ROLLING_SPEED; i--)
+    if (clear(i) && (best < 0 || rides[i].seconds < rides[best].seconds)) best = i;
+  // Nothing clear at racing pace (a very awkward custom lane): the gentlest speed there is.
+  if (best < 0) best = rides.reduce((gentlest, r, i) => (r.hardest < rides[gentlest].hardest ? i : gentlest), 0);
+  let low = best,
+    high = best;
+  const near = (i: number) =>
+    i >= 0 && i < rides.length && clear(i) && rides[i].seconds <= rides[best].seconds * IDEAL_SLOWER;
+  while (high - low < IDEAL_WIDTH && near(high + 1)) high++;
+  while (high - low < IDEAL_WIDTH && near(low - 1) && speed(low - 1) >= ROLLING_SPEED) low--;
+  const impact = rides.map(r => r.hardest);
+  const call = {
+    kind,
+    ideal: [speed(low), speed(high)] as [number, number],
+    from: SPEED_MIN,
+    step: SPEED_STEP,
+    zones: impact.map(hit => (hit > limit ? 'crash' : hit > ROUGH_IMPACT ? 'rough' : 'good')) as JumpCall['zones'],
+  };
+  calls.set(advice[first], call);
+  return call;
+}
+/** The widest ideal band, in tabulated steps. */
+const IDEAL_WIDTH = 5;
+/** Speeds that get through the lane within this factor of the quickest are part of the ideal band. */
+const IDEAL_SLOWER = 1.04;
+/** The ideal band stays this many tabulated speeds away from any crashing speed. */
+const CLEAR_STEPS = 2;
+/** Lane times are taken to this many metres past the last landing, so speed lost there counts. */
+const LANE_RUN_OUT = 15;
+/** A landing harder than this, in m/s into the ground, starts to scrub speed. */
+const ROUGH_IMPACT = 12;
+
+/**
+ * The lane of jumps the rider is in or coming up to within `reach` metres, or null. A rider between two jumps
+ * of a lane still gets the call for the whole lane, so the advice does not change halfway through it.
+ */
+export function jumpCall(track: Track, s: number, reach: number): JumpCall | null {
+  const advice = table(track);
+  const lip = nextLip(track, s, reach);
+  if (!lip) return null;
+  // Walk back to the first jump of the lane this lip belongs to.
+  let first = lip.index,
+    inside = false;
+  for (let k = 1; k < Math.min(advice.length, LANE_JUMPS); k++) {
+    const before = (first - 1 + advice.length) % advice.length;
+    const gap = (((advice[first].lip - advice[before].lip) % track.length) + track.length) % track.length;
+    if (gap > LANE_SPACING) break;
+    first = before;
+    inside = true;
+    // A chain longer than a lane (a ring of mounds) has no first jump: describe what is ahead.
+    if (k === Math.min(advice.length, LANE_JUMPS) - 1) {
+      first = lip.index;
+      inside = false;
+    }
+  }
+  // "Inside" only if the rider is really past the lane's first lip, not just nearer a later one.
+  const toFirst = (((advice[first].lip - s) % track.length) + track.length) % track.length;
+  inside = inside && toFirst > lip.distance && toFirst > track.length / 2;
+  return {...describeLane(track, advice, first), distance: inside ? 0 : toFirst};
+}
