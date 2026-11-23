@@ -338,7 +338,7 @@ function describeLane(track: Track, advice: Advice[], first: number) {
   return call;
 }
 /** The sweet spot lands this share of the way down the landing slope; landings outside FROM..TO are not offered. */
-const SWEET_LANDING = 0.4;
+const SWEET_LANDING = 0.35;
 const SWEET_LANDING_FROM = 0.1;
 const SWEET_LANDING_TO = 0.85;
 /** A down-slope sweet spot stays at least this many tabulated speeds from any that crashes (SWEET_CLEAR_MIN if it can). */
