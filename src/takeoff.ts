@@ -204,8 +204,8 @@ export interface JumpCall {
   kind: string;
   /** Metres to the first lip of the lane, 0 once the rider is in it. */
   distance: number;
-  /** The takeoff speeds that land the whole lane most smoothly. */
-  ideal: [number, number];
+  /** The perfect takeoff speed: the quickest one with room to spare, found by riding the whole lane at every speed. */
+  sweet: number;
   /** The first tabulated speed and the step between them, for drawing `zones`. */
   from: number;
   step: number;
@@ -248,27 +248,44 @@ function describeLane(track: Track, advice: Advice[], first: number) {
   const limit = TUNING.landingCrashImpact * SAFE_IMPACT_SHARE;
   const speed = (i: number) => SPEED_MIN + i * SPEED_STEP;
   const crash = (i: number) => i >= 0 && i < rides.length && rides[i].hardest > limit;
-  /** Not a crashing speed, nor within CLEAR_STEPS of one. */
-  const clear = (i: number) => {
-    for (let k = i - CLEAR_STEPS; k <= i + CLEAR_STEPS; k++) if (crash(k)) return false;
+  /** Not a crashing speed, nor within `steps` tabulated speeds of one. */
+  const clear = (i: number, steps: number) => {
+    for (let k = i - steps; k <= i + steps; k++) if (crash(k)) return false;
     return true;
   };
-  // The speed to aim for is the one that gets through the lane soonest without being near a crashing speed.
+  /** The speed below index `cap` that gets through the lane soonest, `room` tabulated speeds from any that crash. */
+  const quickest = (room: number, cap = rides.length, slowest = ROLLING_SPEED) => {
+    let found = -1;
+    for (let i = cap - 1; i >= 0 && speed(i) >= slowest; i--)
+      if (clear(i, room) && (found < 0 || rides[i].seconds < rides[found].seconds)) found = i;
+    return found;
+  };
+  // The sweet spot is the quickest speed through the lane, with as little room given up as the lane allows.
   let best = -1;
-  for (let i = rides.length - 1; i >= 0 && speed(i) >= ROLLING_SPEED; i--)
-    if (clear(i) && (best < 0 || rides[i].seconds < rides[best].seconds)) best = i;
-  // Nothing clear at racing pace (a very awkward custom lane): the gentlest speed there is.
+  for (let room = SWEET_CLEAR_MIN; room >= 0 && best < 0; room--) best = quickest(room);
+  // A rider building speed must not be sent through a band of crashing speeds to reach it: when there is a safe
+  // racing speed below such a band, that is the sweet spot instead.
+  let cap = rides.length;
+  for (let i = best - 1; i >= 0 && speed(i) >= RACE_PACE; i--)
+    if (crash(i)) {
+      while (crash(i - 1)) i--;
+      if (quickest(SWEET_CLEAR_MIN, i, RACE_PACE) >= 0) [cap, best] = [i, quickest(SWEET_CLEAR_MIN, i, RACE_PACE)];
+      break;
+    }
+  // One with more room either side of it is preferred, so a rider a little off it still lands, unless that costs time.
+  for (let room = SWEET_CLEAR; best >= 0 && room > SWEET_CLEAR_MIN; room--) {
+    const roomy = quickest(room, cap);
+    if (roomy >= 0 && rides[roomy].seconds <= rides[best].seconds * SWEET_SLOWER) {
+      best = roomy;
+      break;
+    }
+  }
+  // Every racing speed crashes (a very awkward custom lane): the gentlest speed there is.
   if (best < 0) best = rides.reduce((gentlest, r, i) => (r.hardest < rides[gentlest].hardest ? i : gentlest), 0);
-  let low = best,
-    high = best;
-  const near = (i: number) =>
-    i >= 0 && i < rides.length && clear(i) && rides[i].seconds <= rides[best].seconds * IDEAL_SLOWER;
-  while (high - low < IDEAL_WIDTH && near(high + 1)) high++;
-  while (high - low < IDEAL_WIDTH && near(low - 1) && speed(low - 1) >= ROLLING_SPEED) low--;
   const impact = rides.map(r => r.hardest);
   const call = {
     kind,
-    ideal: [speed(low), speed(high)] as [number, number],
+    sweet: speed(best),
     from: SPEED_MIN,
     step: SPEED_STEP,
     zones: impact.map(hit => (hit > limit ? 'crash' : hit > ROUGH_IMPACT ? 'rough' : 'good')) as JumpCall['zones'],
@@ -276,12 +293,13 @@ function describeLane(track: Track, advice: Advice[], first: number) {
   calls.set(advice[first], call);
   return call;
 }
-/** The widest ideal band, in tabulated steps. */
-const IDEAL_WIDTH = 5;
-/** Speeds that get through the lane within this factor of the quickest are part of the ideal band. */
-const IDEAL_SLOWER = 1.04;
-/** The ideal band stays this many tabulated speeds away from any crashing speed. */
-const CLEAR_STEPS = 2;
+/** The sweet spot stays this many tabulated speeds away from any takeoff speed that crashes, where the lane allows. */
+const SWEET_CLEAR = 4;
+const SWEET_CLEAR_MIN = 2;
+/** A safe speed from here up counts as racing the lane, so it is preferred to one above a band of crashing speeds. */
+const RACE_PACE = 28;
+/** A roomier sweet spot is taken when it is within this factor of the quickest time through the lane. */
+const SWEET_SLOWER = 1.1;
 /** Lane times are taken to this many metres past the last landing, so speed lost there counts. */
 const LANE_RUN_OUT = 15;
 /** A landing harder than this, in m/s into the ground, starts to scrub speed. */

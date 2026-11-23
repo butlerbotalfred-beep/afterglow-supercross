@@ -159,28 +159,38 @@ function updateTiming(
 }
 /** How far ahead of a lane of jumps the callout appears, in metres. */
 const JUMP_CALL_REACH = 90;
-/** The takeoff meter runs from 40 km/h to the top speed. */
-const METER_FROM = 40 / 3.6;
-const meterShare = (speed: number) =>
-  Math.max(0, Math.min(1, (speed - METER_FROM) / (TUNING.maxSpeed - METER_FROM))) * 100;
-const ZONE_COLOR = {crash: '#e5484d', rough: '#d9a23c', good: '#55606e', ideal: '#6fdc8c'};
-const meterPaint = new WeakMap<JumpCall['zones'], string>();
-/** The meter's background: one stripe per tabulated takeoff speed, green over the ideal band. */
-function meterBackground(call: JumpCall) {
-  let paint = meterPaint.get(call.zones);
-  if (!paint) {
-    const stops = call.zones.map((zone, i) => {
-      const speed = call.from + i * call.step;
-      const color = ZONE_COLOR[speed >= call.ideal[0] && speed <= call.ideal[1] ? 'ideal' : zone];
-      const from = meterShare(speed - call.step / 2).toFixed(1),
-        to = meterShare(speed + call.step / 2).toFixed(1);
-      return `${color} ${from}% ${to}%`;
-    });
-    paint = `linear-gradient(90deg,${stops.join(',')})`;
-    meterPaint.set(call.zones, paint);
-  }
-  return paint;
+/** The takeoff meter is centred on the sweet spot and shows this many m/s either side of it. */
+const METER_SPAN = 10;
+/** Within this many m/s of the sweet spot the takeoff is perfect: the marker turns bright green. */
+export const SWEET_TOLERANCE = 1.25;
+/** The fade away from the sweet spot: [m/s off it, red, green, blue]. A narrow green, then yellow, orange, red. */
+const METER_FADE = [
+  [0, 57, 227, 107],
+  [SWEET_TOLERANCE, 57, 227, 107],
+  [2.5, 242, 209, 60],
+  [5.5, 240, 138, 60],
+  [9, 229, 72, 77],
+];
+const meterShare = (call: JumpCall, speed: number) =>
+  Math.max(0, Math.min(1, 0.5 + (speed - call.sweet) / (2 * METER_SPAN))) * 100;
+/** The meter's colour this many m/s away from the sweet spot. */
+export function meterColor(off: number) {
+  const d = Math.abs(off);
+  let k = 1;
+  while (k < METER_FADE.length - 1 && METER_FADE[k][0] < d) k++;
+  const [a, b] = [METER_FADE[k - 1], METER_FADE[k]];
+  const t = Math.max(0, Math.min(1, (d - a[0]) / (b[0] - a[0])));
+  return `rgb(${[1, 2, 3].map(c => Math.round(a[c] + (b[c] - a[c]) * t)).join(',')})`;
 }
+/** The same fade as a background: red, orange, yellow, a narrow green in the middle, and back out to red. */
+const METER_PAINT = `linear-gradient(90deg,${[
+  ...METER_FADE.slice(1)
+    .reverse()
+    .map(f => -f[0]),
+  ...METER_FADE.slice(1).map(f => f[0]),
+]
+  .map(off => `${meterColor(off)} ${(50 + (off / METER_SPAN) * 50).toFixed(1)}%`)
+  .join(',')})`;
 /** Inside this many metres of a new lane's first lip, the callout matters more than the landing just made. */
 const CALL_OVER_LANDING = 45;
 /** The landing cue gets its moment, also between the jumps of a lane, unless a new lane is nearly here. */
@@ -188,22 +198,23 @@ export const callOutranksLanding = (call: JumpCall | null) =>
   !!call && call.distance > 0 && call.distance < CALL_OVER_LANDING;
 /** What the rider should do about their speed for the jumps coming up. */
 export function takeoffVerdict(call: JumpCall, speed: number) {
+  if (Math.abs(speed - call.sweet) <= SWEET_TOLERANCE) return 'PERFECT';
   const zone = call.zones[Math.max(0, Math.min(call.zones.length - 1, Math.round((speed - call.from) / call.step)))];
-  if (speed < call.ideal[0]) return zone === 'crash' ? 'TOO SLOW · COMES UP SHORT' : 'BUILD SPEED';
-  if (speed > call.ideal[1]) return zone === 'crash' ? 'TOO FAST · OVERSHOOTS' : 'EASE OFF';
-  return 'ON PACE';
+  if (speed < call.sweet) return zone === 'crash' ? 'TOO SLOW · COMES UP SHORT' : 'BUILD SPEED';
+  return zone === 'crash' ? 'TOO FAST · OVERSHOOTS' : 'EASE OFF';
 }
-/** The notice for the jumps coming up: what they are, how far, and a meter of takeoff speed against the ideal. */
+/** The notice for the jumps coming up: what they are, how far, and a meter of takeoff speed around the sweet spot. */
 export function jumpNotice(call: JumpCall, speed: number) {
   const verdict = takeoffVerdict(call, speed);
-  const state = verdict === 'ON PACE' ? 'on-pace' : verdict.startsWith('TOO') ? 'danger' : 'off-pace';
+  const state = verdict === 'PERFECT' ? 'perfect' : verdict.startsWith('TOO') ? 'danger' : 'off-pace';
   const where = call.distance > 0 ? ` · ${Math.round(call.distance / 5) * 5} M` : '';
-  const band = `${Math.round(call.ideal[0] * 3.6)}–${Math.round(call.ideal[1] * 3.6)} KM/H`;
+  // The marker line glows in the colour of the part of the meter it is on.
+  const glow = state === 'perfect' ? '' : `;--glow:${meterColor(speed - call.sweet)}`;
   return (
     `<b class="pace-label">${call.kind}${where}</b>` +
-    `<span class="takeoff-meter ${state}" style="background:${meterBackground(call)}">` +
-    `<u style="left:${meterShare(speed).toFixed(1)}%"></u></span>` +
-    `<small class="takeoff-${state}">${verdict} · ${band}</small>`
+    `<span class="takeoff-meter ${state}" style="background:${METER_PAINT}">` +
+    `<u style="left:${meterShare(call, speed).toFixed(1)}%${glow}"></u></span>` +
+    `<small class="takeoff-${state}">${verdict} · ${Math.round(call.sweet * 3.6)} KM/H</small>`
   );
 }
 /** How long CLEAN LANDING or FLAT LANDING stays up. */

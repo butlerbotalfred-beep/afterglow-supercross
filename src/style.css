@@ -2275,24 +2275,41 @@ footer i {
   color: #ffc46b;
 }
 
-/* Jump callout and takeoff speed meter: red speeds crash, amber land roughly, green is the ideal band. */
+/* Jump callout and takeoff speed meter: a fade from red through orange and yellow to a narrow green sweet spot. */
 .rider-notice .takeoff-meter {
   display: block;
   position: relative;
-  width: min(320px, 64%);
-  height: 12px;
-  margin: 8px auto 0;
+  width: min(360px, 68%);
+  height: 16px;
+  margin: 10px auto 0;
   border: 2px solid #10151e;
+  border-radius: 7px;
   box-shadow: 0 2px 10px #0009;
 }
+.rider-notice .takeoff-meter.perfect {
+  box-shadow:
+    0 0 14px #39ff6acc,
+    0 2px 10px #0009;
+}
+/* The marker: a thin line lit in the colour of the part of the meter it is on. */
 .rider-notice .takeoff-meter u {
   position: absolute;
-  top: -6px;
-  width: 4px;
-  height: 24px;
-  margin-left: -2px;
+  top: -9px;
+  width: 3px;
+  height: 34px;
+  margin-left: -1.5px;
+  border-radius: 2px;
   background: #fff;
-  box-shadow: 0 0 0 1px #0b0f16;
+  box-shadow:
+    0 0 0 1px #0b0f16,
+    0 0 9px 3px var(--glow, #fff);
+}
+.rider-notice .takeoff-meter.perfect u {
+  background: #7dff9c;
+  box-shadow:
+    0 0 0 1px #0b3d1a,
+    0 0 8px 3px #39ff6a,
+    0 0 22px 8px #39ff6acc;
 }
 .rider-notice small[class^='takeoff-'] {
   display: table;
@@ -2307,8 +2324,9 @@ footer i {
   font-size: 9px;
   margin-top: 6px;
 }
-.rider-notice .takeoff-on-pace {
-  color: #b5f58a;
+.rider-notice .takeoff-perfect {
+  color: #0b1f10;
+  background: #39ff6a;
 }
 .rider-notice .takeoff-danger {
   color: #ff8f8f;
@@ -2318,6 +2336,28 @@ footer i {
   margin-top: 6px;
 }
 .compact .rider-notice .takeoff-meter u {
-  top: -5px;
-  height: 18px;
+  top: -7px;
+  height: 22px;
+}
+/* The jump callout sits below the rider, so it never covers the bike or the jump ahead. */
+.rider-notice:has(.takeoff-meter) {
+  top: 74%;
+}
+/* Split screens and phones have little room under the bike: the label and the meter only, at the bottom edge. */
+.compact .rider-notice:has(.takeoff-meter),
+.iphone-session .rider-notice:has(.takeoff-meter) {
+  top: auto;
+  bottom: 10px;
+}
+/* On a phone the RECOVER and PAUSE buttons sit at the bottom middle, so the meter stays above them. */
+.iphone-session .rider-notice:has(.takeoff-meter) {
+  bottom: calc(88px + env(safe-area-inset-bottom));
+}
+.compact .rider-notice:has(.takeoff-meter) b,
+.iphone-session .rider-notice:has(.takeoff-meter) b {
+  padding: 5px 14px;
+}
+.compact .rider-notice:has(.takeoff-meter) small,
+.iphone-session .rider-notice:has(.takeoff-meter) small {
+  display: none;
 }
