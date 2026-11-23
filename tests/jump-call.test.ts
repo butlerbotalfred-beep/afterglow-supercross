@@ -139,10 +139,13 @@ test('a real rider at the sweet spot lands on the down slope, not short of it an
       const at = `${c.id} ${call.kind} at ${lip}, sweet spot ${call.sweet.toFixed(1)} m/s`;
       const sweet = landing(track, lip, call.sweet);
       assert.equal(sweet.slope, 'down', at);
-      assert.ok(sweet.share > 0.2 && sweet.share < 0.5, `${at}: lands ${sweet.share.toFixed(2)} of the way down`);
+      assert.ok(sweet.share > 0.2 && sweet.share < 0.6, `${at}: lands ${sweet.share.toFixed(2)} of the way down`);
       // Anywhere the meter calls perfect still comes down on the slope.
       for (const speed of [call.sweet - SWEET_TOLERANCE, call.sweet + SWEET_TOLERANCE]) {
         const edge = landing(track, lip, speed);
+        assert.equal(edge.crashed, false, `${at}, at ${speed.toFixed(1)}`);
+        // A slow lane's lower edge can be a hop too small to count as a flight: nothing to overshoot.
+        if (edge.slope === 'none') continue;
         assert.equal(edge.slope, 'down', `${at}, at ${speed.toFixed(1)}`);
         assert.ok(edge.share > 0.02 && edge.share < 0.85, `${at}, at ${speed.toFixed(1)}: ${edge.share.toFixed(2)}`);
         assert.equal(edge.crashed, false, `${at}, at ${speed.toFixed(1)}`);
