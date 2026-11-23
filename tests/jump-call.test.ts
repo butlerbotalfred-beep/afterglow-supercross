@@ -3,9 +3,10 @@ import assert from 'node:assert/strict';
 import {TUNING} from '../src/config.ts';
 import {COURSES} from '../src/courses.ts';
 import {makeRider, npcControl, stepRider} from '../src/physics.ts';
+import {createProgress} from '../src/race.ts';
 import {jumpCall} from '../src/takeoff.ts';
 import {Track} from '../src/track.ts';
-import {callOutranksLanding, jumpNotice, takeoffVerdict} from '../src/ui/hud.ts';
+import {callOutranksLanding, jumpNotice, meterColor, SWEET_TOLERANCE, takeoffVerdict} from '../src/ui/hud.ts';
 
 const dusk = new Track(COURSES.find(c => c.id === 'dusk')!);
 const lanes = (track: Track) => {
@@ -35,7 +36,17 @@ test('the callout names what is coming: tabletop, double, triple, whoops', () =>
 function rideLane(track: Track, from: number, metres: number, speed: number) {
   const r = makeRider(track, 0, false, 0xffffff),
     p = track.at(from);
-  Object.assign(r, {x: p.x, z: p.z, y: track.height(from), heading: Math.atan2(p.tx, p.tz), surface: p, speed});
+  // The rider's progress starts here too: without it the route check sends the rider back to the start line.
+  const progress = {...createProgress(from), lastLateral: p.lateral};
+  Object.assign(r, {
+    x: p.x,
+    z: p.z,
+    y: track.height(from),
+    heading: Math.atan2(p.tx, p.tz),
+    surface: p,
+    speed,
+    progress,
+  });
   let steps = 0;
   for (; steps < 20 / TUNING.step && r.crashes === 0; steps++) {
     const travelled = (r.surface.s - from + track.length) % track.length;
@@ -56,15 +67,22 @@ const laneStarts = (track: Track) => {
   return [...starts];
 };
 
-test('a real rider holding any speed in the ideal band gets through the lane, on every circuit', () => {
+test('a real rider at the sweet spot, or anywhere the meter calls perfect, gets through the lane on every circuit', () => {
   for (const c of COURSES) {
     const track = new Track(c);
     for (const [lip, call] of laneStarts(track)) {
-      assert.ok(call.ideal[0] >= 20, `${c.id} ${call.kind} at ${lip}: the ideal band is racing pace, not rolling`);
-      assert.ok(call.ideal[0] <= call.ideal[1] && call.ideal[1] <= TUNING.maxSpeed);
+      assert.ok(
+        call.sweet >= 28 && call.sweet <= TUNING.maxSpeed,
+        `${c.id} ${call.kind} at ${lip}: the sweet spot ${call.sweet} is racing pace, not rolling`,
+      );
       // To the end of this lane and a little beyond, but not into the next one.
       const metres = call.kind === 'TABLETOP' || call.kind === 'SINGLE' ? 110 : 200;
-      for (const speed of [call.ideal[0], (call.ideal[0] + call.ideal[1]) / 2, call.ideal[1]])
+      const perfect = [
+        call.sweet - SWEET_TOLERANCE,
+        call.sweet,
+        Math.min(TUNING.maxSpeed, call.sweet + SWEET_TOLERANCE),
+      ];
+      for (const speed of perfect)
         assert.equal(
           rideLane(track, lip - 40, metres, speed).crashed,
           false,
@@ -74,10 +92,10 @@ test('a real rider holding any speed in the ideal band gets through the lane, on
   }
 });
 
-test('the ideal band is quicker through the lane than rolling it, and red below it really comes up short', () => {
+test('the sweet spot is quicker through the lane than rolling it, and too slow really comes up short', () => {
   const call = laneStarts(dusk).find(([, c]) => c.kind === 'DOUBLE')!;
   const [lip, double] = call;
-  const ideal = rideLane(dusk, lip - 40, 160, double.ideal[1]);
+  const ideal = rideLane(dusk, lip - 40, 160, double.sweet);
   const rolling = rideLane(dusk, lip - 40, 160, 20);
   assert.ok(!rolling.crashed && ideal.seconds < rolling.seconds - 1, `${ideal.seconds} s against ${rolling.seconds} s`);
   const short = double.from + (double.zones.indexOf('crash') + 1) * double.step;
@@ -88,12 +106,37 @@ test('a double asks for race pace, above the band that comes up short', () => {
   const call = lanes(dusk).find(c => c.kind === 'DOUBLE')!;
   const short = call.zones.indexOf('crash');
   assert.ok(short >= 0, 'a double has takeoff speeds that crash');
-  assert.ok(call.ideal[0] > call.from + short * call.step, 'the ideal band is above them');
-  assert.ok(call.ideal[0] * 3.6 > 100 && call.ideal[1] * 3.6 < 140, `ideal ${call.ideal} m/s`);
+  assert.ok(call.sweet - SWEET_TOLERANCE > call.from + short * call.step, 'the sweet spot is above them');
   assert.equal(takeoffVerdict(call, 15), 'BUILD SPEED');
   assert.equal(takeoffVerdict(call, call.from + short * call.step), 'TOO SLOW · COMES UP SHORT');
-  assert.equal(takeoffVerdict(call, (call.ideal[0] + call.ideal[1]) / 2), 'ON PACE');
+  assert.ok(call.sweet * 3.6 > 100 && call.sweet * 3.6 < 140, `sweet spot ${call.sweet} m/s`);
+  assert.equal(takeoffVerdict(call, call.sweet), 'PERFECT');
+  assert.equal(takeoffVerdict(call, call.sweet + SWEET_TOLERANCE - 0.01), 'PERFECT');
+  assert.notEqual(takeoffVerdict(call, call.sweet - SWEET_TOLERANCE - 0.1), 'PERFECT');
   assert.match(takeoffVerdict(call, TUNING.maxSpeed), /^(EASE OFF|TOO FAST · OVERSHOOTS)$/);
+});
+
+test('the sweet spot never sits above a band of crashing speeds when a safe racing speed lies below it', () => {
+  for (const c of COURSES) {
+    const track = new Track(c);
+    for (const [lip, call] of laneStarts(track)) {
+      const at = (speed: number) => call.zones[Math.round((speed - call.from) / call.step)];
+      for (let v = Math.ceil(call.sweet - SWEET_TOLERANCE); v <= call.sweet + SWEET_TOLERANCE; v++)
+        if (v <= TUNING.maxSpeed)
+          assert.notEqual(at(v), 'crash', `${c.id} ${call.kind} at ${lip}: ${v} m/s is perfect`);
+      let band = -1;
+      for (let v = Math.floor(call.sweet) - 1; v >= 28 && band < 0; v--) if (at(v) === 'crash') band = v;
+      if (band < 0) continue;
+      while (at(band - 1) === 'crash') band--;
+      let safeBelow = false;
+      for (let v = band - 3; v >= 28; v--) safeBelow ||= [-2, -1, 0, 1, 2].every(off => at(v + off) !== 'crash');
+      assert.equal(safeBelow, false, `${c.id} ${call.kind} at ${lip}: sweet ${call.sweet} is above a crash band`);
+    }
+  }
+  const canyon = new Track(COURSES.find(c => c.id === 'canyon')!);
+  const triple = lanes(canyon).find(c => c.kind === 'TRIPLE')!;
+  assert.ok(triple.sweet < 38, `the canyon triple is called at ${triple.sweet} m/s, below the speeds that overshoot`);
+  assert.equal(takeoffVerdict(triple, 40), 'TOO FAST · OVERSHOOTS');
 });
 
 test('the advice does not change between the jumps of a lane', () => {
@@ -105,7 +148,7 @@ test('the advice does not change between the jumps of a lane', () => {
   assert.ok(before.distance > 0);
   assert.equal(between.kind, 'TRIPLE');
   assert.equal(between.distance, 0, 'inside the lane there is no distance to show');
-  assert.deepEqual(between.ideal, before.ideal);
+  assert.equal(between.sweet, before.sweet);
 });
 
 test('the notice shows the jump, the distance, the meter and the verdict', () => {
@@ -113,15 +156,33 @@ test('the notice shows the jump, the distance, the meter and the verdict', () =>
   const html = jumpNotice({...call, distance: 52}, 15);
   assert.match(html, /DOUBLE · 50 M/);
   assert.match(html, /takeoff-meter off-pace/);
-  assert.match(html, /BUILD SPEED · \d+–\d+ KM\/H/);
+  assert.match(html, /BUILD SPEED · \d+ KM\/H/);
   assert.match(html, /linear-gradient/);
   assert.match(
-    jumpNotice({...call, distance: 0}, call.ideal[0]),
-    /<b class="pace-label">DOUBLE<\/b>.*takeoff-on-pace">ON PACE/,
+    jumpNotice({...call, distance: 0}, call.sweet),
+    /<b class="pace-label">DOUBLE<\/b>.*takeoff-meter perfect.*left:50\.0%.*takeoff-perfect">PERFECT/,
   );
   const slow = /left:([\d.]+)%/.exec(jumpNotice(call, 15))![1],
     fast = /left:([\d.]+)%/.exec(jumpNotice(call, 40))![1];
   assert.ok(Number(fast) > Number(slow), 'the marker moves right with speed');
+});
+
+test('the meter fades from a narrow green at the sweet spot through yellow and orange to red, the same both ways', () => {
+  assert.equal(meterColor(0), 'rgb(57,227,107)');
+  assert.equal(meterColor(9), 'rgb(229,72,77)');
+  assert.equal(meterColor(-20), meterColor(20));
+  assert.equal(meterColor(-3), meterColor(3));
+  assert.notEqual(meterColor(SWEET_TOLERANCE + 1), meterColor(0), 'green is only at the sweet spot');
+  const call = lanes(dusk).find(c => c.kind === 'DOUBLE')!;
+  const paint = /background:(linear-gradient\([^"]+\))"/.exec(jumpNotice(call, 15))![1];
+  assert.deepEqual(
+    paint.match(/rgb\([\d,]+\)/g),
+    [9, 5.5, 2.5, 1.25, 1.25, 2.5, 5.5, 9].map(meterColor),
+    'red, orange, yellow, green, green, yellow, orange, red',
+  );
+  // The marker line glows in the colour it is over, and has no colour of its own to add when it is perfect.
+  assert.match(jumpNotice(call, call.sweet - 5), new RegExp(`--glow:${meterColor(5).replace(/[()]/g, '\\$&')}`));
+  assert.doesNotMatch(jumpNotice(call, call.sweet), /--glow/);
 });
 
 test('the landing cue gets its moment unless a new lane is nearly here', () => {
