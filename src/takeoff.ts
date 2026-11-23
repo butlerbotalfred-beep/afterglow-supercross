@@ -45,6 +45,8 @@ function ride(track: Track, jump: Jump, speed: number, through: number, holding:
     v = speed,
     grounded = true,
     hardest = 0,
+    left = NaN,
+    landed = NaN,
     step = 0;
   for (; step < steps; step++) {
     const prevY = y;
@@ -58,6 +60,7 @@ function ride(track: Track, jump: Jump, speed: number, through: number, holding:
       const ballistic = prevY + vy * dt - TUNING.gravity * dt * dt * 0.5;
       if (ballistic > floor + 0.00035 && v > 5) {
         grounded = false;
+        left = s;
         y = ballistic;
         vy -= TUNING.gravity * dt;
       } else {
@@ -73,18 +76,23 @@ function ride(track: Track, jump: Jump, speed: number, through: number, holding:
         const slope = (track.height(s + 0.42) - floor) / 0.42;
         const impact = Math.abs(vy - v * slope) / Math.sqrt(1 + slope * slope);
         hardest = Math.max(hardest, impact);
+        // Where the flight off this jump's own lip comes down, for the HUD's sweet spot.
+        const lip = jump.start + jump.rise;
+        if (Number.isNaN(landed) && s > lip && left >= jump.start && left <= lip + LIP_REACH) landed = s;
         grounded = true;
         y = floor;
         vy = 0;
         if (holding) {
-          if (impact > TUNING.landingCrashImpact) return {hardest, seconds: Infinity};
+          if (impact > TUNING.landingCrashImpact) return {hardest, landed, seconds: Infinity};
           v *= Math.max(0.55, 1 - Math.max(0, impact - ROUGH_IMPACT) * 0.015);
         }
       }
     }
   }
-  return {hardest, seconds: step < steps ? step * dt : Infinity};
+  return {hardest, landed, seconds: step < steps ? step * dt : Infinity};
 }
+/** A flight that starts on a jump's face, or within this many metres past its lip, is the jump off that lip. */
+const LIP_REACH = 2;
 /** The hardest landing a rider meets between the foot of `jump` and the ground beyond it, entering at `speed`. */
 export const hardestLanding = (track: Track, jump: Jump, speed: number) => ride(track, jump, speed, 0, false).hardest;
 /** Seconds to ride from the foot of `jump` to `through` metres past it holding `speed`; Infinity on a crash. */
@@ -204,7 +212,7 @@ export interface JumpCall {
   kind: string;
   /** Metres to the first lip of the lane, 0 once the rider is in it. */
   distance: number;
-  /** The perfect takeoff speed: the quickest one with room to spare, found by riding the whole lane at every speed. */
+  /** The perfect takeoff speed: the one that lands on the down slope, found by riding the whole lane at every speed. */
   sweet: number;
   /** The first tabulated speed and the step between them, for drawing `zones`. */
   from: number;
@@ -260,7 +268,8 @@ function describeLane(track: Track, advice: Advice[], first: number) {
       if (clear(i, room) && (found < 0 || rides[i].seconds < rides[found].seconds)) found = i;
     return found;
   };
-  // The sweet spot is the quickest speed through the lane, with as little room given up as the lane allows.
+  // The fallback sweet spot (whoops, or nothing lands on a slope) is the quickest speed through the lane, with as
+  // little room given up as the lane allows.
   let best = -1;
   for (let room = SWEET_CLEAR_MIN; room >= 0 && best < 0; room--) best = quickest(room);
   // A rider building speed must not be sent through a band of crashing speeds to reach it: when there is a safe
@@ -282,10 +291,45 @@ function describeLane(track: Track, advice: Advice[], first: number) {
   }
   // Every racing speed crashes (a very awkward custom lane): the gentlest speed there is.
   if (best < 0) best = rides.reduce((gentlest, r, i) => (r.hardest < rides[gentlest].hardest ? i : gentlest), 0);
+  /**
+   * The takeoff speed that brings the flight off the first lip down on a down slope: of the farthest jump of the
+   * lane a spread of safe speeds can land on, and SWEET_LANDING of the way down it, where the bike meets the slope most
+   * gently and nothing is overshot. Null when no speed does that (whoops, or a lane too awkward to jump).
+   */
+  const downSlope = (room: number): number | null => {
+    const landings: {jump: number; from: number; share: number}[] = [];
+    for (let i = 0; i < rides.length; i++) {
+      if (speed(i) < ROLLING_SPEED || !clear(i, room) || Number.isNaN(rides[i].landed)) continue;
+      for (let k = count - 1; k >= 0; k--) {
+        const target = advice[(first + k) % advice.length].jump;
+        const along = (((target.start - jump.start) % track.length) + track.length) % track.length;
+        const share = (rides[i].landed - jump.start - along - target.rise - target.flat) / target.fall;
+        if (share < SWEET_LANDING_FROM || share > SWEET_LANDING_TO) continue;
+        landings.push({jump: k, from: speed(i), share});
+        break;
+      }
+    }
+    // Aim for the farthest jump that a spread of speeds can land on; one that a single speed reaches is a last resort.
+    let found: typeof landings = [];
+    for (let k = 0; k < count; k++) {
+      const onto = landings.filter(l => l.jump === k);
+      if (onto.length && (onto.length > 1 || found.length < 2)) found = onto;
+    }
+    if (!found.length) return room > SWEET_LANDING_CLEAR_MIN ? downSlope(room - 1) : null;
+    // Between the two tabulated speeds either side of the wanted spot; the nearest one when it is outside them.
+    for (let i = 1; i < found.length; i++) {
+      const [a, b] = [found[i - 1], found[i]];
+      if (b.from - a.from === SPEED_STEP && a.share <= SWEET_LANDING && b.share >= SWEET_LANDING && b.share > a.share)
+        return a.from + ((SWEET_LANDING - a.share) / (b.share - a.share)) * SPEED_STEP;
+    }
+    return found.reduce((best, f) =>
+      Math.abs(f.share - SWEET_LANDING) < Math.abs(best.share - SWEET_LANDING) ? f : best,
+    ).from;
+  };
   const impact = rides.map(r => r.hardest);
   const call = {
     kind,
-    sweet: speed(best),
+    sweet: kind === 'WHOOPS' ? speed(best) : (downSlope(SWEET_CLEAR_MIN) ?? speed(best)),
     from: SPEED_MIN,
     step: SPEED_STEP,
     zones: impact.map(hit => (hit > limit ? 'crash' : hit > ROUGH_IMPACT ? 'rough' : 'good')) as JumpCall['zones'],
@@ -293,7 +337,13 @@ function describeLane(track: Track, advice: Advice[], first: number) {
   calls.set(advice[first], call);
   return call;
 }
-/** The sweet spot stays this many tabulated speeds away from any takeoff speed that crashes, where the lane allows. */
+/** The sweet spot lands this share of the way down the landing slope; landings outside FROM..TO are not offered. */
+const SWEET_LANDING = 0.35;
+const SWEET_LANDING_FROM = 0.1;
+const SWEET_LANDING_TO = 0.85;
+/** A down-slope sweet spot stays at least this many tabulated speeds from any that crashes (SWEET_CLEAR_MIN if it can). */
+const SWEET_LANDING_CLEAR_MIN = 1;
+/** The fallback sweet spot stays this many tabulated speeds away from any that crashes, where the lane allows. */
 const SWEET_CLEAR = 4;
 const SWEET_CLEAR_MIN = 2;
 /** A safe speed from here up counts as racing the lane, so it is preferred to one above a band of crashing speeds. */

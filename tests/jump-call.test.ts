@@ -72,8 +72,8 @@ test('a real rider at the sweet spot, or anywhere the meter calls perfect, gets 
     const track = new Track(c);
     for (const [lip, call] of laneStarts(track)) {
       assert.ok(
-        call.sweet >= 28 && call.sweet <= TUNING.maxSpeed,
-        `${c.id} ${call.kind} at ${lip}: the sweet spot ${call.sweet} is racing pace, not rolling`,
+        call.sweet >= 20 && call.sweet <= TUNING.maxSpeed,
+        `${c.id} ${call.kind} at ${lip}: the sweet spot ${call.sweet} is a jumping speed`,
       );
       // To the end of this lane and a little beyond, but not into the next one.
       const metres = call.kind === 'TABLETOP' || call.kind === 'SINGLE' ? 110 : 200;
@@ -90,6 +90,75 @@ test('a real rider at the sweet spot, or anywhere the meter calls perfect, gets 
         );
     }
   }
+});
+
+/** Where a real rider holding `speed` comes down after the first lip: the share of the way down a landing slope. */
+function landing(track: Track, lip: number, speed: number) {
+  const from = lip - 40,
+    r = makeRider(track, 0, false, 0xffffff),
+    p = track.at(from);
+  const progress = {...createProgress(from), lastLateral: p.lateral};
+  Object.assign(r, {
+    x: p.x,
+    z: p.z,
+    y: track.height(from),
+    heading: Math.atan2(p.tx, p.tz),
+    surface: p,
+    speed,
+    progress,
+  });
+  const past = (s: number, mark: number) => (((s - mark) % track.length) + track.length) % track.length;
+  let air = 0;
+  for (let steps = 0; steps < 8 / TUNING.step && r.crashes === 0; steps++) {
+    const c = npcControl(r, track, [r], 'club');
+    c.throttle = Math.max(0, Math.min(1, (speed - r.speed) * 0.55));
+    c.brake = 0;
+    const was = r.grounded;
+    stepRider(r, c, track, TUNING.step, [r]);
+    if (!r.grounded) air += TUNING.step;
+    else if (!was) {
+      // The first real flight that ends beyond the lip is the jump; hops on the face are not.
+      if (air > 0.3 && past(r.surface.s, lip) < 200) {
+        for (const j of track.jumps) {
+          const down = past(r.surface.s, j.start + j.rise + j.flat);
+          if (down <= j.fall) return {slope: 'down', share: down / j.fall, crashed: r.crashes > 0};
+        }
+        return {slope: 'other', share: NaN, crashed: r.crashes > 0};
+      }
+      air = 0;
+    }
+  }
+  return {slope: 'none', share: NaN, crashed: r.crashes > 0};
+}
+
+test('a real rider at the sweet spot lands on the down slope, not short of it and not past it', () => {
+  for (const c of COURSES) {
+    const track = new Track(c);
+    for (const [lip, call] of laneStarts(track)) {
+      if (call.kind === 'WHOOPS') continue;
+      const at = `${c.id} ${call.kind} at ${lip}, sweet spot ${call.sweet.toFixed(1)} m/s`;
+      const sweet = landing(track, lip, call.sweet);
+      assert.equal(sweet.slope, 'down', at);
+      assert.ok(sweet.share > 0.2 && sweet.share < 0.6, `${at}: lands ${sweet.share.toFixed(2)} of the way down`);
+      // Anywhere the meter calls perfect still comes down on the slope.
+      for (const speed of [call.sweet - SWEET_TOLERANCE, call.sweet + SWEET_TOLERANCE]) {
+        const edge = landing(track, lip, speed);
+        assert.equal(edge.crashed, false, `${at}, at ${speed.toFixed(1)}`);
+        // A slow lane's lower edge can be a hop too small to count as a flight: nothing to overshoot.
+        if (edge.slope === 'none') continue;
+        assert.equal(edge.slope, 'down', `${at}, at ${speed.toFixed(1)}`);
+        assert.ok(edge.share > 0.02 && edge.share < 0.85, `${at}, at ${speed.toFixed(1)}: ${edge.share.toFixed(2)}`);
+        assert.equal(edge.crashed, false, `${at}, at ${speed.toFixed(1)}`);
+      }
+    }
+  }
+});
+
+test('a tabletop is not called flat out: top speed flies past its landing', () => {
+  const table = lanes(dusk).find(c => c.kind === 'TABLETOP')!;
+  assert.ok(table.sweet * 3.6 > 110 && table.sweet * 3.6 < 135, `tabletop sweet spot ${table.sweet} m/s`);
+  assert.equal(takeoffVerdict(table, TUNING.maxSpeed), 'EASE OFF');
+  assert.notEqual(landing(dusk, 26, TUNING.maxSpeed).slope, 'down');
 });
 
 test('the sweet spot is quicker through the lane than rolling it, and too slow really comes up short', () => {
