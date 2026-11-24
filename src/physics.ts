@@ -49,6 +49,18 @@ export interface Rider {
   crashReason: string;
   crashes: number;
   recoveryReason: string;
+  /** How loaded the suspension is from holding the stick straight back on the ground, 0 to 1. */
+  preload: number;
+  /** The load that was let go, kept until the bike leaves the ground or preloadRun passes the release distance. */
+  preloadReleased: number;
+  /** Metres ridden since the preload was let go. */
+  preloadRun: number;
+  /** What the preload did to the last takeoff, for the HUD: a timed release, or held through the lip. */
+  launch: '' | 'pop' | 'absorb';
+  /** After absorbing a lip the stick is still back; it does not pitch the nose up until it has been let go. */
+  pitchHold: boolean;
+  /** The load that was held through the lip, which sets how hard the absorb pulls. */
+  absorbed: number;
 }
 export const idleControl = (): Control => ({throttle: 0, brake: 0, steer: 0, pitch: 0, reset: false, pause: false});
 export function makeRider(track: Track, id: number, human: boolean, color: number, device?: Device): Rider {
@@ -96,6 +108,12 @@ export function makeRider(track: Track, id: number, human: boolean, color: numbe
     crashReason: '',
     crashes: 0,
     recoveryReason: '',
+    preload: 0,
+    preloadReleased: 0,
+    preloadRun: 0,
+    launch: '',
+    pitchHold: false,
+    absorbed: 0,
   };
 }
 export function recover(r: Rider, track: Track, others: Rider[]) {
@@ -146,6 +164,13 @@ export function recover(r: Rider, track: Track, others: Rider[]) {
   r.grounded = true;
   r.recovery = TUNING.recoveryDelay;
   r.stuck = 0;
+  clearPreload(r);
+}
+function clearPreload(r: Rider) {
+  r.preload = 0;
+  r.preloadReleased = 0;
+  r.preloadRun = 0;
+  r.pitchHold = false;
 }
 export function crash(r: Rider, reason: string, side = 1) {
   if (r.crashTime > 0 || r.recovery > 0) return;
@@ -160,6 +185,7 @@ export function crash(r: Rider, reason: string, side = 1) {
   r.throttle = 0;
   r.steer = 0;
   r.pitchRate = 0;
+  clearPreload(r);
 }
 
 export function stepRider(r: Rider, c: Control, track: Track, dt: number, others: Rider[], slideAggression = 1) {
@@ -212,6 +238,24 @@ export function stepRider(r: Rider, c: Control, track: Track, dt: number, others
     r.powerSlide = 0;
     r.slipAngle = 0;
   }
+  // Preload: the stick straight back loads the suspension. AI riders do not use it.
+  if (c.pitch < 0.2) r.pitchHold = false;
+  if (r.human && r.grounded) {
+    const back = c.pitch >= TUNING.preloadStick;
+    if (back && Math.abs(c.steer) < TUNING.preloadSteerLimit) {
+      r.preload = Math.min(1, r.preload + dt / TUNING.preloadCharge);
+      r.preloadReleased = 0;
+    } else if (r.preload > 0) {
+      // Letting the stick go starts the release; steering into a slide instead just drops the load.
+      r.preloadReleased = back ? 0 : r.preload;
+      r.preloadRun = 0;
+      r.preload = 0;
+    } else if (r.preloadReleased > 0) {
+      r.preloadRun += r.speed * dt;
+      if (r.preloadRun > TUNING.preloadReleaseDistance) r.preloadReleased = 0;
+    }
+    if (r.preload > 0) r.compression = Math.max(r.compression, 0.5 * r.preload);
+  }
   const targetSlip = c.steer * TUNING.slideSlipAngle * r.powerSlide * aggression * slideBoost;
   r.slipAngle += (targetSlip - r.slipAngle) * (1 - Math.exp(-dt * 10));
   const off = Math.abs(r.surface.lateral) > track.halfWidth;
@@ -235,11 +279,21 @@ export function stepRider(r: Rider, c: Control, track: Track, dt: number, others
   const look = track.project(r.x + Math.sin(r.heading) * 0.42, r.z + Math.cos(r.heading) * 0.42);
   const slope = (track.height(look.s, look.lateral) - floor) / 0.42;
   if (r.grounded) {
-    const ballistic = prevY + r.vy * dt - TUNING.gravity * dt * dt * 0.5;
+    // A load still held soaks the lip up: the rider pulls the bike down through the lip and the climb after it,
+    // so it flies lower. A load let go just before the lip springs the bike up instead.
+    const launch = r.vy <= 0 ? '' : r.preload > 0 ? 'absorb' : r.preloadReleased > 0 ? 'pop' : '';
+    const pull = TUNING.gravity * (1 + (launch === 'absorb' ? TUNING.preloadAbsorb * r.preload : 0));
+    const ballistic = prevY + r.vy * dt - pull * dt * dt * 0.5;
     if (ballistic > floor + 0.00035 && r.speed > 5) {
       r.grounded = false;
       r.y = ballistic;
-      r.vy -= TUNING.gravity * dt;
+      if (launch === 'pop') r.vy *= 1 + TUNING.preloadPop * r.preloadReleased;
+      r.launch = launch;
+      if (launch === 'absorb') {
+        r.pitchHold = true;
+        r.absorbed = r.preload;
+      }
+      r.vy -= pull * dt;
       r.airTime = dt;
       r.pitchRate = 0;
       r.powerSlide = 0;
@@ -252,11 +306,19 @@ export function stepRider(r: Rider, c: Control, track: Track, dt: number, others
         Math.min(1, dt * 14);
     }
   } else {
-    r.vy -= TUNING.gravity * dt;
+    // Absorbing lasts while the stick stays back and the bike is still climbing.
+    const absorbing = r.launch === 'absorb' && r.pitchHold && r.vy > 0;
+    r.vy -= TUNING.gravity * (absorbing ? 1 + TUNING.preloadAbsorb * r.absorbed : 1) * dt;
     r.y += r.vy * dt;
     r.airTime += dt;
+    // The load is spent once the bike is really flying; a one-frame skip up the face keeps it.
+    if (r.airTime > TUNING.preloadSkip) {
+      r.preload = 0;
+      r.preloadReleased = 0;
+    }
     // Body position rotates the bike; an air-brake tap adds nose-down torque.
-    const targetRate = clamp(c.pitch * 3.6 - c.brake * 1.5, -4, 3.6) - r.pitch * 0.5;
+    const stick = r.pitchHold ? Math.min(c.pitch, 0) : c.pitch;
+    const targetRate = clamp(stick * 3.6 - c.brake * 1.5, -4, 3.6) - r.pitch * 0.5;
     r.pitchRate += (targetRate - r.pitchRate) * Math.min(1, dt * 12);
     r.pitch = clamp(r.pitch + r.pitchRate * dt, -1.1, 1.1);
     r.bestAir = Math.max(r.bestAir, r.y - floor);

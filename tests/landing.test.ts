@@ -108,8 +108,8 @@ test('the bonus stays inside the top speed, on the track, and is not paid for a 
   assert.equal(heavy.landingCue, '', 'a landing that scrubbed speed on impact is not called clean');
 });
 
-test('PHYSICS_VERSION is 3 and best laps from earlier versions are archived', () => {
-  assert.equal(PHYSICS_VERSION, 3);
+test('PHYSICS_VERSION is 4 and best laps from earlier versions are archived', () => {
+  assert.equal(PHYSICS_VERSION, 4);
   const values = new Map<string, string>();
   const storage = {
     getItem: (k: string) => values.get(k) ?? null,

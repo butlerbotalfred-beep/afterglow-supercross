@@ -62,9 +62,12 @@ export function setupScreenHtml() {
 <details>` +
     `<summary>CONTROLS & RIDE SETTINGS <span>+</span></summary><div class="controls"><div>` +
     `<b>KEYBOARD</b><span>W / ↑ Throttle · S / ↓ Brake<br>A D / ← → Steer · Q / Space Nose ` +
-    `down · E Nose up<br>R Recover · Esc / P Pause · M Mute</span></div><div><b>GAMEPAD</b>` +
+    `down · E Nose up<br>On dirt: hold E to preload, let go on the jump face<br>` +
+    `R Recover · Esc / P Pause · M Mute</span></div><div><b>GAMEPAD</b>` +
     `<span>RT Throttle · LT Brake · Left stick Steer<br>In air: left stick ↑ Nose down · ↓ ` +
-    `Nose up<br>On dirt: roll left/right toward ↓ + RT to power slide<br>Steer + LT for a ` +
+    `Nose up<br>On dirt: hold stick ↓ to preload · let go on the jump face to pop higher, ` +
+    `keep holding to absorb and stay low<br>` +
+    `On dirt: roll left/right toward ↓ + RT to power slide<br>Steer + LT for a ` +
     `stronger brake slide<br>B Recover<br>Menu Pause · A Join / Ready</span></div></div>` +
     `<p class="ride-tip">Match the rhythm pace before a jump,` +
     ` then dip the nose to meet the landing. Crashes remount at the wreck. Short track exits ` +

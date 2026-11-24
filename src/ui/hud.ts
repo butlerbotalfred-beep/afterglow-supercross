@@ -82,7 +82,8 @@ export function hudHtml(
           `<div class="rider-notice"></div><div class="test-target"></div><div class="hud-bottom">` +
           `<div class="mini-map"><canvas width="150" height="130"></canvas>` +
           `<span class="sector">FINISH STRAIGHT</span></div><div class="speed"><strong>00</strong>` +
-          `<small>KM/H</small><div class="speed-track"><i></i></div></div></div></section>`,
+          `<small>KM/H</small><div class="speed-track"><i></i></div>` +
+          `<div class="preload"><i></i><em>PRELOAD</em></div></div></div></section>`,
       )
       .join('') +
     (humanCount === 3
@@ -220,6 +221,16 @@ export function jumpNotice(call: JumpCall, speed: number) {
 /** How long CLEAN LANDING or FLAT LANDING stays up. */
 const LANDING_CUE_SECONDS = 1.4;
 /** The notice shown just after a judged landing. */
+/**
+ * The preload meter under the speed: it fills while the stick is held straight back, holds while a release is
+ * still live, and in the air names what the preload did to the jump.
+ */
+export function preloadMeter(r: Pick<Rider, 'grounded' | 'preload' | 'preloadReleased' | 'launch'>) {
+  if (!r.grounded && r.launch) return {share: 1, state: r.launch, label: r.launch === 'pop' ? 'POP' : 'ABSORB'};
+  if (!r.grounded) return {share: 0, state: '', label: 'PRELOAD'};
+  if (r.preloadReleased > 0) return {share: r.preloadReleased, state: 'released', label: 'RELEASED'};
+  return {share: r.preload, state: r.preload >= 1 ? 'full' : r.preload > 0 ? 'charging' : '', label: 'PRELOAD'};
+}
 export function landingNotice(r: Pick<Rider, 'landingCue' | 'landingBonus'>) {
   if (r.landingCue === 'clean') {
     const gained = Math.round(r.landingBonus * 3.6);
@@ -242,6 +253,11 @@ export function updateHud(ctx: HudContext) {
     updateTiming(h, ctx.timing[i], ctx.referenceLap(i), raceTime, r.finished !== null && !practice);
     h.querySelector('.speed strong')!.textContent = String(Math.round(r.speed * 3.6)).padStart(2, '0');
     (h.querySelector('.speed-track i') as HTMLElement).style.width = `${(r.speed / TUNING.maxSpeed) * 100}%`;
+    const load = preloadMeter(r),
+      loadBar = h.querySelector('.preload') as HTMLElement;
+    loadBar.className = `preload ${load.state}`;
+    (loadBar.firstElementChild as HTMLElement).style.width = `${load.share * 100}%`;
+    loadBar.lastElementChild!.textContent = load.label;
     h.querySelector('.sector')!.textContent = track.sector(r.surface.s);
     const call = phase === 'racing' ? jumpCall(track, r.surface.s, JUMP_CALL_REACH) : null;
     const paceNotice = call ? jumpNotice(call, r.speed) : '';

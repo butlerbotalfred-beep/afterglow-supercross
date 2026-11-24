@@ -1,4 +1,5 @@
-// Checks that the lap timing panel does not overlap any other HUD element, in the four layouts the plan names:
+// Checks that the lap timing panel and the preload meter do not overlap any other HUD element, in the four
+// layouts the plan names:
 // 1, 2 and 4 riders at 1280 x 720, and one rider on an 844 x 390 phone screen with touch controls.
 // Needs the dev server (it uses the development hooks) and Playwright:
 //   AFTERGLOW_URL=http://localhost:5173 NODE_PATH=$(npm root -g) node scripts/hud-layout-check.mjs [folder for screenshots]
@@ -66,6 +67,9 @@ const measure = worst => {
       view.querySelector('.rider-notice').innerHTML =
         '<b class="crash-label">CRASH / AWKWARD LANDING</b><small>REMOUNT IN 2.1s · GETTING BACK UP</small>';
       view.querySelector('.test-target').textContent = '★ O12 · TABLETOP · 188 m ahead';
+      const load = view.querySelector('.preload');
+      load.className = 'preload full';
+      load.firstElementChild.style.width = '100%';
     }
   }
   const box = node => {
@@ -93,6 +97,8 @@ const measure = worst => {
     index,
     view: box(view),
     timing: box(view.querySelector('.timing')),
+    preload: box(view.querySelector('.preload')),
+    preloadShown: shown(view.querySelector('.preload')),
     text: view.querySelector('.timing').innerText.replace(/\s+/g, ' '),
     others: [
       ...[
@@ -140,6 +146,18 @@ try {
       )
         problems.push(`${where}: timing panel leaves its view`);
       for (const other of v.others) if (overlaps(v.timing, other)) problems.push(`${where}: overlaps ${other.name}`);
+      // The preload meter sits inside the speed panel, so that panel is the one element it may touch.
+      if (!v.preloadShown) problems.push(`${where}: preload meter is not shown`);
+      if (
+        v.preload.x < v.view.x - 0.5 ||
+        v.preload.right > v.view.right + 0.5 ||
+        v.preload.y < v.view.y - 0.5 ||
+        v.preload.bottom > v.view.bottom + 0.5
+      )
+        problems.push(`${where}: preload meter leaves its view`);
+      for (const other of [...v.others, {name: '.timing', ...v.timing}])
+        if (other.name !== '.speed' && overlaps(v.preload, other))
+          problems.push(`${where}: preload meter overlaps ${other.name}`);
     }
     if (state.laps < 1) problems.push('no lap was completed, so the panel was not showing a lap time');
     failures += problems.length;
@@ -155,6 +173,8 @@ try {
   await browser.close();
 }
 console.log(
-  failures ? `hud-layout-check: ${failures} problem(s)` : 'hud-layout-check: timing panel is clear in all 4 layouts',
+  failures
+    ? `hud-layout-check: ${failures} problem(s)`
+    : 'hud-layout-check: timing panel and preload meter are clear in all 4 layouts',
 );
 process.exit(failures ? 1 : 0);

@@ -1,3 +1,26 @@
+# M1.3 Preload and absorb — 24 November 2026
+
+Holding the stick straight back on the ground now loads the suspension; letting go just before the lip pops the bike higher, and holding through the lip absorbs it. The physics version is 4, so best laps from version 3 are archived.
+
+| Completion box | Result | Evidence |
+|---|---|---|
+| C1 Timed release raises peak height 12 to 18% over no input on a reference tabletop | Pass: +15.5% | `tests/preload.test.ts`, "a timed release raises peak height". Reference: Dusk Valley's opening tabletop at its sweet spot (33.2 m/s). Same +15.5% for a release 0.5, 2, 4 and 5.5 m before takeoff; landing moves from 20.5 m to 24.3 m past the crest. |
+| C2 Holding through the lip lowers peak height 25 to 35% | Pass: −29.0% | Same file, "holding the preload through the lip absorbs it". Landing moves from 20.5 m to 10.0 m past the crest. |
+| C3 Never engages with 35% or more sideways stick; slide tests unchanged | Pass | "preload never engages with 35 percent or more sideways stick": no charge at 0.35, 0.5, 0.8 or 1.0 either side; rolling a full load into a slide drops it; straight back on flat ground gives exactly the same position, speed, heading and slide as no stick. `tests/power-slide.test.ts` is untouched and passes. |
+| C4 Works from keyboard, browser gamepad, Mac Xbox bridge and touch stick | Pass | One test each: "keyboard: holding E preloads", "browser gamepad: left stick straight back preloads", "Mac Xbox bridge: the native controller feed preloads the rider it is assigned to", "touch stick: pulling the stick to nose-up preloads". |
+| C5 Pace gate at 0% matches the current baseline | Pass | `npm run pace-gate -- --tolerance 0`: 10/10 races within 0%, 0 crashes, 0 recoveries. Landing harness and field check (60/60) also match, baselines untouched. "AI riders never preload, pop or absorb" covers W4. |
+| C6 Preload meter overlaps nothing in the four layouts | LAYOUT_RESULT | `scripts/hud-layout-check.mjs` now also checks the preload meter against every other HUD element, with the busiest HUD text and a full bar. Screenshots: `output/m1.3/hud-1-rider.png`, `hud-2-riders.png`, `hud-4-riders.png`, `hud-phone.png`. |
+
+How it works and what to know:
+
+- **Charge.** Stick at least half way back with less than 35% sideways (the same steering value where the power slide begins, so the two cannot overlap) fills the preload in 0.4 s. The bike squats and the PRELOAD bar under the speed fills amber, then bright when full. A part charge gives a part effect.
+- **Timed release.** Letting go starts a 6 m window. If the bike leaves the ground inside it, launch speed rises 7.24% for a full charge, which is 15% more height. A release more than 6 m early does nothing (tested at 6.5, 9 and 14 m).
+- **Where "the lip" is.** A fast bike leaves a face before its crest, about 6 m before on this tabletop at 120 km/h, where the face starts to round off. The 6 m window is counted back from where the bike actually leaves the ground, so the release point is on the lower half of the face, not at the very top. Holding until the crest is an absorb. The play review should say whether that timing feels right.
+- **Absorb.** While the stick stays back through the lip the rider pulls the bike down, 43% extra gravity for a full charge, until the top of the flight or until the stick is let go. The held stick does not lift the nose after an absorb until it has been released once.
+- **How height is measured.** From the point where an untouched bike leaves the face to the top of the flight, so all three jumps share one reference (2.06 m with no input). Across 28 to 40 m/s a release gives +15% to +18% and an absorb −27% to −30%.
+- **Deviation from the plan.** W5 says "raise PHYSICS_VERSION to 3". The speed retune of 22 November already used 3, so this is 4.
+- **Tests.** 181 pass (14 new in `tests/preload.test.ts`).
+
 # Jump callout and takeoff speed meter — 22 November 2026
 
 Michael asked for a signal of what kind of jump is coming and a meter showing the right takeoff speed. Not in build plan v2; added at his request between M1.2 and M1.3. No physics or AI change: the pace gate, landing harness and field check match their baselines untouched.
