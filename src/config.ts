@@ -2,7 +2,7 @@
  * Bump this whenever a change alters how a bike moves for the same inputs. Saved times and replays carry the
  * number, so results from different physics are never compared.
  */
-export const PHYSICS_VERSION = 3;
+export const PHYSICS_VERSION = 4;
 /** Metres, seconds, radians. See README for handling/camera tuning. */
 export const TUNING = {
   step: 1 / 120,
@@ -49,6 +49,24 @@ export const TUNING = {
    * announced, but a nose-high bike still loses a little speed on it.
    */
   landingJudgeAir: 0.3,
+  /**
+   * Preload (M1.3): the stick held straight back on the ground loads the suspension over preloadCharge seconds.
+   * "Straight back" is at least preloadStick of the way back with less than preloadSteerLimit sideways, which is
+   * where the power slide starts, so the two never overlap.
+   */
+  preloadCharge: 0.4,
+  preloadStick: 0.5,
+  preloadSteerLimit: 0.35,
+  /** Letting go within this many metres before leaving the ground turns the load into extra lift. */
+  preloadReleaseDistance: 6,
+  /** Share of launch speed a full, well-timed release adds: about 15% more height. */
+  preloadPop: 0.0724,
+  /** Extra pull on the bike while a full preload is held through the lip and the climb, in multiples of gravity. */
+  preloadAbsorb: 0.43,
+  /** A load smaller than this at the lip (the stick back for under 0.2 s) does not absorb or hold the nose. */
+  preloadAbsorbMin: 0.5,
+  /** Air shorter than this is the bike skipping up the face, not a jump: the load survives it. */
+  preloadSkip: 0.05,
   crashDuration: 2.1,
   brakeSlideBoost: 0.65,
   brakeNoseDip: 0.065,

@@ -512,6 +512,54 @@ footer i {
   background: var(--player);
   transition: width 0.1s;
 }
+.preload {
+  position: relative;
+  height: 12px;
+  margin-top: 5px;
+  background: #ffffff27;
+  overflow: hidden;
+}
+.preload i {
+  display: block;
+  height: 100%;
+  background: #f2a53c;
+}
+.preload em {
+  position: absolute;
+  inset: 0;
+  font:
+    800 9px/12px 'Barlow Condensed',
+    Impact,
+    sans-serif;
+  letter-spacing: 1.5px;
+  text-align: center;
+  color: #fffc;
+}
+.preload.full i,
+.preload.released i {
+  background: #ffd75e;
+  box-shadow: 0 0 10px #ffd75e;
+}
+.preload.full em,
+.preload.released em,
+.preload.pop em {
+  color: #10151c;
+}
+.preload.pop i {
+  background: #39e36b;
+}
+.preload.absorb i {
+  background: #42c5ef;
+}
+.compact .preload,
+.iphone-session .preload {
+  height: 7px;
+  margin-top: 3px;
+}
+.compact .preload em,
+.iphone-session .preload em {
+  display: none;
+}
 .rider-notice {
   position: absolute;
   top: 29%;
