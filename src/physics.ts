@@ -171,6 +171,7 @@ function clearPreload(r: Rider) {
   r.preloadReleased = 0;
   r.preloadRun = 0;
   r.pitchHold = false;
+  r.launch = '';
 }
 export function crash(r: Rider, reason: string, side = 1) {
   if (r.crashTime > 0 || r.recovery > 0) return;
@@ -281,7 +282,9 @@ export function stepRider(r: Rider, c: Control, track: Track, dt: number, others
   if (r.grounded) {
     // A load still held soaks the lip up: the rider pulls the bike down through the lip and the climb after it,
     // so it flies lower. A load let go just before the lip springs the bike up instead.
-    const launch = r.vy <= 0 ? '' : r.preload > 0 ? 'absorb' : r.preloadReleased > 0 ? 'pop' : '';
+    // A stick pulled back only an instant before the lip is a nose-up input, not an absorb.
+    const launch =
+      r.vy <= 0 ? '' : r.preload >= TUNING.preloadAbsorbMin ? 'absorb' : r.preloadReleased > 0 ? 'pop' : '';
     const pull = TUNING.gravity * (1 + (launch === 'absorb' ? TUNING.preloadAbsorb * r.preload : 0));
     const ballistic = prevY + r.vy * dt - pull * dt * dt * 0.5;
     if (ballistic > floor + 0.00035 && r.speed > 5) {

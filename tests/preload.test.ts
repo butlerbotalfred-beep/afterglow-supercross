@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {TUNING} from '../src/config.ts';
 import {COURSES} from '../src/courses.ts';
 import {mapGamepad, mapKeyboard, neutralControl, routeControls, type Control} from '../src/input.ts';
-import {idleControl, makeRider, npcControl, stepRider} from '../src/physics.ts';
+import {crash, idleControl, makeRider, npcControl, stepRider} from '../src/physics.ts';
 import {createProgress} from '../src/race.ts';
 import {jumpCall} from '../src/takeoff.ts';
 import {TouchInput} from '../src/touch-input.ts';
@@ -84,7 +84,7 @@ test('the reference jump is a tabletop the bike really flies', () => {
 });
 
 test('a timed release raises peak height 12 to 18 percent over no input', () => {
-  for (const release of [0.5, 2, 4, 5.5]) {
+  for (const release of [0.1, 0.5, 2, 4, 5.5]) {
     const pop = timed(release);
     const gain = height(pop) / height(none) - 1;
     assert.equal(pop.launch, 'pop', `released ${release} m before takeoff`);
@@ -120,8 +120,8 @@ test('pop and absorb keep their size across takeoff speeds', () => {
     const rise = (j: {apex: number}) => (j.apex - plain.leftY) / (plain.apex - plain.leftY);
     const pop = jump(toCrest => (toCrest < 25 && toCrest > plain.left + 2 ? 1 : 0), speed);
     const absorb = held(speed);
-    assert.ok(rise(pop) > 1.1 && rise(pop) < 1.2, `${speed} m/s pop ${rise(pop)}`);
-    assert.ok(rise(absorb) > 0.6 && rise(absorb) < 0.8, `${speed} m/s absorb ${rise(absorb)}`);
+    assert.ok(rise(pop) > 1.12 && rise(pop) < 1.19, `${speed} m/s pop ${rise(pop)}`);
+    assert.ok(rise(absorb) > 0.68 && rise(absorb) < 0.75, `${speed} m/s absorb ${rise(absorb)}`);
     assert.ok(!pop.crashed && !absorb.crashed);
   }
 });
@@ -250,6 +250,19 @@ test('crashes and recoveries clear the preload', () => {
   for (let i = 0; i < 60; i++) stepRider(r, {...neutralControl(), throttle: 1, pitch: 1}, flat, TUNING.step, [r]);
   stepRider(r, {...idleControl(), reset: true}, flat, TUNING.step, [r]);
   assert.equal(r.preload, 0);
+  const fallen = place(flat, 100, 16);
+  Object.assign(fallen, {preload: 1, preloadReleased: 0.7, pitchHold: true, launch: 'absorb', grounded: false});
+  crash(fallen, 'HARD LANDING', 1);
+  assert.deepEqual([fallen.preload, fallen.preloadReleased, fallen.pitchHold, fallen.launch], [0, 0, false, '']);
+  assert.equal(preloadMeter(fallen).share, 0, 'the meter does not keep showing the last jump through a crash');
+});
+
+test('a quick nose-up press just before the lip is not an absorb', () => {
+  // E pressed 0.1 s before takeoff and held into the air: the jump keeps its height and the nose comes up.
+  const late = jump(toCrest => (toCrest < none.left + reference.sweet * 0.1 ? 1 : 0));
+  assert.equal(late.launch, '');
+  assert.ok(Math.abs(height(late) / height(none) - 1) < 0.01, `${height(late) / height(none)}`);
+  assert.ok(late.pitch > 0.6 || late.crashed, `the held stick lifts the nose: ${late.pitch}`);
 });
 
 test('the preload meter fills, holds a live release, and names the result in the air', () => {

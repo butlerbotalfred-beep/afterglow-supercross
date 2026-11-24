@@ -63,6 +63,8 @@ export const TUNING = {
   preloadPop: 0.0724,
   /** Extra pull on the bike while a full preload is held through the lip and the climb, in multiples of gravity. */
   preloadAbsorb: 0.43,
+  /** A load smaller than this at the lip (the stick back for under 0.2 s) does not absorb or hold the nose. */
+  preloadAbsorbMin: 0.5,
   /** Air shorter than this is the bike skipping up the face, not a jump: the load survives it. */
   preloadSkip: 0.05,
   crashDuration: 2.1,

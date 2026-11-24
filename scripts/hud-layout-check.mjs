@@ -99,6 +99,7 @@ const measure = worst => {
     timing: box(view.querySelector('.timing')),
     preload: box(view.querySelector('.preload')),
     preloadShown: shown(view.querySelector('.preload')),
+    speed: box(view.querySelector('.speed')),
     text: view.querySelector('.timing').innerText.replace(/\s+/g, ' '),
     others: [
       ...[
@@ -158,6 +159,10 @@ try {
       for (const other of [...v.others, {name: '.timing', ...v.timing}])
         if (other.name !== '.speed' && overlaps(v.preload, other))
           problems.push(`${where}: preload meter overlaps ${other.name}`);
+      // The meter makes the speed panel taller, so the panel is checked as well.
+      for (const other of v.others)
+        if (other.name !== '.speed' && overlaps(v.speed, other))
+          problems.push(`${where}: speed panel overlaps ${other.name}`);
     }
     if (state.laps < 1) problems.push('no lap was completed, so the panel was not showing a lap time');
     failures += problems.length;
