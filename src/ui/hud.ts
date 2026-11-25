@@ -284,9 +284,11 @@ export function updateHud(ctx: HudContext) {
               : r.progress.wrongWay
                 ? '<b>WRONG WAY</b>'
                 : !r.grounded && r.airTime > 0.2
-                  ? `<b class="air-label">${r.pitch < -0.18 ? 'NOSE DOWN' : 'AIR TIME'}</b>` +
-                    `<small>${airHint}` +
-                    `</small>`
+                  ? r.scrub && Math.abs(r.airLean) > TUNING.airLeanLimit
+                    ? `<b class="air-label">SCRUB</b><small>CENTER THE STICK BEFORE YOU LAND</small>`
+                    : `<b class="air-label">${r.pitch < -0.18 ? 'NOSE DOWN' : 'AIR TIME'}</b>` +
+                      `<small>${airHint}` +
+                      `</small>`
                   : r.powerSlide > 0.18
                     ? `<b class="pace-label">${r.brake > 0.1 ? 'BRAKE SLIDE' : 'POWER SLIDE'}</b>` +
                       `<small>CENTER THE STICK TO REGAIN GRIP</small>`

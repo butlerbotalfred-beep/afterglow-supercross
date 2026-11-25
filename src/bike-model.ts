@@ -18,6 +18,8 @@ export interface BikeAnimationState {
   crashAge?: number;
   crashSide?: number;
   crashed?: boolean;
+  /** Sideways lay-over in the air from a scrub or whip, radians. */
+  airLean?: number;
 }
 
 /** Metres; +Z is forward. The outer root belongs to the vehicle simulation. */
@@ -477,7 +479,10 @@ export function createBike(
       (1 - THREE.MathUtils.smoothstep(state.groundDistance || 0, 0.05, 0.3));
     const suspension = THREE.MathUtils.clamp(state.compression, -0.2, 1);
     const travel = suspension * 0.1;
-    motion.rotation.z = -state.lean * (1 - tumble) + crashSide * tumble * 1.42;
+    // Scrub and whip: the bike lays over and the tail swings out, while the rider stays more upright over it.
+    const laid = (state.airLean || 0) * (1 - tumble);
+    motion.rotation.z = -(state.lean + laid) * (1 - tumble) + crashSide * tumble * 1.42;
+    motion.rotation.y = laid * 0.75;
     motion.rotation.x = -state.pitch * (1 - tumble) - tumble * 0.14;
     body.position.y = -travel;
     fork.position.y = -travel * 0.6 - groundBrake * 0.085;
@@ -492,16 +497,16 @@ export function createBike(
     const airborne = THREE.MathUtils.smoothstep(state.groundDistance || 0, 0.15, 1.1);
     const crouch = travel * 1.1 + Math.max(0, state.throttle) * 0.025 - airborne * 0.085;
     torso.position.set(
-      state.lean * 0.12,
+      state.lean * 0.12 - laid * 0.2,
       vibration - crouch,
       0.035 * state.throttle - 0.045 * (state.brake || 0) + slide * 0.14,
     );
     head.position.set(
-      state.lean * 0.1,
+      state.lean * 0.1 - laid * 0.26,
       1.65 + vibration - crouch,
       0.18 + 0.05 * state.throttle - 0.035 * (state.brake || 0) + slide * 0.16,
     );
-    head.rotation.set(state.pitch * 0.3, state.steer * 0.22, state.lean * 0.28);
+    head.rotation.set(state.pitch * 0.3, state.steer * 0.22 - laid * 0.5, state.lean * 0.28 + laid * 0.6);
     for (const arm of arms) {
       const side = arm.side;
       const shoulder = new THREE.Vector3(side * 0.225 + torso.position.x, 1.48 + vibration - crouch, 0.055);
