@@ -145,6 +145,11 @@ test('landing with air lean above 0.35 crashes; at or below 0.35 lands', () => {
   // In a real flight: holding the scrub all the way down crashes, centring the stick in time lands.
   const held = scrub(9);
   assert.ok(held.crashed && held.reason === 'SCRUB NOT RECOVERED', held.reason);
+  // At top speed the held stick also dives the nose well past the landing slope: it is still called a scrub crash.
+  for (const pitch of [-1, -0.5]) {
+    const fast = jump(() => ({steer: 1, pitch}), {speed: TUNING.maxSpeed});
+    assert.ok(fast.crashed && fast.reason === 'SCRUB NOT RECOVERED', `${pitch}: ${fast.reason}`);
+  }
   const recovered = scrub(0.3);
   assert.ok(!recovered.crashed && Math.abs(recovered.r.airLean) <= TUNING.airLeanLimit);
   // Easing off the forward stick alone is enough: sideways without forward is only ever a whip.
