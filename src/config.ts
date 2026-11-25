@@ -68,14 +68,17 @@ export const TUNING = {
   /** Air shorter than this is the bike skipping up the face, not a jump: the load survives it. */
   preloadSkip: 0.05,
   /**
-   * Scrub (M1.4): within scrubWindow seconds of takeoff, the stick at least scrubSteer sideways and scrubForward
-   * forward lays the bike over and cuts its upward speed, so it flies lower and lands sooner.
+   * Scrub (M1.4): within scrubWindow seconds of takeoff, a flick of the stick to at least 80% sideways and 50%
+   * forward lays the bike over and cuts its upward speed, so it flies lower and lands sooner. The two thresholds
+   * are those stick positions after the 16% dead zone, so a round gamepad stick can reach both at once.
    */
   scrubWindow: 0.25,
-  scrubSteer: 0.8,
-  scrubForward: 0.5,
-  /** Share of upward speed a full scrub takes away: about 22% less height. */
-  scrubCut: 0.11,
+  scrubSteer: 0.76,
+  scrubForward: 0.4,
+  /** Upward speed below which a takeoff is a bump, not a jump, and cannot be scrubbed. */
+  scrubMinRise: 3,
+  /** Extra pull on a scrubbing bike for the rest of its climb, in multiples of gravity: about 23% less height. */
+  scrubPull: 0.4,
   /** How far a scrub lays the bike over, radians, while the stick stays sideways. */
   scrubLean: 0.8,
   /** Touching down with more air lean than this is a SCRUB NOT RECOVERED crash. A whip never goes past it. */

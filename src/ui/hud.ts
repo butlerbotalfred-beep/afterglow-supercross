@@ -284,7 +284,7 @@ export function updateHud(ctx: HudContext) {
               : r.progress.wrongWay
                 ? '<b>WRONG WAY</b>'
                 : !r.grounded && r.airTime > 0.2
-                  ? r.scrub
+                  ? r.scrub && Math.abs(r.airLean) > TUNING.airLeanLimit
                     ? `<b class="air-label">SCRUB</b><small>CENTER THE STICK BEFORE YOU LAND</small>`
                     : `<b class="air-label">${r.pitch < -0.18 ? 'NOSE DOWN' : 'AIR TIME'}</b>` +
                       `<small>${airHint}` +

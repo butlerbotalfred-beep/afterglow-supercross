@@ -65,6 +65,8 @@ export interface Rider {
   airLean: number;
   /** A scrub was started on this flight. */
   scrub: boolean;
+  /** The stick has been off the side since takeoff, so a sideways flick now counts as a scrub. */
+  scrubArmed: boolean;
 }
 export const idleControl = (): Control => ({throttle: 0, brake: 0, steer: 0, pitch: 0, reset: false, pause: false});
 export function makeRider(track: Track, id: number, human: boolean, color: number, device?: Device): Rider {
@@ -120,6 +122,7 @@ export function makeRider(track: Track, id: number, human: boolean, color: numbe
     absorbed: 0,
     airLean: 0,
     scrub: false,
+    scrubArmed: false,
   };
 }
 export function recover(r: Rider, track: Track, others: Rider[]) {
@@ -180,6 +183,7 @@ function clearPreload(r: Rider) {
   r.launch = '';
   r.airLean = 0;
   r.scrub = false;
+  r.scrubArmed = false;
 }
 export function crash(r: Rider, reason: string, side = 1) {
   if (r.crashTime > 0 || r.recovery > 0) return;
@@ -308,6 +312,7 @@ export function stepRider(r: Rider, c: Control, track: Track, dt: number, others
       }
       r.vy -= pull * dt;
       r.airTime = dt;
+      r.scrubArmed = Math.abs(c.steer) < TUNING.scrubSteer;
       r.pitchRate = 0;
       r.powerSlide = 0;
       r.slipAngle = 0;
@@ -322,7 +327,9 @@ export function stepRider(r: Rider, c: Control, track: Track, dt: number, others
   } else {
     // Absorbing lasts while the stick stays back and the bike is still climbing.
     const absorbing = r.launch === 'absorb' && r.pitchHold && r.vy > 0;
-    r.vy -= TUNING.gravity * (absorbing ? 1 + TUNING.preloadAbsorb * r.absorbed : 1) * dt;
+    // A scrub keeps the bike low the same way: extra pull for the rest of the climb.
+    const pull = (absorbing ? TUNING.preloadAbsorb * r.absorbed : 0) + (r.scrub && r.vy > 0 ? TUNING.scrubPull : 0);
+    r.vy -= TUNING.gravity * (1 + pull) * dt;
     r.y += r.vy * dt;
     r.airTime += dt;
     // The load is spent once the bike is really flying; a one-frame skip up the face keeps it.
@@ -339,12 +346,25 @@ export function stepRider(r: Rider, c: Control, track: Track, dt: number, others
     if (r.human) {
       // Scrub and whip. AI riders do neither.
       const side = Math.abs(c.steer) >= TUNING.scrubSteer ? Math.sign(c.steer) : 0;
-      if (!r.scrub && side && c.pitch <= -TUNING.scrubForward && r.airTime <= TUNING.scrubWindow && r.vy > 0) {
+      const forward = c.pitch <= -TUNING.scrubForward;
+      // The flick has to arrive in the air: a stick already hard over from steering through the lip is not one.
+      if (!side) r.scrubArmed = true;
+      // A hop over a bump or a kerb is not a jump: nothing starts until the bike is really flying upward.
+      const flying = r.airTime >= TUNING.preloadSkip;
+      if (
+        !r.scrub &&
+        r.scrubArmed &&
+        side &&
+        forward &&
+        flying &&
+        r.airTime <= TUNING.scrubWindow &&
+        r.vy >= TUNING.scrubMinRise
+      ) {
         r.scrub = true;
-        r.vy *= 1 - TUNING.scrubCut * clamp((Math.abs(c.steer) - 0.6) / 0.4, 0, 1);
       }
       // A whip is the same lay-over without the scrub: for show only, and never past the landing limit.
-      const target = side * (r.scrub ? TUNING.scrubLean : TUNING.airLeanLimit);
+      // A scrub stays laid over only while the stick is still forward and sideways.
+      const target = flying ? side * (r.scrub && forward ? TUNING.scrubLean : TUNING.airLeanLimit) : 0;
       const rate = Math.abs(target) > Math.abs(r.airLean) ? TUNING.airLeanRate : TUNING.airLeanRecover;
       r.airLean += clamp(target - r.airLean, -rate * dt, rate * dt);
     }
@@ -362,7 +382,7 @@ export function stepRider(r: Rider, c: Control, track: Track, dt: number, others
         r.vy = 0;
         r.grounded = true;
         updateProgress(r.progress, r.surface.s, r.surface.lateral, track.length, track.halfWidth + 0.45, dt);
-        const side = laidOver ? r.airLean : r.lean || r.steer || (r.id % 2) * 2 - 1;
+        const side = laidOver ? -r.airLean : r.lean || r.steer || (r.id % 2) * 2 - 1;
         const reason = !badLanding
           ? 'SCRUB NOT RECOVERED'
           : impact > TUNING.landingCrashImpact
