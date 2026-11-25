@@ -63,10 +63,13 @@ export function setupScreenHtml() {
     `<summary>CONTROLS & RIDE SETTINGS <span>+</span></summary><div class="controls"><div>` +
     `<b>KEYBOARD</b><span>W / ↑ Throttle · S / ↓ Brake<br>A D / ← → Steer · Q / Space Nose ` +
     `down · E Nose up<br>On dirt: hold E to preload, let go on the jump face<br>` +
+    `Off the lip: A or D with Q to scrub low, A or D alone to whip<br>` +
     `R Recover · Esc / P Pause · M Mute</span></div><div><b>GAMEPAD</b>` +
     `<span>RT Throttle · LT Brake · Left stick Steer<br>In air: left stick ↑ Nose down · ↓ ` +
     `Nose up<br>On dirt: hold stick ↓ to preload · let go on the jump face to pop higher, ` +
     `keep holding to absorb and stay low<br>` +
+    `Off the lip: stick forward and fully to one side to scrub low, then centre it before landing · ` +
+    `fully to one side alone to whip<br>` +
     `On dirt: roll left/right toward ↓ + RT to power slide<br>Steer + LT for a ` +
     `stronger brake slide<br>B Recover<br>Menu Pause · A Join / Ready</span></div></div>` +
     `<p class="ride-tip">Match the rhythm pace before a jump,` +

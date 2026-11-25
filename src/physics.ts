@@ -61,6 +61,10 @@ export interface Rider {
   pitchHold: boolean;
   /** The load that was held through the lip, which sets how hard the absorb pulls. */
   absorbed: number;
+  /** Sideways lay-over in the air from a scrub or a whip, radians, signed like steer. Separate from cornering lean. */
+  airLean: number;
+  /** A scrub was started on this flight. */
+  scrub: boolean;
 }
 export const idleControl = (): Control => ({throttle: 0, brake: 0, steer: 0, pitch: 0, reset: false, pause: false});
 export function makeRider(track: Track, id: number, human: boolean, color: number, device?: Device): Rider {
@@ -114,6 +118,8 @@ export function makeRider(track: Track, id: number, human: boolean, color: numbe
     launch: '',
     pitchHold: false,
     absorbed: 0,
+    airLean: 0,
+    scrub: false,
   };
 }
 export function recover(r: Rider, track: Track, others: Rider[]) {
@@ -172,6 +178,8 @@ function clearPreload(r: Rider) {
   r.preloadRun = 0;
   r.pitchHold = false;
   r.launch = '';
+  r.airLean = 0;
+  r.scrub = false;
 }
 export function crash(r: Rider, reason: string, side = 1) {
   if (r.crashTime > 0 || r.recovery > 0) return;
@@ -269,7 +277,9 @@ export function stepRider(r: Rider, c: Control, track: Track, dt: number, others
     : -0.08 * r.speed;
   r.speed = clamp(r.speed + accel * dt, 0, TUNING.maxSpeed);
   const steerPower = TUNING.turnRate * (0.18 + 0.82 * clamp(r.speed / 6, 0, 1)) * (r.grounded ? 1 : 0.36);
-  r.heading += c.steer * steerPower * (1 + TUNING.slideYawBoost * r.powerSlide * aggression * slideBoost) * dt;
+  // In a scrub the sideways stick lays the bike over instead of steering it.
+  if (!r.scrub)
+    r.heading += c.steer * steerPower * (1 + TUNING.slideYawBoost * r.powerSlide * aggression * slideBoost) * dt;
   r.lean += (c.steer * clamp(r.speed / 22, 0, 1) * (0.52 + 0.12 * r.powerSlide) - r.lean) * Math.min(1, dt * 9);
   const prevY = r.y;
   const travelHeading = r.heading - r.slipAngle;
@@ -303,6 +313,7 @@ export function stepRider(r: Rider, c: Control, track: Track, dt: number, others
       r.slipAngle = 0;
     } else {
       r.y = floor;
+      r.airLean *= Math.exp(-dt * 14);
       r.vy = clamp((floor - prevY) / dt, -20, 20);
       r.pitch +=
         (Math.atan(slope) - TUNING.slideNoseDip * r.powerSlide - TUNING.brakeNoseDip * brake * slideSpeed - r.pitch) *
@@ -325,21 +336,39 @@ export function stepRider(r: Rider, c: Control, track: Track, dt: number, others
     r.pitchRate += (targetRate - r.pitchRate) * Math.min(1, dt * 12);
     r.pitch = clamp(r.pitch + r.pitchRate * dt, -1.1, 1.1);
     r.bestAir = Math.max(r.bestAir, r.y - floor);
+    if (r.human) {
+      // Scrub and whip. AI riders do neither.
+      const side = Math.abs(c.steer) >= TUNING.scrubSteer ? Math.sign(c.steer) : 0;
+      if (!r.scrub && side && c.pitch <= -TUNING.scrubForward && r.airTime <= TUNING.scrubWindow && r.vy > 0) {
+        r.scrub = true;
+        r.vy *= 1 - TUNING.scrubCut * clamp((Math.abs(c.steer) - 0.6) / 0.4, 0, 1);
+      }
+      // A whip is the same lay-over without the scrub: for show only, and never past the landing limit.
+      const target = side * (r.scrub ? TUNING.scrubLean : TUNING.airLeanLimit);
+      const rate = Math.abs(target) > Math.abs(r.airLean) ? TUNING.airLeanRate : TUNING.airLeanRecover;
+      r.airLean += clamp(target - r.airLean, -rate * dt, rate * dt);
+    }
     if (r.y <= floor) {
       const impact = Math.abs(r.vy - r.speed * slope) / Math.sqrt(1 + slope * slope),
         alignment = Math.abs(angleDelta(r.pitch, Math.atan(slope)));
       r.lastLanding = impact;
       r.compression = clamp(impact * 0.035, 0.04, 1);
-      if (impact > TUNING.landingCrashImpact || (alignment > TUNING.landingCrashAngle && impact > 5 && r.speed > 7)) {
+      // A scrub has to be brought back upright before the wheels touch.
+      const laidOver = r.scrub && Math.abs(r.airLean) > TUNING.airLeanLimit;
+      const badLanding =
+        impact > TUNING.landingCrashImpact || (alignment > TUNING.landingCrashAngle && impact > 5 && r.speed > 7);
+      if (laidOver || badLanding) {
         r.y = floor;
         r.vy = 0;
         r.grounded = true;
         updateProgress(r.progress, r.surface.s, r.surface.lateral, track.length, track.halfWidth + 0.45, dt);
-        crash(
-          r,
-          impact > TUNING.landingCrashImpact ? 'HARD LANDING' : 'AWKWARD LANDING',
-          r.lean || r.steer || (r.id % 2) * 2 - 1,
-        );
+        const side = laidOver ? r.airLean : r.lean || r.steer || (r.id % 2) * 2 - 1;
+        const reason = !badLanding
+          ? 'SCRUB NOT RECOVERED'
+          : impact > TUNING.landingCrashImpact
+            ? 'HARD LANDING'
+            : 'AWKWARD LANDING';
+        crash(r, reason, side);
         return;
       }
       // Matching the bike's pitch to the landing slope keeps speed; a flat or nose-high landing scrubs it.
@@ -368,6 +397,7 @@ export function stepRider(r: Rider, c: Control, track: Track, dt: number, others
       }
       r.y = floor;
       r.grounded = true;
+      r.scrub = false;
       r.vy = r.speed * slope;
       r.airTime = 0;
       r.pitchRate = 0;

@@ -2,7 +2,7 @@
  * Bump this whenever a change alters how a bike moves for the same inputs. Saved times and replays carry the
  * number, so results from different physics are never compared.
  */
-export const PHYSICS_VERSION = 4;
+export const PHYSICS_VERSION = 5;
 /** Metres, seconds, radians. See README for handling/camera tuning. */
 export const TUNING = {
   step: 1 / 120,
@@ -67,6 +67,22 @@ export const TUNING = {
   preloadAbsorbMin: 0.5,
   /** Air shorter than this is the bike skipping up the face, not a jump: the load survives it. */
   preloadSkip: 0.05,
+  /**
+   * Scrub (M1.4): within scrubWindow seconds of takeoff, the stick at least scrubSteer sideways and scrubForward
+   * forward lays the bike over and cuts its upward speed, so it flies lower and lands sooner.
+   */
+  scrubWindow: 0.25,
+  scrubSteer: 0.8,
+  scrubForward: 0.5,
+  /** Share of upward speed a full scrub takes away: about 22% less height. */
+  scrubCut: 0.11,
+  /** How far a scrub lays the bike over, radians, while the stick stays sideways. */
+  scrubLean: 0.8,
+  /** Touching down with more air lean than this is a SCRUB NOT RECOVERED crash. A whip never goes past it. */
+  airLeanLimit: 0.35,
+  /** Radians per second the bike lays over, and comes back once the stick is centred. */
+  airLeanRate: 5,
+  airLeanRecover: 3.2,
   crashDuration: 2.1,
   brakeSlideBoost: 0.65,
   brakeNoseDip: 0.065,

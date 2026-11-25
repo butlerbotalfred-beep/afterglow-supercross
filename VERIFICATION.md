@@ -1,3 +1,26 @@
+# M1.4 Scrub and whip — 25 November 2026
+
+A forward-and-sideways flick just off the lip now scrubs the jump: the bike lays over and flies lower. A sideways flick alone is a whip, for show. The physics version is 5, so best laps from version 4 are archived.
+
+| Completion box | Result | Evidence |
+|---|---|---|
+| C1 A full scrub lowers peak height 20 to 25% and shortens air time | Pass: −23.5%, air 0.85 s to 0.55 s | `tests/scrub.test.ts`, "a full scrub lowers peak height". Reference: Dusk Valley's opening tabletop at 33.2 m/s, both sides. Landing moves from 20.5 m to 13.4 m past the crest. Height is measured as in M1.3, from where an untouched bike leaves the face. |
+| C2 Landing with air lean above 0.35 crashes; at or below 0.35 lands | Pass | "landing with air lean above 0.35 crashes": 0.35 and −0.35 land, 0.351 and −0.351 crash with SCRUB NOT RECOVERED. In a full flight, a scrub held to the ground crashes and one centred in time lands. |
+| C3 A whip leaves path, speed and landing identical to the same jump without it | Pass | "a whip leaves path, speed and landing identical": position, speed, heading, pitch and vertical speed are equal at every physics step, and the landing point, landing cue and exit speed are equal, for three different flicks. See the note on what "without it" means below. |
+| C4 Full sideways stick without forward stick never starts a scrub on any jump | Pass | "full sideways stick without forward stick never starts a scrub": every jump lane of all five circuits, four stick positions each (left, right, 49% forward, and back), more than 100 passes, no scrub and never more than 0.35 lean. |
+| C5 Pace gate at 0% matches | Pass | `npm run pace-gate -- --tolerance 0`: 10/10 races within 0%, 0 crashes, 0 recoveries. Landing harness and field check (60/60) also match, baselines untouched. "AI riders never scrub or whip". |
+| C6 Scrub works from keyboard, browser gamepad, Mac Xbox bridge and touch stick | Pass | One test each: "keyboard: A or D with Q scrubs", "browser gamepad: stick forward and to the side scrubs", "Mac Xbox bridge: the native controller feed scrubs the rider it is assigned to", "touch stick: sideways with the stick forward, or with NOSE DOWN held, scrubs". |
+
+How it works and what to know:
+
+- **Gesture.** Within 0.25 s of takeoff, while still climbing: stick at least 80% sideways and at least 50% forward. Upward speed is cut 11% at full sideways stick and half that at 80%. A gesture after the window is only a whip.
+- **Lay-over and recovery.** While the stick stays sideways the bike lays over to 0.8 radians at 5 radians a second. Centred, it comes back at 3.2 radians a second, so getting from full lay-over to under the 0.35 limit takes 0.14 s. On the reference tabletop the scrubbed flight lasts 0.55 s: letting go by 0.40 s lands, holding to 0.45 s crashes.
+- **No steering in a scrub.** The sideways stick normally turns the bike a little in the air. During a scrub it does not, so the bike lands pointing where it took off.
+- **Whip, and what C3 compares.** The whip is a lay-over of at most 0.35 radians that the physics never reads. The test rides the same jump with the same stick twice, once with the whip switched off, and the two runs are identical. A sideways stick in the air still turns the bike slightly, as it did before this milestone; that is not part of the whip and is unchanged.
+- **Plan wording.** W2 says the scrub "cuts vertical speed by up to 25%". An 11% cut is what gives the 20 to 25% lower peak that C1 asks for; a 25% cut would be 44% lower. W6 says "raise PHYSICS_VERSION to 4"; it is 5 because the retune and M1.3 used 3 and 4.
+- **Animation and review shot.** `src/bike-model.ts` rolls the bike, swings the tail out and keeps the rider more upright over it. `?review=1` has a Scrub button next to Jump. Screenshot: `output/m1.4/review-scrub.png`.
+- **Tests.** 193 pass (11 new in `tests/scrub.test.ts`).
+
 # M1.3 Preload and absorb — 24 November 2026
 
 Holding the stick straight back on the ground now loads the suspension; letting go just before the lip pops the bike higher, and holding through the lip absorbs it. The physics version is 4, so best laps from version 3 are archived.

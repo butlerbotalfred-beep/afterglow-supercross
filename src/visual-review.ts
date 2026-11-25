@@ -4,7 +4,7 @@ export function mountVisualReview(actions: {shot: (kind: string) => void; run: (
   panel.id = 'visual-review';
   panel.innerHTML =
     '<strong>ART REVIEW · SIMULATED RIDERS</strong><div>' +
-    ['Grid', 'Jump', 'Berm', 'Rhythm', 'Four views', 'Crash landing', 'Rider contact']
+    ['Grid', 'Jump', 'Scrub', 'Berm', 'Rhythm', 'Four views', 'Crash landing', 'Rider contact']
       .map(name => `<button>${name}</button>`)
       .join('') +
     '<button>Run / freeze</button></div><output></output>';

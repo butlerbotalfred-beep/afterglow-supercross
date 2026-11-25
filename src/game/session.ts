@@ -348,6 +348,7 @@ function syncModels(dt: number) {
         groundDistance: Math.max(0, r.y - track.height(r.surface.s, r.surface.lateral)),
         crashed: r.crashTime > 0,
         crashAge: r.crashAge,
+        airLean: r.airLean,
         crashSide: r.crashSide,
       },
       dt,
@@ -828,6 +829,8 @@ if (reviewEnabled) {
           )
             break;
         }
+        // The Scrub shot is the Jump shot with the lead rider laid over as a full scrub leaves the bike.
+        if (kind === 'Scrub') Object.assign(session.riders[0], {scrub: true, airLean: TUNING.scrubLean});
         session.reviewFrozen = true;
         syncModels(0);
         updateHud(hudContext());
