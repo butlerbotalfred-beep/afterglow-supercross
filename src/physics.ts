@@ -383,7 +383,8 @@ export function stepRider(r: Rider, c: Control, track: Track, dt: number, others
         r.grounded = true;
         updateProgress(r.progress, r.surface.s, r.surface.lateral, track.length, track.halfWidth + 0.45, dt);
         const side = laidOver ? -r.airLean : r.lean || r.steer || (r.id % 2) * 2 - 1;
-        const reason = !badLanding
+        // A scrub still laid over is named first: holding it also dives the nose, which would read as awkward.
+        const reason = laidOver
           ? 'SCRUB NOT RECOVERED'
           : impact > TUNING.landingCrashImpact
             ? 'HARD LANDING'
