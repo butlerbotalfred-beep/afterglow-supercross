@@ -208,7 +208,6 @@ export class RaceSession {
       if (!this.practice && r.finished === null && r.progress.lap >= this.lapCount) {
         r.finished = this.raceTime;
         if (r.human && this.firstFinish === null) this.firstFinish = this.raceTime;
-        screen.cue(900, 0.25);
       }
     }
     collide(riders, track);

@@ -4,6 +4,7 @@
 // save exists yet and are never changed or deleted, so an older build still finds its data.
 import {PHYSICS_VERSION} from './config';
 import type {CourseId} from './courses';
+import {DEFAULT_VOLUMES, normalizeVolumes, type Volumes} from './audio';
 import {loadSlideAggression, normalizeSlideAggression} from './handling-settings';
 import {COURSE_IDS, loadLayout, obstacleType, validateLayout, type TrackLayout} from './track-layout';
 
@@ -14,7 +15,7 @@ export const DAMAGED_SAVE_KEY = 'afterglow.save.damaged';
 
 export interface SaveData {
   version: number;
-  settings: {slideAggression: number};
+  settings: {slideAggression: number; volumes: Volumes};
   layouts: Partial<Record<CourseId, TrackLayout>>;
   /** Best times and similar; filled in by later milestones and kept as stored until then. */
   records: Record<string, unknown>;
@@ -96,7 +97,13 @@ function parse(text: string | null): Record<string, unknown> | null {
 const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 
 export function defaultSave(): SaveData {
-  return {version: SAVE_VERSION, settings: {slideAggression: 1}, layouts: {}, records: {}, career: {}};
+  return {
+    version: SAVE_VERSION,
+    settings: {slideAggression: 1, volumes: {...DEFAULT_VOLUMES}},
+    layouts: {},
+    records: {},
+    career: {},
+  };
 }
 /** Defaults, with anything an older build stored under its own keys. */
 function fromLegacy(storage: SaveStorage | null): SaveData {
@@ -114,6 +121,7 @@ function fromStored(v: Record<string, unknown>, physics: number): SaveData {
   const data = defaultSave();
   if (isObject(v.settings) && typeof v.settings.slideAggression === 'number')
     data.settings.slideAggression = normalizeSlideAggression(v.settings.slideAggression);
+  if (isObject(v.settings)) data.settings.volumes = normalizeVolumes(v.settings.volumes);
   if (isObject(v.layouts))
     for (const id of COURSE_IDS) {
       try {
@@ -216,6 +224,18 @@ export class SaveStore {
       this.update(stored => (stored.settings.slideAggression = next));
     } catch {}
     this.data.settings.slideAggression = next;
+    return next;
+  }
+  get volumes() {
+    return this.data.settings.volumes;
+  }
+  /** Stores the four volume sliders. A browser that refuses storage does not stop the change applying. */
+  setVolumes(volumes: Volumes) {
+    const next = normalizeVolumes(volumes);
+    try {
+      this.update(stored => (stored.settings.volumes = next));
+    } catch {}
+    this.data.settings.volumes = next;
     return next;
   }
   /** The saved best lap for a track (see recordKey), or null. Laps from another physics version do not count. */

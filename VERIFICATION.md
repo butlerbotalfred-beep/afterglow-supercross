@@ -1,3 +1,30 @@
+# M1.5 Sound engine — 26 November 2026
+
+`src/audio.ts` (one tone that followed Player 1 for everybody) is replaced by `src/audio/`: an engine voice for every human rider and the four nearest other bikes, a crowd, dirt spray, landings, crashes, lap and finish stings, and four volume sliders. Physics is untouched (`PHYSICS_VERSION` stays 5).
+
+| Completion box | Result | Evidence |
+|---|---|---|
+| C1 Revs rise steadily within a gear and drop at each shift speed | Pass | `tests/audio.test.ts`, "revs rise steadily within a gear and drop at each shift speed": a sweep from 0 to top speed in 0.01 m/s steps never loses revs inside a gear, shifts four times from the red line at 20, 36, 54 and 76% of top speed, and drops at least 15% of the rev range at each. Three more tests cover the straight-line rise, no hunting at a shift speed, and clutch slip off idle. |
+| C2 With 8 riders the four nearest non-human bikes are voiced; no more than 24 oscillators | Pass: 15 with one human, 24 with four | "with 8 riders the four nearest non-human bikes are voiced" and "four humans and four others use exactly 24 oscillators, also across a new race and a smaller grid". The stand-in sound hardware counts oscillators that are really running, and the peak over a race, results, a new race and a smaller grid is 24. |
+| C3 Player 2's throttle changes only Player 2's engine voice | Pass | "in split screen, Player 2's throttle changes only Player 2's engine voice": two identical runs but for Player 2's throttle; note, loudness, balance, revs and crackle of every other voice are equal, and Player 2's is louder. |
+| C4 A bike left of the camera is louder in the left channel, and the reverse | Pass | "a bike to the left of the camera is louder in the left channel, and the reverse" (five camera directions, speaker levels at equal power), plus the same through the engine voices and a check against the way three.js cameras face. Rendered in Chromium: a rival 7 m to the left measured 0.073 RMS left against 0.040 right. |
+| C5 No sound in setup, while paused, on results or when muted | Pass, with one note | "no sound plays in setup, while paused, on the results screen or when muted": the race gate is shut, no countdown beep, landing or crash can start, and the hardware is asleep after a second. Rendered in Chromium, a paused race is exact digital silence. The note is the finish, below. |
+| C6 Every volume change is ramped (CI check) | Pass | `npm run lint:audio` (`scripts/check-audio-ramps.mjs`), a CI step: outside `src/audio/ramp.ts` nothing may set a `.value` or schedule one, and nothing outside `src/audio/` may make a sound node. "no level is ever set in one step on a node that is wired in" also runs a busy race against the stand-in hardware and finds every level change is a glide. |
+| C7 The four sliders persist across a reload | Pass | "the four sliders persist across a reload" through the save module, and in Chromium: Engines set to 55% in setup read 55% in the pause menu and in both places after a reload. |
+| C8 Audio costs 1 ms or less per frame on the Mac; iPhone frame rate within 5% of M0.4 | MAC_RESULT | MAC_EVIDENCE |
+
+What to know:
+
+- **The finish and the results screen.** The last human's flag and the results screen arrive in the same physics step, so a finish that stopped dead at the results screen would never be heard. The finish sting and the crowd are allowed to ring for 1.2 s (`FINISH_TAIL`), with the engines already stopped and nothing new able to start; after that the results screen is silent. This reads C5 as "the results screen is silent once the flag has rung out". It is one constant to change if Michael wants strict silence; put to him with the play review.
+- **Engine.** Three oscillators (the firing note, a thump an octave under it, a bright edge) through a filter that opens with revs and throttle, plus hiss for breath. Revs come from `src/audio/revs.ts`: five gears, each run to the red line; in the air an open throttle spins the engine up; at the red line the limiter cuts 26 times a second; shutting the throttle above 40% revs crackles. Each bike is tuned up to 6% apart so rivals do not blur together.
+- **Placement.** `src/audio/placement.ts` puts each bike by the camera nearest to it: half loudness at 9 m, balance from which side of that camera it is on, eased to the middle when very close so a rider's own bike stays centred.
+- **Voices are reused.** A voice whose bike drops out of the nearest four is handed to the bike that replaces it, and a new race reuses the same voices, so the oscillator count never passes 24 even for a moment.
+- **No oscillators outside the engines.** Beeps, stings, thuds and crashes are samples worked out as numbers when sound first starts (`src/audio/synth.ts`, seeded, so the same every time). That is what keeps four-player split screen at exactly 24.
+- **Levels.** Rendered in Chromium at the default sliders: one bike flat out is about 0.10 RMS with a 0.37 peak; eight bikes flat out and close together peak at 0.51, so nothing clips. A compressor on the output catches the rest.
+- **The beep for every finisher is gone.** `RaceSession` used to beep whenever any rider, AI included, took the flag. The finish sting now plays for human riders only.
+- **Phone.** Sound starts from the tap that starts the race. If a race is started from a controller, which browsers do not count as a touch, the hardware is asked again every second and on the next touch or key.
+- **Not judged here.** Whether the engine sounds like a bike rather than a tone can only be heard; that is the play review.
+
 # M1.4 Scrub and whip — 25 November 2026
 
 A forward-and-sideways flick just off the lip now scrubs the jump: the bike lays over and flies lower. A sideways flick alone is a whip, for show. The physics version is 5, so best laps from version 4 are archived.
