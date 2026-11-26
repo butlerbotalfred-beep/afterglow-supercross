@@ -37,6 +37,8 @@ export class FakeNode {
   pan = new FakeParam(this, 0);
   playbackRate = new FakeParam(this, 1);
   type = '';
+  curve: Float32Array | null = null;
+  oversample = 'none';
   loop = false;
   buffer: unknown = null;
   onended: (() => void) | null = null;
@@ -83,6 +85,7 @@ export class FakeAudioContext {
   createStereoPanner = () => this.make('panner');
   createBufferSource = () => this.make('source');
   createDynamicsCompressor = () => this.make('compressor');
+  createWaveShaper = () => this.make('shaper');
   createBuffer(_channels: number, length: number, rate: number) {
     const data = new Float32Array(length);
     return {length, duration: length / rate, getChannelData: () => data};

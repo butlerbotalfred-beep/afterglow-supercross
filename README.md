@@ -201,7 +201,7 @@ The camera maintains a stable horizon, smooths heading and position, stays above
 
 All sound is made in the browser as the game runs; there are no audio files. Sound starts when a race does, after the tap, click or key press that starts it (on the iPhone, the first touch).
 
-- **Engines.** Each human rider hears their own bike, and the four other bikes nearest to any camera are voiced too. An engine is three oscillators and filtered hiss following a five-gear rev model: revs climb with speed, drop at each shift, flare when the rear wheel is in the air, bang on the limiter at top speed, and crackle when the throttle is shut at high revs.
+- **Engines.** Each human rider hears their own bike, and the four other bikes nearest to any camera are voiced too. An engine is three oscillators driven into a clipper for a two-stroke's chainsaw rasp, a ringing exhaust-pipe filter and filtered hiss, following a five-gear rev model: revs climb with speed, drop at each shift, flare when the rear wheel is in the air, bang on the limiter at top speed, and crackle when the throttle is shut at high revs.
 - **Where a bike is heard.** A browser has one pair of ears and split screen has up to four cameras, so each bike is placed by the camera nearest to it: louder when close, and to the left or right as that camera sees it.
 - **Crowd and effects.** A crowd bed that lifts for a big jump (0.9 s of air or more), a pass and the finish; dirt spray in a slide; a landing thud scaled by the impact; a crash; a two-note lap sting and a three-note finish.
 - **Silence.** Nothing plays on the setup screen, while paused, on the results screen (after the finish has rung out for 1.2 s) or when muted. After a second of silence the sound hardware is put to sleep.

@@ -5,12 +5,22 @@ import {Glide, preset} from './ramp';
 
 /** Oscillators in one engine voice. Eight voices is the most that ever run, so 24 oscillators. */
 export const VOICE_OSCILLATORS = 3;
-/** How the three oscillators sit against the firing note: the note, the thump an octave under it, and a bright edge. */
+/**
+ * How the three oscillators sit against the firing note: the note, a second a shade off it so the two beat
+ * into a buzz, and a bright edge an octave up. There is no low thump: the sound is a two-stroke's rasp.
+ */
 const PARTS: {type: OscillatorType; ratio: number; level: number}[] = [
   {type: 'sawtooth', ratio: 1, level: 0.5},
-  {type: 'square', ratio: 0.5, level: 0.32},
-  {type: 'sawtooth', ratio: 2.007, level: 0.2},
+  {type: 'square', ratio: 1.012, level: 0.3},
+  {type: 'sawtooth', ratio: 2.007, level: 0.34},
 ];
+/** How hard the mixed oscillators are driven into the clipper that gives the engine its chainsaw bite. */
+const BITE = 2.4;
+/** The clipper's curve: a soft squash that adds harsh upper harmonics. Lopsided, as an exhaust pulse is. */
+const BITE_CURVE = Float32Array.from({length: 1025}, (_, i) => {
+  const x = (i / 512 - 1) * BITE;
+  return Math.tanh(x + 0.12 * x * x) * 0.75;
+});
 /** What a voice needs to know about its bike. */
 export interface EngineInput {
   speed: number;
@@ -30,6 +40,7 @@ export class EngineVoice {
   private sources: AudioBufferSourceNode[] = [];
   private pitch: Glide[] = [];
   private tone: Glide;
+  private ring: Glide;
   private level: Glide;
   private breath: Glide;
   private breathTone: Glide;
@@ -51,7 +62,16 @@ export class EngineVoice {
     const filter = context.createBiquadFilter();
     filter.type = 'lowpass';
     preset(filter.Q, 1.2);
-    this.tone = new Glide(filter.frequency, 0.04, 400);
+    this.tone = new Glide(filter.frequency, 0.04, 900);
+    const bite = context.createWaveShaper();
+    bite.curve = BITE_CURVE;
+    bite.oversample = '2x';
+    // The exhaust pipe rings at a pitch of its own, which is the "ring-ding" of a two-stroke.
+    const pipe = context.createBiquadFilter();
+    pipe.type = 'peaking';
+    preset(pipe.Q, 1.6);
+    preset(pipe.gain, 7);
+    this.ring = new Glide(pipe.frequency, 0.05, 1800);
     const body = context.createGain();
     this.level = new Glide(body.gain, 0.03);
     for (const part of PARTS) {
@@ -60,11 +80,11 @@ export class EngineVoice {
       osc.type = part.type;
       preset(mix.gain, part.level);
       this.pitch.push(new Glide(osc.frequency, 0.035, revsToHz(0.16) * part.ratio * tune));
-      osc.connect(mix).connect(filter);
+      osc.connect(mix).connect(bite);
       osc.start(now);
       this.oscillators.push(osc);
     }
-    filter.connect(body).connect(this.panner);
+    bite.connect(pipe).connect(filter).connect(body).connect(this.panner);
     const air = this.loop(hiss, 0.9 + 0.2 * (tune % 1)),
       airFilter = context.createBiquadFilter(),
       airLevel = context.createGain();
@@ -111,13 +131,14 @@ export class EngineVoice {
     this.decel += (shut - this.decel) * (1 - Math.exp(-dt * (shut > this.decel ? 12 : 3)));
     const hz = revsToHz(this.revs) * this.tune;
     PARTS.forEach((part, i) => this.pitch[i].to(hz * part.ratio, now));
-    this.tone.to(240 + 1500 * this.revs + 1900 * throttle * this.revs, now);
+    this.tone.to(800 + 2200 * this.revs + 3000 * throttle * this.revs, now);
+    this.ring.to(1500 + 1500 * this.revs, now);
     // On the limiter the spark is cut: the engine loses its edge and the exhaust bangs. The banging comes from
     // the crackle sample, so it sounds the same at any frame rate.
     const limited = onLimiter(this.revs) && throttle > 0.5;
     this.level.to(gain * (0.2 + 0.5 * throttle + 0.3 * this.revs) * (limited ? 0.6 : 1), now, 0.02);
-    this.breathTone.to(700 + 2600 * this.revs, now);
-    this.breath.to(gain * (0.02 + 0.16 * throttle * this.revs), now);
+    this.breathTone.to(1400 + 3200 * this.revs, now);
+    this.breath.to(gain * (0.03 + 0.2 * throttle * this.revs), now);
     this.pops.to(gain * Math.max(this.decel * 0.55, limited ? 0.6 : 0), now);
     this.pan.to(pan, now);
   }
