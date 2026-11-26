@@ -7,7 +7,8 @@ export function preset(param: AudioParam, value: number) {
 }
 /** Glides a value to a new one. `seconds` is the time to cover about two thirds of the way. */
 export function ramp(param: AudioParam, value: number, now: number, seconds = 0.03) {
-  param.setTargetAtTime(value, now, seconds);
+  // A glide of no length would be a step, so it is never shorter than a millisecond.
+  if (Number.isFinite(value)) param.setTargetAtTime(value, now, Math.max(0.001, seconds));
 }
 /** A value that is glided, and only told about changes big enough to matter, to keep the per-frame cost low. */
 export class Glide {
@@ -25,6 +26,7 @@ export class Glide {
     return this.last;
   }
   to(value: number, now: number, seconds = this.seconds) {
+    if (!Number.isFinite(value)) return;
     if (Math.abs(value - this.last) <= 0.004 * Math.abs(this.last) + 1e-5) return;
     this.last = value;
     ramp(this.param, value, now, seconds);

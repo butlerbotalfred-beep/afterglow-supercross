@@ -198,6 +198,59 @@ test('four humans and four others use exactly 24 oscillators, also across a new 
   assert.equal(peak, 24);
 });
 
+test('two bikes at about the same distance do not trade a voice back and forth', () => {
+  const {audio, context} = started();
+  // Five rivals; the fourth and fifth nearest are level, and one of them wobbles by a few centimetres.
+  const riders = [
+    rider({human: true}),
+    rider({z: 5}),
+    rider({z: 7}),
+    rider({z: 9}),
+    rider({x: 8, z: 12}),
+    rider({x: -8, z: 12}),
+  ];
+  run(audio, context, frame(riders), 0.2);
+  const first = audio.voices.map(v => v.rider).join();
+  let swaps = 0;
+  for (let i = 0; i < 120; i++) {
+    riders[5].z = 12 + (i % 2 ? -0.02 : 0.02);
+    run(audio, context, frame(riders), 1 / 60);
+    if (audio.voices.map(v => v.rider).join() !== first) swaps++;
+  }
+  assert.equal(swaps, 0, 'the voice stays with the bike that has it');
+  // A bike that comes clearly nearer does take the voice, which is silent while it moves over and then fades in.
+  riders[5].z = 6;
+  run(audio, context, frame(riders), 1 / 60);
+  const moved = voiceOf(audio, 5);
+  assert.ok(moved, 'the nearer bike is voiced');
+  assert.equal(moved.loudness, 0, 'silent at the moment of the swap');
+  run(audio, context, frame(riders), 0.5);
+  assert.ok(moved.loudness > 0.05, 'and back up to level');
+  assert.deepEqual(voicedRiders(riders, [EAR], [4]).others.includes(4), false, 'holding on is not for ever');
+});
+test("a rider's own bike is the same loudness wherever the chase camera sits", () => {
+  const loudness = (back: number) => {
+    const {audio, context} = started();
+    run(audio, context, frame([rider({human: true})], {ears: [{x: 0, z: -back, yaw: 0}]}), 0.5);
+    return [voiceOf(audio, 0).loudness, voiceOf(audio, 0).balance];
+  };
+  assert.deepEqual(loudness(2.5), loudness(9));
+});
+test('on the limiter the engine loses its edge and bangs, the same at any frame rate', () => {
+  const at = (fps: number) => {
+    const {audio, context} = started();
+    const riders = [rider({human: true, speed: TUNING.maxSpeed, throttle: 1})];
+    run(audio, context, frame(riders, {dt: 1 / fps}), 1);
+    const flat = voiceOf(audio, 0).loudness;
+    riders[0].speed = TUNING.maxSpeed * 0.9;
+    run(audio, context, frame(riders, {dt: 1 / fps}), 1);
+    return [flat, voiceOf(audio, 0).loudness];
+  };
+  const [limited, below] = at(60);
+  assert.ok(limited < below * 0.75, 'quieter on the limiter than just under it');
+  assert.ok(Math.abs(at(30)[0] - limited) < 1e-6 && Math.abs(at(120)[0] - limited) < 1e-6);
+});
+
 // C3
 test("in split screen, Player 2's throttle changes only Player 2's engine voice", () => {
   const sound = (throttle: number) => {
@@ -308,10 +361,40 @@ test('a finish rings out for a moment on the results screen, and then there is s
   assert.equal(audio.open, true);
   run(audio, context, results, FINISH_TAIL);
   assert.equal(audio.open, false, 'silence once the finish has rung out');
+  // A tab switched away during the ring is silenced at once.
+  audio.hush();
   // Coming back to results from somewhere else never reopens it.
   run(audio, context, frame(riders, {phase: 'setup'}), 0.1);
   run(audio, context, results, 0.1);
   assert.equal(audio.open, false);
+});
+
+test('a finish is still heard when the race was paused a moment before the flag', () => {
+  const {audio, context} = started();
+  const riders = [rider({human: true}), rider({z: 8})];
+  run(audio, context, frame(riders), 0.5);
+  run(audio, context, frame(riders, {paused: true}), 0.3);
+  riders[0].finished = 61.2;
+  run(audio, context, frame(riders, {phase: 'results'}), 0.1);
+  assert.equal(audio.played, 1);
+  assert.ok(audio.crowdSwell > 0.8);
+});
+test('two riders trading places are cheered once, not held up as one long cheer', () => {
+  const {audio, context} = started();
+  const riders = [rider({human: true}), rider({z: 2})];
+  run(audio, context, frame(riders), 0.2);
+  for (let i = 0; i < 180; i++) run(audio, context, frame(riders, {positions: i % 2 ? [1, 2] : [2, 1]}), 1 / 60);
+  assert.ok(audio.crowdSwell < 0.05, `the cheer has settled: ${audio.crowdSwell}`);
+  run(audio, context, frame(riders, {positions: [2, 1]}), 3.2);
+  run(audio, context, frame(riders, {positions: [1, 2]}), 1 / 60);
+  assert.ok(audio.crowdSwell > 0.25, 'a pass after a quiet spell is cheered again');
+});
+test('a bad number from the game is ignored rather than sent to the sound hardware', () => {
+  const {audio, context} = started();
+  const riders = [rider({human: true, speed: NaN, throttle: NaN}), rider({x: NaN})];
+  run(audio, context, frame(riders), 0.2);
+  const sent = context.nodes.flatMap(n => [n.gain, n.frequency, n.pan].flatMap(p => p.ops));
+  assert.ok(sent.every(op => Number.isFinite(op.value)));
 });
 
 // C6

@@ -47,16 +47,22 @@ export function place(bike: {x: number; z: number}, ears: Listener[]): Placement
   }
   return best;
 }
+/** A bike that already has a voice keeps it until another is this much nearer: 15%, and at least a metre. */
+const holdOn = (distance: number) => Math.max(1, distance * 0.15);
 /**
  * The riders that get an engine voice, as indexes into `riders`: every human, then the four other bikes
- * nearest to any camera.
+ * nearest to any camera. `held` are the other bikes voiced a moment ago; they are favoured a little, so two
+ * bikes at about the same distance do not trade a voice back and forth.
  */
-export function voicedRiders(riders: Bike[], ears: Listener[]) {
+export function voicedRiders(riders: Bike[], ears: Listener[], held: number[] = []) {
   const humans: number[] = [],
     others: {index: number; distance: number}[] = [];
   riders.forEach((r, index) => {
     if (r.human) humans.push(index);
-    else others.push({index, distance: place(r, ears).distance});
+    else {
+      const distance = place(r, ears).distance;
+      others.push({index, distance: held.includes(index) ? distance - holdOn(distance) : distance});
+    }
   });
   others.sort((a, b) => a.distance - b.distance || a.index - b.index);
   return {humans, others: others.slice(0, OTHER_VOICES).map(o => o.index)};

@@ -24,6 +24,8 @@ export class EngineVoice {
   revs = 0;
   /** How much exhaust crackle there is, 0 to 1. */
   decel = 0;
+  /** Seconds since the voice was handed a different bike. It is silent while the note moves over, then fades in. */
+  private since = 1;
   private oscillators: OscillatorNode[] = [];
   private sources: AudioBufferSourceNode[] = [];
   private pitch: Glide[] = [];
@@ -89,13 +91,16 @@ export class EngineVoice {
   /** Points the voice at a rider. A new rider starts in the right gear with the revs already there. */
   follow(rider: number, bike: EngineInput) {
     if (rider === this.rider) return;
+    this.since = this.rider < 0 ? 1 : 0;
     this.rider = rider;
     this.gear = gearFor(bike.speed);
     this.revs = gearRevs(this.gear, bike.speed, bike.throttle);
     this.decel = 0;
   }
   /** Moves the engine on by `dt` seconds and sends the new sound to the speakers at loudness `gain`. */
-  drive(bike: EngineInput, dt: number, gain: number, pan: number) {
+  drive(bike: EngineInput, dt: number, loudness: number, pan: number) {
+    this.since += dt;
+    const gain = loudness * Math.min(1, Math.max(0, (this.since - 0.07) / 0.12));
     const now = this.context.currentTime,
       throttle = Math.min(1, Math.max(0, bike.throttle));
     this.gear = nextGear(this.gear, bike.speed);
@@ -107,12 +112,13 @@ export class EngineVoice {
     const hz = revsToHz(this.revs) * this.tune;
     PARTS.forEach((part, i) => this.pitch[i].to(hz * part.ratio, now));
     this.tone.to(240 + 1500 * this.revs + 1900 * throttle * this.revs, now);
-    // The limiter cuts the spark about 26 times a second.
-    const limited = onLimiter(this.revs) && throttle > 0.5 && Math.floor(now * 52) % 2 === 1;
-    this.level.to(gain * (0.2 + 0.5 * throttle + 0.3 * this.revs) * (limited ? 0.4 : 1), now, limited ? 0.006 : 0.02);
+    // On the limiter the spark is cut: the engine loses its edge and the exhaust bangs. The banging comes from
+    // the crackle sample, so it sounds the same at any frame rate.
+    const limited = onLimiter(this.revs) && throttle > 0.5;
+    this.level.to(gain * (0.2 + 0.5 * throttle + 0.3 * this.revs) * (limited ? 0.6 : 1), now, 0.02);
     this.breathTone.to(700 + 2600 * this.revs, now);
     this.breath.to(gain * (0.02 + 0.16 * throttle * this.revs), now);
-    this.pops.to(gain * this.decel * 0.55, now);
+    this.pops.to(gain * Math.max(this.decel * 0.55, limited ? 0.6 : 0), now);
     this.pan.to(pan, now);
   }
   /** The loudness the engine body is gliding to, for tests. */

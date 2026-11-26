@@ -11,7 +11,7 @@ import {createWorld} from '../world';
 import {createBike} from '../bike-model';
 import {RaceEffects} from '../race-effects';
 import {ChaseCamera} from '../camera';
-import {GameAudio, VOLUME_KEYS, type SoundFrame} from '../audio';
+import {GameAudio, normalizeVolumes, VOLUME_KEYS, type SoundFrame} from '../audio';
 import {Dust} from '../dust';
 import {TouchControls} from '../touch-controls';
 import type {TouchDirection} from '../touch-input';
@@ -84,7 +84,9 @@ const session = new RaceSession(input, {
     touchControls.show(iphoneMode && !nowPaused);
     setVisible('pause', nowPaused);
     el('pause-message').textContent = pauseMessage(missing);
+    // Resuming is a tap or a key press, which is when a phone lets the sound hardware wake.
     if (nowPaused) audio.hush();
+    else audio.start();
   },
   lap(rider, lap) {
     if (!lapCountsForRecord(lap, rider, session.reviewDrive || session.override.size > 0)) return;
@@ -372,6 +374,7 @@ function hudContext(): HudContext {
   };
 }
 const audioCost: number[] = [];
+let audioFault: unknown = null;
 /** What the sound follows this frame: the riders, their race positions and where each human camera is. */
 function soundFrame(dt: number): SoundFrame {
   const riders = session.riders,
@@ -589,7 +592,12 @@ function frame(now: number) {
     lastHud = now;
   }
   const audioStart = performance.now();
-  audio.frame(soundFrame(dt));
+  // Sound must never stop the race: a fault here is reported once and the frame carries on.
+  try {
+    audio.frame(soundFrame(dt));
+  } catch (error) {
+    if (!audioFault) console.error((audioFault = error));
+  }
   audioCost.push(performance.now() - audioStart);
   if (audioCost.length > 600) audioCost.shift();
   requestAnimationFrame(frame);
@@ -668,12 +676,18 @@ function syncVolumes() {
     }
 }
 for (const prefix of ['', 'pause-'])
-  for (const key of VOLUME_KEYS)
-    el<HTMLInputElement>(`${prefix}vol-${key}`).oninput = e => {
-      save.setVolumes({...save.volumes, [key]: Number((e.target as HTMLInputElement).value) / 100});
+  for (const key of VOLUME_KEYS) {
+    const slider = el<HTMLInputElement>(`${prefix}vol-${key}`);
+    // Heard while dragging; written to the save once, when the slider is let go.
+    slider.oninput = () => {
+      save.data.settings.volumes = normalizeVolumes({...save.volumes, [key]: Number(slider.value) / 100});
       syncVolumes();
     };
+    slider.onchange = () => save.setVolumes(save.volumes);
+  }
 syncVolumes();
+// A tab switched away in the moment after the flag would otherwise leave the crowd ringing.
+document.addEventListener('visibilitychange', () => document.hidden && audio.hush());
 // A race started from a controller is not a tap, so the browser may hold the sound back until the first touch or key.
 for (const type of ['pointerdown', 'keydown', 'touchend']) addEventListener(type, () => audio.wake(), {passive: true});
 el('sound').onclick = toggleMute;

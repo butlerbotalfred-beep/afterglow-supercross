@@ -79,7 +79,9 @@ export class GameAudio {
   private tail = 0;
   private quiet = 0;
   private asked = 0;
-  private wasRacing = false;
+  private lastPhase = '';
+  /** Seconds until the crowd will cheer another pass, so two riders trading places do not hold it up. */
+  private passRest = 0;
 
   /** `create` makes the browser's sound context; tests pass a stand-in. */
   constructor(private create: () => AudioContext = () => new AudioContext()) {}
@@ -114,7 +116,7 @@ export class GameAudio {
   /** Builds the sound graph the first time, and wakes the hardware. Call from a tap, click or key press. */
   start() {
     if (!this.context) this.build();
-    void this.context!.resume();
+    this.rouse();
   }
   private build() {
     const context = (this.context = this.create()),
@@ -197,10 +199,14 @@ export class GameAudio {
   }
   /** Wakes the hardware if a race is being heard. Call from any tap or key press. */
   wake() {
-    if (this.context && this.quiet === 0 && this.context.state !== 'running') void this.context.resume();
+    if (this.context && this.quiet === 0 && this.context.state !== 'running') this.rouse();
+  }
+  private rouse() {
+    this.context!.resume().catch(() => {});
   }
   /** Shuts the race gate now: for the pause menu, the results screen and the way back to setup. */
   hush() {
+    this.tail = 0;
     if (this.context) this.gate.to(0, this.context.currentTime, 0.03);
   }
   /** Follows one frame of the game. */
@@ -210,24 +216,25 @@ export class GameAudio {
     const now = context.currentTime,
       riding = (f.phase === 'countdown' || f.phase === 'racing') && !f.paused;
     // The moment the last rider takes the flag the results appear; let the finish ring out, then stop.
-    const flag = f.phase === 'results' && this.wasRacing;
+    const flag = f.phase === 'results' && this.lastPhase === 'racing';
     if (flag) this.tail = FINISH_TAIL;
     if (f.phase !== 'results') this.tail = 0;
-    this.wasRacing = f.phase === 'racing' && !f.paused;
+    this.lastPhase = f.phase;
+    this.passRest = Math.max(0, this.passRest - f.dt);
     this.tail = Math.max(0, this.tail - f.dt);
     const audible = riding || this.tail > 0;
     this.gate.to(audible ? 1 : 0, now, 0.03);
     if (!audible) {
       // Asleep the hardware costs nothing, which matters on a phone sitting on the setup screen.
       this.quiet += f.dt;
-      if (this.quiet > SLEEP_AFTER && context.state === 'running') void context.suspend();
+      if (this.quiet > SLEEP_AFTER && context.state === 'running') context.suspend().catch(() => {});
       return;
     }
     // A browser may refuse to wake the hardware until the player touches something, so keep asking now and then.
     this.asked += f.dt;
     if (context.state !== 'running' && (this.quiet > 0 || this.asked > 1)) {
       this.asked = 0;
-      void context.resume();
+      this.rouse();
     }
     this.quiet = 0;
     if (f.riders !== this.field) {
@@ -236,6 +243,7 @@ export class GameAudio {
       this.field = f.riders;
       this.seen = [];
       this.swell = 0;
+      this.passRest = 0;
     }
     this.engines(f, riding);
     // The last rider's flag falls in the same frame as the results, so that frame is still listened to.
@@ -255,7 +263,8 @@ export class GameAudio {
   /** Gives every human and the four nearest other bikes a voice, and drives each from its rider. */
   private engines(f: SoundFrame, riding: boolean) {
     const context = this.context!,
-      {humans, others} = voicedRiders(f.riders, f.ears),
+      held = this.voices.map(v => v.rider).filter(i => i >= 0 && f.riders[i] && !f.riders[i].human),
+      {humans, others} = voicedRiders(f.riders, f.ears, held),
       wanted = [...humans, ...others];
     // Voices whose bike is still wanted keep it; the rest are handed to the bikes that have none.
     const free = this.voices.filter(v => !wanted.includes(v.rider));
@@ -276,7 +285,9 @@ export class GameAudio {
       const bike = f.riders[voice.rider];
       const where = place(bike, f.ears);
       // On results only the finish is heard, so the engines fade under it.
-      voice.drive(bike, f.dt, riding ? where.gain * (bike.human ? 0.5 : 0.42) : 0, where.pan);
+      // A rider's own bike is always in the middle at the same loudness, wherever the chase camera sits.
+      if (bike.human) voice.drive(bike, f.dt, riding ? 0.42 : 0, 0);
+      else voice.drive(bike, f.dt, riding ? where.gain * 0.42 : 0, where.pan);
     }
   }
   private events(f: SoundFrame) {
@@ -287,8 +298,10 @@ export class GameAudio {
           const where = place(f.riders[event.rider], f.ears);
           this.play('crash', where.gain * 0.9, where.pan);
         } else if (event.type === 'bigAir') this.cheer(0.35 + Math.min(0.45, (event.seconds - 0.9) * 0.6));
-        else if (event.type === 'pass') this.cheer(0.3);
-        else if (event.type === 'lap') this.play('lap', 0.3);
+        else if (event.type === 'pass') {
+          if (this.passRest <= 0) this.cheer(0.3);
+          this.passRest = 3;
+        } else if (event.type === 'lap') this.play('lap', 0.3);
         else {
           this.play('finish', 0.4);
           this.cheer(1);
