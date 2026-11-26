@@ -24,7 +24,8 @@ test('aligned landings stay rideable; awkward or excessive normal impacts crash'
   const awkward = landing(1.08, -10);
   assert.equal(awkward.crashReason, 'AWKWARD LANDING');
   assert.ok(awkward.crashTime > 0);
-  const hard = landing(0, -25);
+  assert.equal(landing(0, -25).crashes, 0, 'a level bike rides out a heavy hit on flat ground');
+  const hard = landing(0, -27);
   assert.equal(hard.crashReason, 'HARD LANDING');
   assert.equal(landing(1.08, -2, 2).crashes, 0, 'low-energy tip does not trigger a punitive crash');
 });
