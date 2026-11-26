@@ -1,6 +1,6 @@
 // Pause menu markup and its message.
 import type {Rider} from '../physics';
-import {directionSettings, slideSettings} from './ride-settings';
+import {directionSettings, slideSettings, volumeSettings} from './ride-settings';
 
 export function pauseMenuHtml() {
   return (
@@ -11,7 +11,7 @@ export function pauseMenuHtml() {
     `<div class="button-row"><button id="restart-pause">RESTART RACE</button>` +
     `<button id="setup-pause">RACE SETUP</button></div>` +
     `<button id="pause-editor">EDIT THIS ` +
-    `TRACK</button>${directionSettings('pause-')}${slideSettings('pause-')}<label ` +
+    `TRACK</button>${directionSettings('pause-')}${slideSettings('pause-')}${volumeSettings('pause-')}<label ` +
     `class="pause-setting">Chase distance <input id="pause-distance" type="range" min="2.5" ` +
     `max="6" step=".1" value="3.2"></label>` +
     `<label class="pause-setting">Camera shake <input id="pause-shake" type="range" min="0" ` +

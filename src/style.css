@@ -2150,6 +2150,14 @@ footer i {
   color: #bbc3d1;
   margin: 6px 0 0;
 }
+.volume-setting {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 18px;
+}
+.volume-setting label {
+  margin-bottom: 2px;
+}
 
 .controller-focus {
   outline: 3px solid #ffdf80 !important;

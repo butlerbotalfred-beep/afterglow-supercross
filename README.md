@@ -197,6 +197,18 @@ Primary values live in `src/config.ts`. Units are metres, seconds and radians.
 
 The camera maintains a stable horizon, smooths heading and position, stays above terrain, and hides an opponent mesh only when it intersects the camera's near region. Render scale (100%, 75%, 50%) is in setup. Pixel ratio is capped at 1.5; one directional shadow map focused around active riders, batched scenery, layered crowd cards and a small dust pool limit rendering cost.
 
+## Sound
+
+All sound is made in the browser as the game runs; there are no audio files. Sound starts when a race does, after the tap, click or key press that starts it (on the iPhone, the first touch).
+
+- **Engines.** Each human rider hears their own bike, and the four other bikes nearest to any camera are voiced too. An engine is three oscillators and filtered hiss following a five-gear rev model: revs climb with speed, drop at each shift, flare when the rear wheel is in the air, bang on the limiter at top speed, and crackle when the throttle is shut at high revs.
+- **Where a bike is heard.** A browser has one pair of ears and split screen has up to four cameras, so each bike is placed by the camera nearest to it: louder when close, and to the left or right as that camera sees it.
+- **Crowd and effects.** A crowd bed that lifts for a big jump (0.9 s of air or more), a pass and the finish; dirt spray in a slide; a landing thud scaled by the impact; a crash; a two-note lap sting and a three-note finish.
+- **Silence.** Nothing plays on the setup screen, while paused, on the results screen (after the finish has rung out for 1.2 s) or when muted. After a second of silence the sound hardware is put to sleep.
+- **Volume.** Four sliders, **Master volume**, **Engines**, **Effects** and **Crowd**, are under **Controls & ride settings** in setup and in the pause menu. They apply at once, stay in step with each other and are kept in this browser's save. **M** or the sound button mutes everything.
+
+Every level change is a short glide, never a jump, so nothing clicks; `npm run lint:audio` checks the code for that in CI.
+
 ## Project map
 
 - `src/main.ts`: session lifecycle, UI integration and one shared simulation/render loop.
@@ -206,7 +218,8 @@ The camera maintains a stable horizon, smooths heading and position, stays above
 - `src/input.ts`: isolated keyboard/gamepad/touch routing and edge-triggered actions.
 - `src/touch-input.ts`, `src/touch-controls.ts`: multi-touch pointer ownership and the explicitly selected iPhone overlay.
 - `src/bike-model.ts`, `src/world.ts`, `src/dust.ts`: procedural visuals and animation.
-- `src/camera.ts`, `src/audio.ts`: chase views and synthesized feedback.
+- `src/camera.ts`: chase views.
+- `src/audio/`: the sound engine (engine voices, crowd, effects, mixer); see **Sound** above.
 - `tests/`: deterministic regression tests; `scripts/browser-smoke.mjs`: actual browser loop verification.
 - `ASSETS.md`: attribution; `VERIFICATION.md`: acceptance status and measured limitations.
 

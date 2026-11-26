@@ -25,6 +25,8 @@ jobs:
         run: npm run format:check
       - name: Line length (140 characters in src/)
         run: npm run lint:lines
+      - name: Sound levels are always ramped (no clicks)
+        run: npm run lint:audio
       - name: Type check
         run: npm run typecheck
       - name: Unit tests

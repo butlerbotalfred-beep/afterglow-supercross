@@ -11,7 +11,7 @@ import {createWorld} from '../world';
 import {createBike} from '../bike-model';
 import {RaceEffects} from '../race-effects';
 import {ChaseCamera} from '../camera';
-import {GameAudio} from '../audio';
+import {GameAudio, normalizeVolumes, VOLUME_KEYS, type SoundFrame} from '../audio';
 import {Dust} from '../dust';
 import {TouchControls} from '../touch-controls';
 import type {TouchDirection} from '../touch-input';
@@ -36,7 +36,7 @@ import {el, setVisible} from '../ui/dom';
 import {isLoading, watchLoading} from '../ui/loading';
 import {hudHtml, updateHud, type HudContext} from '../ui/hud';
 import {pauseMessage} from '../ui/pause-menu';
-import {showResultsTable} from '../ui/results-screen';
+import {ranking, showResultsTable} from '../ui/results-screen';
 import {
   appShellHtml,
   controllerStatusMessage,
@@ -84,7 +84,9 @@ const session = new RaceSession(input, {
     touchControls.show(iphoneMode && !nowPaused);
     setVisible('pause', nowPaused);
     el('pause-message').textContent = pauseMessage(missing);
-    audio.update(0, 0, false);
+    // Resuming is a tap or a key press, which is when a phone lets the sound hardware wake.
+    if (nowPaused) audio.hush();
+    else audio.start();
   },
   lap(rider, lap) {
     if (!lapCountsForRecord(lap, rider, session.reviewDrive || session.override.size > 0)) return;
@@ -96,7 +98,6 @@ const session = new RaceSession(input, {
     touchControls.show(false);
     setVisible('results', true);
     setVisible('countdown', false);
-    audio.update(0, 0, false);
     showResultsTable(track, session.riders, session.lapCount, session.raceTime, session.timing);
   },
 });
@@ -315,7 +316,7 @@ function toSetup() {
   touchControls.show(false);
   document.body.classList.remove('iphone-session');
   session.toSetup();
-  audio.update(0, 0, false);
+  audio.hush();
   ['hud', 'pause', 'results', 'countdown', 'race-bar'].forEach(id => setVisible(id, false));
   setVisible('setup', true);
   refreshSlots();
@@ -370,6 +371,25 @@ function hudContext(): HudContext {
     iphoneMode,
     timing: session.timing,
     referenceLap: index => session.referenceLap(index),
+  };
+}
+const audioCost: number[] = [];
+let audioFault: unknown = null;
+/** What the sound follows this frame: the riders, their race positions and where each human camera is. */
+function soundFrame(dt: number): SoundFrame {
+  const riders = session.riders,
+    listening = session.phase !== 'setup',
+    order = listening ? ranking(riders, track) : [];
+  return {
+    phase: session.phase,
+    paused: session.paused || session.reviewFrozen,
+    practice,
+    riders,
+    positions: riders.map(r => order.indexOf(r) + 1),
+    ears: listening
+      ? cameras.slice(0, humanCount).map(c => ({x: c.camera.position.x, z: c.camera.position.z, yaw: c.yaw}))
+      : [],
+    dt,
   };
 }
 function renderContext(): RenderContext {
@@ -559,7 +579,8 @@ function frame(now: number) {
     if (stepCounts.length > 600) stepCounts.shift();
   }
   if (editorOpen()) {
-    audio.update(0, 0, false);
+    // The editor is silent, like a pause.
+    audio.frame({...soundFrame(dt), paused: true});
     requestAnimationFrame(frame);
     return;
   }
@@ -570,8 +591,15 @@ function frame(now: number) {
     updateHud(hudContext());
     lastHud = now;
   }
-  const player = session.riders[0];
-  audio.update(player?.speed || 0, player?.throttle || 0, session.phase === 'racing' && !session.paused);
+  const audioStart = performance.now();
+  // Sound must never stop the race: a fault here is reported once and the frame carries on.
+  try {
+    audio.frame(soundFrame(dt));
+  } catch (error) {
+    if (!audioFault) console.error((audioFault = error));
+  }
+  audioCost.push(performance.now() - audioStart);
+  if (audioCost.length > 600) audioCost.shift();
   requestAnimationFrame(frame);
 }
 function setMode(isPractice: boolean) {
@@ -638,6 +666,30 @@ function toggleMute() {
   el('sound').textContent = audio.muted ? 'SOUND OFF' : 'SOUND ON';
   el('race-mute').textContent = audio.muted ? '♪ MUTED' : '♪ SOUND ON';
 }
+function syncVolumes() {
+  audio.setVolumes(save.volumes);
+  for (const prefix of ['', 'pause-'])
+    for (const key of VOLUME_KEYS) {
+      const percent = Math.round(save.volumes[key] * 100);
+      el<HTMLInputElement>(`${prefix}vol-${key}`).value = String(percent);
+      el(`${prefix}vol-${key}-value`).textContent = percent ? `${percent}%` : 'Off';
+    }
+}
+for (const prefix of ['', 'pause-'])
+  for (const key of VOLUME_KEYS) {
+    const slider = el<HTMLInputElement>(`${prefix}vol-${key}`);
+    // Heard while dragging; written to the save once, when the slider is let go.
+    slider.oninput = () => {
+      save.data.settings.volumes = normalizeVolumes({...save.volumes, [key]: Number(slider.value) / 100});
+      syncVolumes();
+    };
+    slider.onchange = () => save.setVolumes(save.volumes);
+  }
+syncVolumes();
+// A tab switched away in the moment after the flag would otherwise leave the crowd ringing.
+document.addEventListener('visibilitychange', () => document.hidden && audio.hush());
+// A race started from a controller is not a tap, so the browser may hold the sound back until the first touch or key.
+for (const type of ['pointerdown', 'keydown', 'touchend']) addEventListener(type, () => audio.wake(), {passive: true});
 el('sound').onclick = toggleMute;
 el('race-mute').onclick = toggleMute;
 for (const id of ['camera-distance', 'pause-distance'])
@@ -725,6 +777,8 @@ if (import.meta.env.DEV) {
       humanCount,
       npcCount,
       fps: fpsFrames.length / fpsFrames.reduce((a, b) => a + b, 0),
+      audioMs: audioCost.reduce((a, b) => a + b, 0) / Math.max(1, audioCost.length),
+      audio: {open: audio.open, muted: audio.muted, oscillators: audio.oscillators, played: audio.played},
       frameCount,
       resolution: [innerWidth, innerHeight],
       renderScale,
