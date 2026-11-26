@@ -36,4 +36,4 @@ export function gearRevs(gear: number, speed: number, throttle = 0, maxSpeed: nu
 /** True when the engine is against the red line and the limiter is cutting in. */
 export const onLimiter = (revs: number) => revs >= 0.985;
 /** The engine's firing note in hertz for a share of the red line. */
-export const revsToHz = (revs: number) => 34 + 118 * revs;
+export const revsToHz = (revs: number) => 42 + 150 * revs;
