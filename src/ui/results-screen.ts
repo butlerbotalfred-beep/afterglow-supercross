@@ -37,11 +37,15 @@ export function showResultsTable(
   lapCount: number,
   raceTime: number,
   timing: RiderTiming[] = [],
+  trial = false,
 ) {
   el('results').querySelector('.eyebrow')!.textContent = track.course.name.toUpperCase() + ' / OFFICIAL CLASSIFICATION';
   const ordered = ranking(riders, track);
-  el('results-subtitle').textContent =
-    `${lapCount} ${lapCount === 1 ? 'lap' : 'laps'} · ${riders.length} riders · ${formatTime(raceTime)} session`;
+  if (trial) el('results').querySelector('.eyebrow')!.textContent = track.course.name.toUpperCase() + ' / TIME TRIAL';
+  const ridden = timing[0]?.laps.length ?? 0;
+  el('results-subtitle').textContent = trial
+    ? `${ridden} ${ridden === 1 ? 'lap' : 'laps'} · ${formatTime(raceTime)} session`
+    : `${lapCount} ${lapCount === 1 ? 'lap' : 'laps'} · ${riders.length} riders · ${formatTime(raceTime)} session`;
   const winner = ordered[0]?.finished ?? null;
   // The fastest lap of the race, by anyone, is marked as well as each rider's own best.
   const fastest = Math.min(...timing.flatMap(t => t.laps.filter(lap => lap.valid).map(lap => lap.time)));
@@ -49,8 +53,11 @@ export function showResultsTable(
     .map((r, i) => {
       const laps = timing[riders.indexOf(r)]?.laps || [];
       const best = Math.min(...laps.filter(lap => lap.valid).map(lap => lap.time));
-      const gap =
-        r.finished === null
+      const gap = trial
+        ? Number.isFinite(best)
+          ? `BEST ${formatLap(best)}`
+          : 'NO LAP SET'
+        : r.finished === null
           ? 'DNF'
           : i === 0 || winner === null
             ? formatTime(r.finished)

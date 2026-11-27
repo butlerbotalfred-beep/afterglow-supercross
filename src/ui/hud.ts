@@ -32,7 +32,9 @@ export function raceChromeHtml() {
   return (
     `<div id="hud" class="hidden"></div><div id="race-bar" class="hidden">` +
     `<span id="session-label">DUSK VALLEY / RACE NIGHT</span>` +
-    `<span id="race-time">00:00.0</span><button id="pause-button">Ⅱ PAUSE</button>` +
+    `<span id="ghost-notice" class="hidden">GHOST NOT SAVED: THIS BROWSER KEEPS IT FOR THIS VISIT ONLY</span>` +
+    `<span id="race-time">00:00.0</span><button id="restart-lap" class="hidden">↺ RESTART LAP</button>` +
+    `<button id="pause-button">Ⅱ PAUSE</button>` +
     `<button id="race-mute">♪ SOUND ON</button></div><div id="countdown" class="hidden"></div>`
   );
 }

@@ -28,6 +28,8 @@ import {
 import {npcControl, idleControl, type Rider} from '../physics';
 import {prepareTakeoffAdvice} from '../takeoff';
 import {TUNING} from '../config';
+import {GhostPlayback, GhostStore, indexedDbGhosts, type GhostPose} from '../ghost';
+import {currentLapTime} from '../timing';
 import {browserStorage, lapCountsForRecord, recordKey, SaveStore} from '../save';
 import {devicesReady, RaceSession} from './race-session';
 import {blendPose, capturePose, pacingStats, type Pose} from '../render-interp';
@@ -71,6 +73,7 @@ let sceneDrawCalls = 0;
 const preview = new THREE.PerspectiveCamera(58, 1, 0.1, 1800);
 let iphoneMode = false;
 let practice = false,
+  trial = false,
   humanCount = 1,
   npcCount = 5;
 const save = new SaveStore(browserStorage());
@@ -94,14 +97,104 @@ const session = new RaceSession(input, {
     if (save.submitLap(recordKey(track.course.id, activeLayout), lap)) session.personalBest = lap;
     else loadPersonalBest();
   },
+  ghostLap(rider, lap, lapGhost) {
+    const key = recordKey(track.course.id, activeLayout);
+    // Autopilot laps never become a ghost, except when a development check asks for one.
+    const assisted = !ghost.fromAutopilot && (session.reviewDrive || session.override.size > 0);
+    const counts = lapCountsForRecord(lap, rider, assisted);
+    void ghosts.submit(key, lapGhost, counts).then(became => {
+      // The player may have left for another track while the browser was saving.
+      if (became && lapGhost && session.trial && key === recordKey(track.course.id, activeLayout))
+        ghost.playback = new GhostPlayback(lapGhost);
+      setVisible('ghost-notice', session.trial && ghosts.sessionOnly);
+    });
+  },
+  restarted: () => (prevPoses = []),
   results() {
     touchControls.show(false);
     setVisible('results', true);
     setVisible('countdown', false);
-    showResultsTable(track, session.riders, session.lapCount, session.raceTime, session.timing);
+    showResultsTable(track, session.riders, session.lapCount, session.raceTime, session.timing, session.trial);
   },
 });
 session.slideAggression = save.slideAggression;
+// The best lap of the track being ridden in Time Trial, drawn as a translucent bike nobody can touch.
+const ghosts = new GhostStore(indexedDbGhosts());
+const ghost = {
+  playback: null as GhostPlayback | null,
+  model: createBike(0xcfe9ff, 0),
+  pose: {x: 0, y: 0, z: 0, heading: 0, pitch: 0, lean: 0} as GhostPose,
+  last: {x: 0, z: 0},
+  shown: false,
+  /** Development checks only: lets a lap ridden by the autopilot become the ghost. */
+  fromAutopilot: false,
+};
+ghost.model.root.name = 'Ghost of the best lap';
+ghost.model.root.visible = false;
+ghost.model.root.traverse(o => {
+  if (!(o instanceof THREE.Mesh)) return;
+  o.castShadow = false;
+  const seeThrough = (m: THREE.Material) => {
+    const see = m.clone();
+    see.transparent = true;
+    see.opacity = 0.32;
+    see.depthWrite = false;
+    return see;
+  };
+  o.material = Array.isArray(o.material) ? o.material.map(seeThrough) : seeThrough(o.material);
+});
+scene.add(ghost.model.root);
+/** Fetches the stored ghost for the track about to be ridden. */
+function loadGhost() {
+  ghost.playback = null;
+  const key = recordKey(track.course.id, activeLayout);
+  void ghosts.load(key).then(stored => {
+    if (stored && session.trial && key === recordKey(track.course.id, activeLayout))
+      ghost.playback = new GhostPlayback(stored);
+    setVisible('ghost-notice', session.trial && ghosts.sessionOnly);
+  });
+}
+/** Puts the ghost where the best lap was at this moment of the lap. It is drawn only; physics never sees it. */
+function syncGhost(dt: number) {
+  const {playback, model, pose} = ghost;
+  const riding = session.trial && (session.phase === 'racing' || session.phase === 'countdown');
+  const lapTime = riding
+    ? currentLapTime(session.timing[0], session.raceTime + (session.paused ? 0 : session.accumulator))
+    : 0;
+  // The ghost stops being drawn a moment after it finishes its lap, so it does not park on the line.
+  ghost.shown = !!playback && riding && save.showGhost && lapTime <= playback.time + 0.25;
+  model.root.visible = ghost.shown;
+  if (!ghost.shown || !playback) return;
+  playback.at(lapTime, pose);
+  const speed = dt > 0 ? Math.hypot(pose.x - ghost.last.x, pose.z - ghost.last.z) / dt : 0;
+  ghost.last.x = pose.x;
+  ghost.last.z = pose.z;
+  model.root.position.set(pose.x, pose.y, pose.z);
+  model.root.rotation.y = pose.heading;
+  model.animate(
+    {
+      speed: Math.min(TUNING.maxSpeed, speed),
+      steer: 0,
+      lean: pose.lean,
+      pitch: pose.pitch,
+      compression: 0.1,
+      powerSlide: 0,
+      slipAngle: 0,
+      time: globalTime,
+      throttle: 1,
+      brake: 0,
+      groundDistance: Math.max(
+        0,
+        pose.y - track.height(track.project(pose.x, pose.z).s, track.project(pose.x, pose.z).lateral),
+      ),
+      crashed: false,
+      crashAge: 0,
+      airLean: 0,
+      crashSide: 1,
+    },
+    dt,
+  );
+}
 let cameraDistance: number = TUNING.cameraDistance,
   cameraShake: number = TUNING.cameraShake,
   renderScale = 1;
@@ -136,7 +229,7 @@ function loadEditor() {
           rebuildTrack(new Track(courseById(layout.courseId), layout));
           setVisible('setup', true);
           if (ride) {
-            setMode(true);
+            setMode('practice');
             startRace();
           }
         },
@@ -199,10 +292,10 @@ function layoutChoice() {
 
 function refreshNpcOptions() {
   const s = el<HTMLSelectElement>('npcs');
-  npcCount = practice ? 0 : Math.min(npcCount, 8 - humanCount);
+  npcCount = practice || trial ? 0 : Math.min(npcCount, 8 - humanCount);
   s.innerHTML = npcOptionsHtml(humanCount);
   s.value = String(npcCount);
-  s.disabled = practice;
+  s.disabled = practice || trial;
 }
 function refreshSlots() {
   const pads = input.connectedGamepads();
@@ -266,7 +359,7 @@ function buildGrid() {
       }
     });
   }
-  session.grid({track, humanCount, npcCount, practice, assignments});
+  session.grid({track, humanCount, npcCount, practice, trial, assignments});
   models = session.riders.map(r => {
     const m = createBike(r.color, r.id + 1);
     scene.add(m.root);
@@ -282,7 +375,7 @@ function loadPersonalBest() {
 }
 function buildHud(lapCount: number) {
   loadPersonalBest();
-  el('hud').innerHTML = hudHtml(humanCount, session.riders, assignments, practice, lapCount);
+  el('hud').innerHTML = hudHtml(humanCount, session.riders, assignments, practice || trial, lapCount);
   viewHud = [...el('hud').querySelectorAll<HTMLElement>('.viewport-hud')];
 }
 function startRace() {
@@ -296,6 +389,14 @@ function startRace() {
   document.body.classList.toggle('iphone-session', iphoneMode);
   buildGrid();
   buildHud(lapCount);
+  if (trial) loadGhost();
+  else ghost.playback = null;
+  setVisible('restart-lap', trial);
+  setVisible('restart-lap-pause', trial);
+  setVisible('ghost-notice', trial && ghosts.sessionOnly);
+  for (const prefix of ['', 'pause-']) setVisible(`${prefix}ghost-setting`, trial || prefix === '');
+  el('restart-pause').textContent = trial ? 'RESTART TIME TRIAL' : 'RESTART RACE';
+  el('setup-pause').textContent = trial ? 'END TIME TRIAL' : 'RACE SETUP';
   // A new seed every race: the computer riders' mistakes fall on different jumps each time.
   session.start({lapCount, difficulty, seed: (Date.now() % 4294967295) + 1});
   prevPoses = [];
@@ -308,7 +409,7 @@ function startRace() {
   touchControls.show(iphoneMode);
   audio.start();
   el('session-label').textContent =
-    `${(track.customName || track.course.name).toUpperCase()} / ${practice ? 'FREE PRACTICE' : 'RACE NIGHT'}`;
+    `${(track.customName || track.course.name).toUpperCase()} / ${trial ? 'TIME TRIAL' : practice ? 'FREE PRACTICE' : 'RACE NIGHT'}`;
   el('countdown').innerHTML = '<small>FIND YOUR LINE</small><strong>3</strong>';
   updateHud(hudContext());
 }
@@ -364,7 +465,7 @@ function hudContext(): HudContext {
     riders,
     viewHud,
     phase,
-    practice,
+    practice: practice || trial,
     lapCount,
     humanCount,
     raceTime,
@@ -384,7 +485,7 @@ function soundFrame(dt: number): SoundFrame {
   return {
     phase: session.phase,
     paused: session.paused || session.reviewFrozen,
-    practice,
+    practice: practice || trial,
     riders,
     positions: riders.map(r => order.indexOf(r) + 1),
     ears: listening
@@ -586,6 +687,7 @@ function frame(now: number) {
     return;
   }
   syncModels(session.paused || session.reviewFrozen ? 0 : dt);
+  syncGhost(session.paused || session.reviewFrozen ? 0 : dt);
   dust.update(session.riders, session.paused || session.reviewFrozen || session.phase !== 'racing' ? 0 : dt);
   sceneDrawCalls = renderViews(renderContext(), dt);
   if (now - lastHud > 100 && session.phase !== 'setup') {
@@ -603,17 +705,21 @@ function frame(now: number) {
   if (audioCost.length > 600) audioCost.shift();
   requestAnimationFrame(frame);
 }
-function setMode(isPractice: boolean) {
-  practice = isPractice;
+function setMode(mode: 'race' | 'practice' | 'trial') {
+  practice = mode === 'practice';
+  trial = mode === 'trial';
+  const solo = practice || trial;
   el('practice-mode').classList.toggle('active', practice);
-  el('race-mode').classList.toggle('active', !practice);
-  if (practice) {
+  el('trial-mode').classList.toggle('active', trial);
+  el('race-mode').classList.toggle('active', !solo);
+  if (solo) {
     humanCount = 1;
     el<HTMLSelectElement>('humans').value = '1';
   }
-  el<HTMLSelectElement>('humans').disabled = practice || iphoneMode;
-  el<HTMLSelectElement>('laps').disabled = practice;
-  el<HTMLSelectElement>('difficulty').disabled = practice;
+  setVisible('ghost-setting', trial);
+  el<HTMLSelectElement>('humans').disabled = solo || iphoneMode;
+  el<HTMLSelectElement>('laps').disabled = solo;
+  el<HTMLSelectElement>('difficulty').disabled = solo;
   refreshNpcOptions();
   refreshSlots();
 }
@@ -624,7 +730,7 @@ el<HTMLSelectElement>('play-device').onchange = e => {
   touchControls.show(false);
   humanCount = 1;
   el<HTMLSelectElement>('humans').value = '1';
-  el<HTMLSelectElement>('humans').disabled = practice || iphoneMode;
+  el<HTMLSelectElement>('humans').disabled = practice || trial || iphoneMode;
   assignments = [{kind: iphoneMode ? 'touch' : 'keyboard'}, null, null, null];
   ready = [true, false, false, false];
   setVisible('touch-setup-hint', iphoneMode);
@@ -649,8 +755,26 @@ for (const prefix of ['', 'pause-']) {
   el<HTMLSelectElement>(`${prefix}touch-steering`).onchange = updateDirections;
   el<HTMLSelectElement>(`${prefix}touch-pitch`).onchange = updateDirections;
 }
-el('race-mode').onclick = () => setMode(false);
-el('practice-mode').onclick = () => setMode(true);
+el('race-mode').onclick = () => setMode('race');
+el('practice-mode').onclick = () => setMode('practice');
+el('trial-mode').onclick = () => setMode('trial');
+el('restart-lap').onclick = () => {
+  session.restartLap();
+  el('restart-lap').blur();
+};
+// The same from the pause menu, where a controller can reach it.
+el('restart-lap-pause').onclick = () => {
+  session.togglePause();
+  session.restartLap();
+};
+for (const prefix of ['', 'pause-']) {
+  const box = el<HTMLInputElement>(`${prefix}show-ghost`);
+  box.checked = save.showGhost;
+  box.onchange = () => {
+    save.setShowGhost(box.checked);
+    for (const other of ['', 'pause-']) el<HTMLInputElement>(`${other}show-ghost`).checked = box.checked;
+  };
+}
 el<HTMLSelectElement>('humans').onchange = e => {
   humanCount = Number((e.target as HTMLSelectElement).value);
   refreshNpcOptions();
@@ -661,7 +785,14 @@ el('start').onclick = startRace;
 el('pause-button').onclick = () => session.togglePause();
 el('resume').onclick = () => session.togglePause();
 for (const id of ['restart-pause', 'restart-results']) el(id).onclick = startRace;
-for (const id of ['setup-pause', 'setup-results']) el(id).onclick = toSetup;
+// Leaving a Time Trial from the pause menu shows the laps of the session first.
+el('setup-pause').onclick = () => {
+  if (session.trial) {
+    setVisible('pause', false);
+    session.leaveTrial();
+  } else toSetup();
+};
+el('setup-results').onclick = toSetup;
 function toggleMute() {
   audio.muted = !audio.muted;
   el('sound').textContent = audio.muted ? 'SOUND OFF' : 'SOUND ON';
@@ -724,6 +855,8 @@ el<HTMLSelectElement>('render-scale').onchange = e => {
 };
 addEventListener('keydown', e => {
   if (!editorOpen() && e.code === 'KeyM' && !e.repeat && !(e.target instanceof HTMLInputElement)) toggleMute();
+  if (!editorOpen() && e.code === 'Backspace' && !e.repeat && !(e.target instanceof HTMLInputElement))
+    session.restartLap();
 });
 addEventListener('blur', () => {
   if ((session.phase === 'racing' || session.phase === 'countdown') && !session.paused) session.togglePause();
@@ -774,6 +907,16 @@ if (import.meta.env.DEV) {
       phase: session.phase,
       paused: session.paused,
       practice,
+      trial: session.trial,
+      ghost: {
+        loaded: !!ghost.playback,
+        time: ghost.playback?.time ?? null,
+        shown: ghost.shown,
+        sessionOnly: ghosts.sessionOnly,
+        x: ghost.pose.x,
+        y: ghost.pose.y,
+        z: ghost.pose.z,
+      },
       raceTime: session.raceTime,
       humanCount,
       npcCount,
@@ -809,6 +952,8 @@ if (import.meta.env.DEV) {
       const r = session.riders[id];
       session.override.set(id, npcControl(r, track, session.riders, 'club'));
     },
+    restartLap: () => session.restartLap(),
+    ghostFromAutopilot: (on: boolean) => (ghost.fromAutopilot = on),
     clearPerf: () => {
       fpsFrames = [];
       stepCounts = [];
@@ -830,6 +975,7 @@ if (reviewEnabled) {
         session.reviewFrozen = false;
         session.paused = false;
         practice = false;
+        trial = false;
         iphoneMode = false;
         session.reviewCrashTest = kind === 'Crash landing' || kind === 'Rider contact' ? kind : '';
         humanCount = kind === 'Four views' ? 4 : 1;

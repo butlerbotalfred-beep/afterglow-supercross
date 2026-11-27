@@ -152,6 +152,14 @@ Every rider is timed. The sixteen timing gates are grouped into four sectors per
 
 `npm run test:hud` (dev server running, Playwright available) checks that the timing panel overlaps nothing in four layouts: 1, 2 and 4 riders at 1280 × 720, and a phone at 844 × 390.
 
+## Time Trial and ghosts
+
+**TIME TRIAL** is the third tab on the setup screen, beside Race Night and Free Practice: one rider, no computer riders, as many laps as you like. Every lap is timed as in a race. **↺ RESTART LAP** in the top bar (Backspace on the keyboard, or RESTART LAP in the pause menu, which a controller can reach) puts you back on the start line at a standstill and starts the clock again; the laps you have already ridden are kept. There is no results screen while you ride. **END TIME TRIAL** in the pause menu shows the laps of the session and your best.
+
+Your best valid lap on each circuit and layout is kept as a **ghost**: a see-through bike that rides that lap again beside you, starting each time you cross the line or restart. It cannot be touched and changes nothing about your ride. A faster valid lap replaces it; a slower lap, a lap with a shortcut return or an autopilot lap never does. **Show the ghost of my best lap** on the setup screen and in the pause menu switches it off and on, and is remembered.
+
+The ghost records where the bike was (position, heading, pitch and lean), not what was pressed, at least 15 times a second with extra samples at takeoffs, landings and crashes, packed as 16-bit values: about 19 KB for a Dusk Valley lap. Playback is never more than 0.10 m from the lap as ridden. Ghosts are stored in the browser's IndexedDB (`afterglow-ghosts`), stamped with the physics version; a ghost from an older version is not loaded. If the browser has no IndexedDB or refuses it, the ghost still works until the page is closed and the top bar says it is not being saved. `src/ghost.ts` holds all of it; `npm run test:trial` checks it in a real browser.
+
 ## Circuit selection
 
 Choose a circuit in pre-race setup. Each has its own centerline, jump sequence and scenery; selection is retained on restart. Returning to setup and changing circuit rebuilds the environment and releases its previous graphics resources.
