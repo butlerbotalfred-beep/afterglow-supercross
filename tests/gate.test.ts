@@ -276,8 +276,8 @@ function launchWith(control: (pressed: boolean) => Control, held: (elapsed: numb
   h.run(Math.round(1 / STEP));
   return {result: gate.launches[0].result, metres: Math.hypot(r.x - from.x, r.z - from.z), sampled};
 }
-/** A key or a button is on or off: pressing it a little over half a second before the drop lands in the band. */
-const lateSqueeze = (elapsed: number, dropAt: number) => elapsed >= dropAt - 0.62;
+/** A key or a button is on or off: pressing it a little over a second before the drop lands in the band. */
+const lateSqueeze = (elapsed: number, dropAt: number) => elapsed >= dropAt - 1.13;
 const padWith = (index: number, id: string, trigger: number) => ({
   index,
   id,
@@ -368,4 +368,31 @@ test('a paused gate waits, and the autopilot holds the band', () => {
   auto.toDrop();
   assert.equal(auto.session.gate!.launches[0].result, 'good', 'the review autopilot is not caught by the gate');
   void idleControl;
+});
+
+test('a key or a touch button can hold the band by watching the needle, without knowing when the gate drops', () => {
+  // The rider presses while the needle they saw a fifth of a second ago was under the middle of the band.
+  const reaction = Math.round(0.2 / STEP);
+  for (let seed = 1; seed <= 100; seed++) {
+    const seen: number[] = [];
+    const h = harness({
+      seed,
+      throttle: (elapsed, gate) => {
+        seen.push(gate.launches[0].revs);
+        return seen[Math.max(0, seen.length - 1 - reaction)] < (GATE.bandLow + GATE.bandHigh) / 2 ? 1 : 0;
+      },
+    });
+    h.toDrop();
+    assert.equal(h.session.gate!.launches[0].result, 'good', `seed ${seed}`);
+  }
+});
+
+test('a jumped gate costs more than a poor launch, and a poor launch more than a good one, all the way down the straight', () => {
+  for (const metres of [20, 40, 60, 80]) {
+    const good = timeTo(metres, harness({throttle: inTheBand}));
+    const poor = timeTo(metres, harness({throttle: () => 0}));
+    const jumped = timeTo(metres, harness({throttle: (elapsed, gate) => (gate.live ? 1 : 0.68)}));
+    assert.ok(poor - good >= 0.15, `${metres} m: poor ${poor.toFixed(3)} s, good ${good.toFixed(3)} s`);
+    assert.ok(jumped - poor >= 0.1, `${metres} m: jumped ${jumped.toFixed(3)} s, poor ${poor.toFixed(3)} s`);
+  }
 });

@@ -18,11 +18,11 @@ export const GATE = {
   /** Seconds after the board goes during which nobody is caught, so a rider can still come off the throttle. */
   grace: 0.3,
   /** How fast the revs follow the throttle, in full scales a second. */
-  revRise: 1.1,
-  revFall: 0.9,
+  revRise: 0.6,
+  revFall: 0.5,
   /** The share of full drive a launch outside the band gets, and for how many metres. */
-  poorDrive: 0.62,
-  launchDistance: 24,
+  poorDrive: 0.7,
+  launchDistance: 14,
   /** A computer rider's reaction to the drop is between these two, in seconds. */
   minReaction: 0.06,
   maxReaction: 0.3,

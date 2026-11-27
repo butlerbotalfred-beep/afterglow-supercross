@@ -100,7 +100,7 @@ try {
     const g = window.__game;
     window.dispatchEvent(new KeyboardEvent('keyup', {code: 'KeyW'}));
     const gate = () => g.snapshot().gate;
-    while (gate().elapsed < gate().dropAt - 0.62) g.step(1 / 120);
+    while (gate().elapsed < gate().dropAt - 1.13) g.step(1 / 120);
     window.dispatchEvent(new KeyboardEvent('keydown', {code: 'KeyW'}));
     g.toRacing();
     g.step(0.5);

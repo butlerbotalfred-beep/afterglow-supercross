@@ -332,13 +332,13 @@ export function updateHud(ctx: HudContext) {
             `UP</small>`
           : r.recovery > 0
             ? `<b>RECOVERING ${r.recovery.toFixed(1)}</b><small>${r.recoveryReason}</small>`
-            : shot
-              ? `<b class="holeshot-label">HOLESHOT</b>` +
-                `<small>${shot.id === r.id ? 'FIRST THROUGH THE FIRST CORNER' : shot.name}</small>`
-              : r.progress.routeBroken
-                ? `<b>RETURN TO TRACK EXIT</b><small>${iphoneMode ? 'TAP ↺ RECOVER' : 'R / B TO RECOVER'}</small>`
-                : r.progress.wrongWay
-                  ? '<b>WRONG WAY</b>'
+            : r.progress.routeBroken
+              ? `<b>RETURN TO TRACK EXIT</b><small>${iphoneMode ? 'TAP ↺ RECOVER' : 'R / B TO RECOVER'}</small>`
+              : r.progress.wrongWay
+                ? '<b>WRONG WAY</b>'
+                : shot
+                  ? `<b class="holeshot-label">HOLESHOT</b>` +
+                    `<small>${shot.id === r.id ? 'FIRST THROUGH THE FIRST CORNER' : shot.name}</small>`
                   : !r.grounded && r.airTime > 0.2
                     ? r.scrub && Math.abs(r.airLean) > TUNING.airLeanLimit
                       ? `<b class="air-label">SCRUB</b><small>CENTER THE STICK BEFORE YOU LAND</small>`
