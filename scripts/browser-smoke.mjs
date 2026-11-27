@@ -29,7 +29,7 @@ cli(['set', 'viewport', '1440', '900']);
 const stage1 = await evaluate(`(async()=>{
  const wait=ms=>new Promise(r=>setTimeout(r,ms)),g=window.__game;
  const assert=(v,m)=>{if(!v)throw new Error(m);};
- document.querySelector('#practice-mode').click();document.querySelector('#start').click();g.step(3.9);
+ document.querySelector('#practice-mode').click();document.querySelector('#start').click();g.toRacing();
  assert(g.snapshot().practice&&g.riders().length===1,'solo practice has no opponents');
  window.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyW'}));await wait(1100);window.dispatchEvent(new KeyboardEvent('keyup',{code:'KeyW'}));
  const speed=g.riders()[0].speed;assert(speed>8,'keyboard throttle');
@@ -37,7 +37,7 @@ const stage1 = await evaluate(`(async()=>{
  const heading=g.riders()[0].heading;window.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyD'}));await wait(250);window.dispatchEvent(new KeyboardEvent('keyup',{code:'KeyD'}));assert(g.riders()[0].heading<heading,'keyboard steering');
  window.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyR'}));await wait(50);window.dispatchEvent(new KeyboardEvent('keyup',{code:'KeyR'}));assert(g.riders()[0].recovery>1,'visible reset delay');
  const before=g.snapshot().raceTime;window.dispatchEvent(new KeyboardEvent('keydown',{code:'Escape'}));await wait(100);window.dispatchEvent(new KeyboardEvent('keyup',{code:'Escape'}));assert(g.snapshot().paused,'keyboard pause');await wait(100);assert(g.snapshot().raceTime<before+.05,'shared pause freezes simulation');
- document.querySelector('#setup-pause').click();document.querySelector('#race-mode').click();document.querySelector('#laps').value='1';document.querySelector('#npcs').value='5';document.querySelector('#start').click();g.step(3.9);
+ document.querySelector('#setup-pause').click();document.querySelector('#race-mode').click();document.querySelector('#laps').value='1';document.querySelector('#npcs').value='5';document.querySelector('#start').click();g.toRacing();
  window.__driver=setInterval(()=>g.drive(0),8);g.clearPerf();await wait(10000);
  for(let i=0;i<40&&g.snapshot().riders[0].air<=.4;i++)await wait(250);
  assert(!g.snapshot().riders[0].broken,'steering inputs follow validated course');assert(g.snapshot().riders[0].air>.4,'terrain jump');
@@ -61,7 +61,7 @@ const stage2 = evaluate(`(async()=>{
    for(let i=1;i<count;i++){select('[data-device="'+i+'"]','pad-'+(i-1));document.querySelector('[data-ready="'+i+'"]').click();}
    // Prior slots may already be ready; explicitly set all displayed slots to ready.
    for(const b of document.querySelectorAll('[data-ready]'))if(!b.classList.contains('is-ready'))b.click();
-   document.querySelector('#start').click();g.step(3.9);await wait(80);
+   document.querySelector('#start').click();g.toRacing();await wait(80);
    assert(document.querySelectorAll('.viewport-hud').length===count,'viewport count '+count);
    if(count===2)assert(document.querySelectorAll('.viewport-hud')[1].style.top==='50%','two stacked viewports');
    if(count===3)assert(!!document.querySelector('#live-standings'),'three player info quadrant');
@@ -72,7 +72,7 @@ const stage2 = evaluate(`(async()=>{
  window.__pads[0].buttons[7]={pressed:true,value:1};await wait(500);assert(g.riders()[1].speed>3&&g.riders()[0].speed===0&&g.riders()[2].speed===0,'one pad one rider');window.__pads[0].buttons[7]={pressed:false,value:0};
  window.__pads[1]=null;await wait(80);assert(g.snapshot().paused&&document.querySelector('#pause-message').textContent.includes('disconnected'),'disconnect pauses all riders');document.querySelector('#resume').click();assert(g.snapshot().paused,'cannot resume missing device');
  window.__pads[1]={index:1,id:'Simulated pad 2',connected:true,axes:[0,0,0,0],buttons:Array.from({length:17},()=>({pressed:false,value:0}))};await wait(80);document.querySelector('#resume').click();assert(!g.snapshot().paused,'reconnect resume');
- document.querySelector('#pause-button').click();document.querySelector('#setup-pause').click();select('#npcs','4');document.querySelector('#laps').value='3';document.querySelector('#start').click();g.step(3.9);
+ document.querySelector('#pause-button').click();document.querySelector('#setup-pause').click();select('#npcs','4');document.querySelector('#laps').value='3';document.querySelector('#start').click();g.toRacing();
  window.__driver=setInterval(()=>{for(let i=0;i<4;i++)g.drive(i);},8);g.clearPerf();await wait(10000);
  return {checks:['human finishes validated race / results','clean restart','countdown pause','2 stacked views','3 views plus standings','4 view grid','zero NPCs at 2/3/4 players','independent simulated pad routing','controller disconnect / reconnect'],finish,performance:g.snapshot()};
 })()`);
@@ -94,7 +94,7 @@ const stage4 = evaluate(`(async()=>{
  // Join three more distinct controllers through the actual setup polling path.
  for(let i=1;i<4;i++){window.__pads[i].buttons[0]={pressed:true,value:1};await wait(40);window.__pads[i].buttons[0]={pressed:false,value:0};await wait(40);}
  assert(document.querySelector('#humans').value==='4','gamepad join reaches four humans');
- document.querySelector('#laps').value='1';document.querySelector('#start').click();g.step(3.9);
+ document.querySelector('#laps').value='1';document.querySelector('#start').click();g.toRacing();
  window.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyW'}));g.step(.5);window.dispatchEvent(new KeyboardEvent('keyup',{code:'KeyW'}));assert(g.riders().every(r=>r.speed===0),'unassigned keyboard controls no rider');
  window.__pads[2].buttons[7]={pressed:true,value:1};g.step(.5);window.__pads[2].buttons[7]={pressed:false,value:0};assert(g.riders()[2].speed>3&&g.riders()[0].speed===0,'four physical-index pad assignments');
  for(let i=0;i<21000&&g.snapshot().phase!=='results';i++){g.drive(0);g.step(1/60);}

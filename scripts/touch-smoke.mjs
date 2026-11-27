@@ -69,7 +69,7 @@ try {
   assert.equal(await evaluate('document.querySelector("#play-device").value'), 'desktop');
   assert.equal(await evaluate('getComputedStyle(document.querySelector("#touch-controls")).display'), 'none');
   // Desktop race remains free of touch overlays even in a phone-sized browser.
-  await evaluate('document.querySelector("#start").click();window.__game.step(4);');
+  await evaluate('document.querySelector("#start").click();window.__game.toRacing();');
   assert.equal(await evaluate('getComputedStyle(document.querySelector("#touch-controls")).display'), 'none');
   checks.push('Desktop default and desktop race have no touch overlay');
   await evaluate(
@@ -80,7 +80,7 @@ try {
   assert.equal(await evaluate('document.querySelector("#touch-pitch").value'), 'regular');
   assert.equal(await evaluate('getComputedStyle(document.querySelector("#touch-controls")).display'), 'none');
   await capture('output/iphone-setup.png');
-  await evaluate('document.querySelector("#start").click();window.__game.step(4);');
+  await evaluate('document.querySelector("#start").click();window.__game.toRacing();');
   await wait(150);
   assert.notEqual(await evaluate('getComputedStyle(document.querySelector("#touch-controls")).display'), 'none');
   checks.push('Explicit iPhone selection enables one touch rider only after starting');
@@ -146,7 +146,7 @@ try {
   assert.notEqual(await evaluate('getComputedStyle(document.querySelector("#touch-controls")).display'), 'none');
   checks.push('Restart retains explicitly selected iPhone mode');
   await evaluate(
-    'document.querySelector("#pause-button").click();document.querySelector("#setup-pause").click();var s=document.querySelector("#play-device");s.value="desktop";s.dispatchEvent(new Event("change"));document.querySelector("#start").click();window.__game.step(4);',
+    'document.querySelector("#pause-button").click();document.querySelector("#setup-pause").click();var s=document.querySelector("#play-device");s.value="desktop";s.dispatchEvent(new Event("change"));document.querySelector("#start").click();window.__game.toRacing();',
   );
   assert.equal(await evaluate('getComputedStyle(document.querySelector("#touch-controls")).display'), 'none');
   checks.push('Switching back to Mac removes touch controls');
@@ -157,7 +157,7 @@ try {
   );
   assert.equal(await evaluate('document.querySelector("#touch-steering").value'), 'inverted');
   assert.equal(await evaluate('document.querySelector("#touch-pitch").value'), 'inverted');
-  await evaluate('document.querySelector("#restart-pause").click();window.__game.step(4);');
+  await evaluate('document.querySelector("#restart-pause").click();window.__game.toRacing();');
   await wait(100);
   const reverseHeading = await evaluate('window.__game.riders()[0].heading'),
     reverseStick = await center('.touch-stick'),
@@ -175,7 +175,7 @@ try {
   await touch('touchEnd', []);
   checks.push('Regular and Inverted steer in opposite directions; setup/pause settings sync and survive restart');
   await evaluate(
-    'document.querySelector("#pause-button").click();document.querySelector("#restart-pause").click();window.__game.step(4);',
+    'document.querySelector("#pause-button").click();document.querySelector("#restart-pause").click();window.__game.toRacing();',
   );
   const nose = await center('.touch-nose'),
     noseGas = await center('.touch-throttle'),

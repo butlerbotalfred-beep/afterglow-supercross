@@ -22,7 +22,7 @@ const startTrial = () => {
   course.dispatchEvent(new Event('change', {bubbles: true}));
   document.querySelector('#trial-mode').click();
   document.querySelector('#start').click();
-  g.step(4);
+  g.toRacing();
   return g.snapshot();
 };
 /** Runs in the page: the autopilot rides until `laps` laps are timed. Returns the lap times. */
@@ -153,7 +153,7 @@ try {
   await click(page, '#race-mode');
   await page.evaluate(() => (document.querySelector('#npcs').value = '5'));
   await click(page, '#start');
-  state = await page.evaluate(() => (window.__game.step(4), window.__game.snapshot()));
+  state = await page.evaluate(() => (window.__game.toRacing(), window.__game.snapshot()));
   check(
     !state.trial && state.riders.length > 1 && !(await page.isVisible('#restart-lap')),
     'Race Night is unchanged afterwards',

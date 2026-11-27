@@ -560,6 +560,99 @@ footer i {
 .iphone-session .preload em {
   display: none;
 }
+.launch {
+  position: absolute;
+  top: 64%;
+  left: 50%;
+  width: min(340px, 62%);
+  transform: translateX(-50%);
+  text-align: center;
+  text-shadow: 0 2px 8px #000a;
+}
+.launch.hidden {
+  display: none;
+}
+.launch-track {
+  position: relative;
+  height: 16px;
+  background: #10151ccc;
+  border: 1px solid #fff5;
+}
+.launch-band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: #39e36b;
+  opacity: 0.55;
+}
+.launch-red {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  background: #ef4a4a;
+  opacity: 0.6;
+}
+.launch-track i {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 4px;
+  margin-left: -2px;
+  background: #fff;
+  box-shadow: 0 0 8px #fff;
+}
+.launch em {
+  display: inline-block;
+  margin-top: 7px;
+  padding: 3px 10px;
+  background: #10151ccc;
+  font:
+    800 14px/1.2 'Barlow Condensed',
+    Impact,
+    sans-serif;
+  font-style: normal;
+  letter-spacing: 2px;
+  color: #fff;
+}
+.launch.good .launch-band {
+  opacity: 1;
+  box-shadow: 0 0 12px #39e36b;
+}
+.launch.good em {
+  color: #7dffa3;
+}
+.launch.creep em,
+.launch.jumped em,
+.launch.poor em {
+  color: #ff8c7a;
+}
+.launch.creep .launch-red,
+.launch.jumped .launch-red {
+  opacity: 1;
+}
+.compact .launch em {
+  font-size: 10px;
+  letter-spacing: 1px;
+}
+.rider-notice .holeshot-label {
+  color: #ffb648;
+}
+.holeshot-tag {
+  font-style: normal;
+  color: #ffb648;
+}
+#countdown.at-gate {
+  justify-content: flex-start;
+  padding-top: 11vh;
+}
+#countdown.at-gate strong {
+  font-size: 104px;
+}
+#countdown.at-gate strong.gate-live {
+  font-size: 64px;
+  color: #ffb648;
+}
 .rider-notice {
   position: absolute;
   top: 29%;

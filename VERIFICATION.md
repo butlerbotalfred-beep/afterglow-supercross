@@ -1,3 +1,29 @@
+# M2.2 Start gate and holeshot — 27 November 2026
+
+Race Night now starts from a gate: a 5-second board, a drop 1 to 3 s later, a rev meter with a green band, a half-second hold for moving early, and a holeshot line after the first corner. `src/gate.ts` holds the rules and `RaceSession` runs them; Free Practice and Time Trial skip the gate. Physics constants are untouched (`PHYSICS_VERSION` stays 5).
+
+| Completion box | Result | Evidence |
+|---|---|---|
+| C1 Same seed, same gate delay; all delays 1.0 to 3.0 s across 1,000 seeds | Pass: 1.002 to 2.996 s | `tests/gate.test.ts`, "the same seed gives the same gate delay, and every delay is 1.0 to 3.0 s across 1,000 seeds". |
+| C2 Moving before the drop costs exactly 0.5 s | Pass | "moving before the drop costs exactly 0.5 s": the bike is held for 60 physics steps after the drop, and from then on its position, speed and heading at every step are exactly those of a clean launch half a second earlier. Revving to the stop while the board counts costs nothing. |
+| C3 A launch in the green band reaches 20 m at least 0.15 s sooner than one outside | Pass: 1.308 s against 1.692 s, 0.383 s sooner | "a launch in the green band reaches 20 m at least 0.15 s sooner than one outside it": no revs, just under the band, just over it and nearly creeping all take 1.692 s; anywhere in the band takes 1.308 s, the same as a Free Practice start. |
+| C4 Exactly one holeshot per race, none in Free Practice or Time Trial | Pass | "exactly one rider is awarded the holeshot in every race, and none in Free Practice or Time Trial". Also counted over the 500 starts of C5: one holeshot in each. |
+| C5 No AI rider crashes before the holeshot line in 100 seeded 8-rider starts per circuit | Pass: 0 crashes, 0 recoveries in 500 starts | `npm run start-check -- --check`, now a CI step: 100 seeded starts of eight on each circuit, every rider reaches the line, slowest field through in 12.4 s (Dusk Valley) to 15.7 s (Pine Summit). |
+| C6 From pressing "Drop the gate" to the drop takes 9 s or less | Pass: 6.0 to 8.0 s | "from pressing Drop the gate to the drop takes 9 s or less": the 5 s board plus the 1 to 3 s delay, for every seed tried, through the race session. |
+| C7 A launch works from keyboard, gamepad, Mac Xbox bridge and touch | Pass | One test each: "keyboard: W sets the revs and launches the bike", "browser gamepad: the right trigger sets the revs and launches the bike", "Mac Xbox bridge: the native controller feed sets the revs and launches the bike", "touch: the throttle button sets the revs and launches the bike". |
+| C8 With the gate skipped, pace-gate at 0% matches the M1.2 times | Pass | `npm run pace-gate -- --tolerance 0`: 10/10 races within 0% with 0 crashes and 0 recoveries. Landing harness and field check (90/90) also match, baselines untouched. |
+
+What to know:
+
+- **The launch is throttle only.** The plan says "rev meter with green band". The band is 55 to 80% throttle held as the gate falls. The meter needle follows the throttle with a little lag (full swing in about a second), so a keyboard rider taps W to hold it in the band.
+- **What counts as moving early.** Holding 93% throttle or more once the gate is live (after a 0.3 s grace as the board ends) creeps the bike into the bar. The rider is told once and held for exactly 0.5 s after the drop. This is the only way to be penalised; the bike cannot physically leave before the drop.
+- **A poor launch** is 62% drive for the first 24 m. A good launch is the bike's normal drive, so nothing got faster: a good gate start is what Free Practice has always had off the line.
+- **Computer riders** always launch in the band, after a seeded reaction of 0.06 to 0.30 s (×0.75 on Expert, ×1.15 on Relaxed). To get eight bikes through the first jumps cleanly they hold their start lane until 80 m past the holeshot line, avoid only a slower bike directly ahead while doing so, the second row waits for the bike in front, and seeded mistakes are switched off until each rider is past the line. Past the line they race as before.
+- **After the line.** In full eight-rider gated races on Pine Summit and Saltwind Coast, with seeded mistakes off, the pack still has 0 to 2 crashes a race once lanes merge; everybody finishes. That is the same pack racing as before the gate and is outside C5, which ends at the line.
+- **Six seconds or more.** The start now takes 6 to 8 s instead of 3.8 s. The plan sets 9 s as the limit.
+- **Browser check.** `npm run test:gate` (needs the dev server): 23 checks covering the board, the live gate, the meter, the bars dropping, a jumped gate, the holeshot banner and results tag, and no gate in Free Practice or Time Trial. The other browser checks now step to the drop instead of assuming 3.8 s.
+- **Not judged here.** Whether the launch is understood without instructions, whether a jumped gate feels fairly punished and whether a good launch feels different are the play review.
+
 # M2.1 Time Trial and ghosts — 27 November 2026
 
 A third mode beside Race Night and Free Practice: one rider against the clock with a see-through ghost of the best lap. `src/ghost.ts` records, packs, plays and stores ghosts; `RaceSession` gains the mode, the lap restart and the leave-to-results step. Physics is untouched (`PHYSICS_VERSION` stays 5).

@@ -19,7 +19,7 @@ const report = {date: new Date().toISOString(), courses: [], checks: []};
 try {
   for (const id of ['dusk', 'canyon', 'alpine', 'coast', 'quarry']) {
     const start = evaluate(
-      `(()=>{const g=window.__game;clearInterval(window.courseDriver);if(g.snapshot().phase==='results')document.querySelector('#setup-results').click();else if(g.snapshot().phase!=='setup'){if(!g.snapshot().paused)document.querySelector('#pause-button').click();document.querySelector('#setup-pause').click();}const select=document.querySelector('#course');select.value='${id}';select.dispatchEvent(new Event('change'));document.querySelector('#laps').value='1';document.querySelector('#start').click();g.step(4);if(g.track.course.id!=='${id}')throw new Error('track selection');window.courseDriver=setInterval(()=>g.drive(0),8);g.clearPerf();return {name:g.track.course.name,length:g.track.length,elevation:g.track.elevationRange};})()`,
+      `(()=>{const g=window.__game;clearInterval(window.courseDriver);if(g.snapshot().phase==='results')document.querySelector('#setup-results').click();else if(g.snapshot().phase!=='setup'){if(!g.snapshot().paused)document.querySelector('#pause-button').click();document.querySelector('#setup-pause').click();}const select=document.querySelector('#course');select.value='${id}';select.dispatchEvent(new Event('change'));document.querySelector('#laps').value='1';document.querySelector('#start').click();g.toRacing();if(g.track.course.id!=='${id}')throw new Error('track selection');window.courseDriver=setInterval(()=>g.drive(0),8);g.clearPerf();return {name:g.track.course.name,length:g.track.length,elevation:g.track.elevationRange};})()`,
     );
     evaluate(`new Promise(resolve=>setTimeout(resolve,5500))`);
     cli(['screenshot', `output/course-${id}.png`]);
@@ -44,7 +44,7 @@ try {
   );
   evaluate('new Promise(resolve=>setTimeout(resolve,100))');
   report.pitch = evaluate(
-    `(()=>{const g=window.__game,s=document.querySelector('[data-device="0"]');s.value='pad-0';s.dispatchEvent(new Event('change'));document.querySelector('[data-ready="0"]').click();document.querySelector('#start').click();g.step(4);const r=g.riders()[0];for(let i=0;i<1200&&r.grounded;i++){g.drive(0);g.step(1/120);}g.setControl(0,null);const before=r.pitch;window.testPads[0].axes[1]=-1;g.step(.2);const after=r.pitch;if(after>before-.4)throw new Error('forward stick did not dip nose');window.testPads[0].axes[1]=1;g.step(.2);if(r.pitch<=after)throw new Error('back stick did not lift nose');return {before,forward:after,back:r.pitch};})()`,
+    `(()=>{const g=window.__game,s=document.querySelector('[data-device="0"]');s.value='pad-0';s.dispatchEvent(new Event('change'));document.querySelector('[data-ready="0"]').click();document.querySelector('#start').click();g.toRacing();const r=g.riders()[0];for(let i=0;i<1200&&r.grounded;i++){g.drive(0);g.step(1/120);}g.setControl(0,null);const before=r.pitch;window.testPads[0].axes[1]=-1;g.step(.2);const after=r.pitch;if(after>before-.4)throw new Error('forward stick did not dip nose');window.testPads[0].axes[1]=1;g.step(.2);if(r.pitch<=after)throw new Error('back stick did not lift nose');return {before,forward:after,back:r.pitch};})()`,
   );
   report.checks.push('Actual gamepad routing: left stick forward lowers nose, backward lifts it in flight');
   report.errors = cli(['errors']);

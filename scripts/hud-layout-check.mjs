@@ -43,7 +43,7 @@ const setUp = async ({humans, phone}) => {
   select('#course', 'coast');
   select('#npcs', '3');
   document.querySelector('#start').click();
-  g.step(3.9);
+  g.toRacing();
   // Ride on autopilot until rider 1 has just finished a lap, so the panel is showing its longest text.
   for (let i = 0; i < 4000 && g.timing()[0].laps.length < 1; i++) {
     g.riders().forEach(r => r.human && g.drive(r.id));

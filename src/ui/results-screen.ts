@@ -38,6 +38,7 @@ export function showResultsTable(
   raceTime: number,
   timing: RiderTiming[] = [],
   trial = false,
+  holeshot: number | null = null,
 ) {
   el('results').querySelector('.eyebrow')!.textContent = track.course.name.toUpperCase() + ' / OFFICIAL CLASSIFICATION';
   const ordered = ranking(riders, track);
@@ -72,7 +73,8 @@ export function showResultsTable(
       return (
         `<div class="result-row"><b>${String(i + 1).padStart(2, '0')}</b>` +
         `<span style="color:${CSS_COLORS[r.id]}">●</span>` +
-        `<strong>${r.name}<small>${r.human ? 'HUMAN' : 'NPC'}</small></strong>` +
+        `<strong>${r.name}<small>${r.human ? 'HUMAN' : 'NPC'}` +
+        `${r.id === holeshot ? ' · <i class="holeshot-tag">HOLESHOT</i>' : ''}</small></strong>` +
         `<span class="result-time">${gap}</span>` +
         (lapList ? `<div class="result-laps">${lapList}</div>` : '') +
         `</div>`

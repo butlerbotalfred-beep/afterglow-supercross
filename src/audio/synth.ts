@@ -86,6 +86,26 @@ export function crash(rate: number, seed = 53) {
   }
   return out;
 }
+/** The start gate hitting the ground: a hard metal clang with a rattle after it. */
+export function clang(rate: number, seed = 71) {
+  const out = samples(0.55, rate),
+    rng = new Rng(seed);
+  const partials = [523, 1187, 1710, 2630, 3940].map((hz, n) => ({hz: hz * rng.range(0.98, 1.02), decay: 9 + n * 5}));
+  let low = 0;
+  for (let i = 0; i < out.length; i++) {
+    const t = i / rate,
+      fade = Math.min(1, t * 900, (out.length - i) / (0.03 * rate));
+    low += (rng.next() * 2 - 1 - low) * 0.5;
+    const ring = partials.reduce(
+      (sum, p, n) => sum + (Math.sin(2 * Math.PI * p.hz * t) * Math.exp(-t * p.decay)) / (n + 1),
+      0,
+    );
+    // The bar bounces once: a second, softer hit a moment later.
+    const bounce = t > 0.09 ? Math.sin(2 * Math.PI * 1187 * (t - 0.09)) * Math.exp(-(t - 0.09) * 22) * 0.35 : 0;
+    out[i] = (ring * 0.5 + bounce + low * 0.8 * Math.exp(-t * 60)) * fade * 0.8;
+  }
+  return out;
+}
 /** One or more notes played in a row, each `seconds` long. Used for the countdown, lap and finish. */
 export function tones(rate: number, hz: number[], seconds: number, ring = 6) {
   const each = Math.round(seconds * rate),

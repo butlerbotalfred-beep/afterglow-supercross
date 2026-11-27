@@ -230,19 +230,24 @@ test('computer riders react to the drop after a seeded moment and always launch 
   const h = harness({seed: 31, npcs: 7, throttle: inTheBand});
   h.toDrop();
   const gate = h.session.gate!;
+  const helds = gate.launches.map(launch => launch.held);
   h.session.riders.forEach((r, i) => {
     assert.equal(gate.launches[i].result, 'good', `rider ${i}`);
-    if (!r.human) assert.equal(gate.launches[i].held, Math.round(npcReaction(31, r.id, 'club') / STEP));
+    const own = Math.round(npcReaction(31, r.id, 'club') / STEP);
+    if (r.human) return;
+    // The front row goes on its own reaction; the second row never before the bike ahead of it.
+    if (i < 4) assert.equal(helds[i], own);
+    else assert.equal(helds[i], Math.max(own, helds[i - 4] + Math.round(0.03 / STEP)), `rider ${i}`);
   });
   assert.equal(gate.launches[0].held, 0, 'a human is never held back by a reaction time');
-  h.run(Math.round(GATE.maxReaction / STEP) + 2);
+  h.run(Math.round(GATE.maxReaction / STEP) + 8);
   assert.ok(
     h.session.riders.every(r => r.speed > 0),
     'everybody is away',
   );
   const again = harness({seed: 31, npcs: 7, throttle: inTheBand});
   again.toDrop();
-  again.run(Math.round(GATE.maxReaction / STEP) + 2);
+  again.run(Math.round(GATE.maxReaction / STEP) + 8);
   assert.deepEqual(
     again.session.riders.map(r => [r.x, r.z]),
     h.session.riders.map(r => [r.x, r.z]),
