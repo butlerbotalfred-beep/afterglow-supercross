@@ -7,7 +7,6 @@ import {
   GhostPlayback,
   GhostRecorder,
   GhostStore,
-  ghostKey,
   type Ghost,
   type GhostBackend,
   type GhostPose,
@@ -59,11 +58,17 @@ const memoryBackend = () => {
   const held = new Map<string, Ghost>();
   const backend: GhostBackend = {
     get: async key => held.get(key) ?? null,
-    put: async (key, ghost) => void held.set(key, ghost),
+    async update(key, decide) {
+      const stored = held.get(key) ?? null;
+      const next = decide(stored);
+      if (next) held.set(key, next);
+      return next ?? stored;
+    },
   };
   return {held, backend};
 };
 const dusk = recordLap('dusk');
+const still: GhostPose = {x: 0, y: 0, z: 0, heading: 0, pitch: 0, lean: 0};
 
 test('ghost playback is within 0.10 m of the recorded run at every moment', () => {
   assert.equal(GHOST_ACCURACY, 0.1);
@@ -120,7 +125,7 @@ test('a stored Dusk Valley ghost is 40 KB or smaller', () => {
 test('a ghost is replaced only by a faster valid lap', async () => {
   const {held, backend} = memoryBackend();
   const store = new GhostStore(backend);
-  const key = ghostKey('dusk');
+  const key = 'dusk';
   const lap = (time: number): Ghost => ({...dusk.ghost, time});
   assert.equal(await store.load(key), null);
   assert.equal(await store.submit(key, lap(100), true), true, 'the first valid lap becomes the ghost');
@@ -132,17 +137,13 @@ test('a ghost is replaced only by a faster valid lap', async () => {
   assert.equal(await store.submit(key, lap(99.5), true), true, 'a faster valid lap does');
   assert.equal(held.get(key)!.time, 99.5, 'and it is what the browser keeps');
   assert.equal((await new GhostStore(backend).load(key))!.time, 99.5, 'so it is there after a reload');
-  assert.equal(
-    await new GhostStore(backend).load(ghostKey('dusk', 'my-layout')),
-    null,
-    'each layout has its own ghost',
-  );
+  assert.equal(await new GhostStore(backend).load('dusk:my-layout'), null, 'each layout has its own ghost');
   assert.equal(store.sessionOnly, false);
 });
 
 test('a ghost from an older PHYSICS_VERSION is not loaded', async () => {
   const {held, backend} = memoryBackend();
-  const key = ghostKey('dusk');
+  const key = 'dusk';
   await new GhostStore(backend, PHYSICS_VERSION - 1).submit(key, {...dusk.ghost, physics: PHYSICS_VERSION - 1}, true);
   assert.equal(held.get(key)!.physics, PHYSICS_VERSION - 1);
   const store = new GhostStore(backend);
@@ -158,7 +159,7 @@ test('a ghost from an older PHYSICS_VERSION is not loaded', async () => {
 });
 
 test('if IndexedDB is unavailable, the ghost works for the session with a notice', async () => {
-  const key = ghostKey('dusk');
+  const key = 'dusk';
   const none = new GhostStore(null);
   assert.equal(none.sessionOnly, true, 'no IndexedDB at all');
   assert.equal(await none.submit(key, dusk.ghost, true), true);
@@ -167,7 +168,7 @@ test('if IndexedDB is unavailable, the ghost works for the session with a notice
     get: async () => {
       throw new Error('blocked');
     },
-    put: async () => {
+    update: async () => {
       throw new Error('quota');
     },
   };
@@ -178,8 +179,106 @@ test('if IndexedDB is unavailable, the ghost works for the session with a notice
   assert.equal(await failing.submit(key, dusk.ghost, true), true);
   assert.equal((await failing.load(key))!.time, dusk.ghost.time);
   const {backend} = memoryBackend();
-  const writeFails = new GhostStore({get: backend.get, put: broken.put});
+  const writeFails = new GhostStore({get: backend.get, update: broken.update});
   assert.equal(await writeFails.submit(key, dusk.ghost, true), true, 'a failed write still keeps the ghost');
   assert.equal(writeFails.sessionOnly, true);
   assert.equal((await writeFails.load(key))!.time, dusk.ghost.time);
+});
+
+test('a lap too slow to fit in 40 KB gets no ghost instead of a large one', () => {
+  // A rider crawling round in tight wiggles needs a sample every few steps for minutes on end.
+  const recorder = new GhostRecorder();
+  recorder.begin(0);
+  let step = 0;
+  for (; step < 400 / TUNING.step && recorder.recording; step++)
+    recorder.push({x: step * 0.02, y: 0, z: Math.sin(step / 3) * 2, heading: 0, pitch: 0, lean: 0}, step);
+  assert.equal(recorder.recording, false, 'the recorder stopped when the lap could no longer fit');
+  assert.ok(step * TUNING.step > 20, `it recorded ${(step * TUNING.step).toFixed(0)} s before giving up`);
+  assert.equal(recorder.finish(step * TUNING.step), null);
+  // A long lap ridden smoothly still fits: three minutes in a straight line.
+  recorder.begin(0);
+  for (let i = 0; i < 180 / TUNING.step; i++)
+    recorder.push({x: i * 0.05, y: 0, z: 0, heading: 0, pitch: 0, lean: 0}, i);
+  const long = recorder.finish(180)!;
+  assert.ok(long.data.byteLength <= 40 * 1024, `${long.data.byteLength} bytes`);
+});
+
+test('a step the recorder never saw does not shift the rest of the lap', () => {
+  const recorder = new GhostRecorder();
+  recorder.begin(0);
+  const xAt = (step: number) => step * 0.3;
+  // Steps 100 to 104 are never pushed: the later ones still carry their own step numbers.
+  for (let step = 0; step < 400; step++) if (step < 100 || step > 104) recorder.push({...still, x: xAt(step)}, step);
+  const playback = new GhostPlayback(recorder.finish(400 * TUNING.step)!);
+  for (const step of [50, 99, 105, 250, 399])
+    assert.ok(Math.abs(playback.at(step * TUNING.step).x - xAt(step)) < 0.01, `step ${step}`);
+});
+
+test('two laps finishing together, or in two tabs, leave the faster one stored', async () => {
+  const lap = (time: number): Ghost => ({...dusk.ghost, time});
+  // A backend whose answers take a moment, as IndexedDB's do.
+  const slow = () => {
+    const {held, backend} = memoryBackend();
+    const later = <T>(value: () => T) => new Promise<T>(resolve => setTimeout(() => resolve(value()), 5));
+    const delayed: GhostBackend = {
+      get: key => later(() => held.get(key) ?? null),
+      update: async (key, decide) => {
+        await later(() => 0);
+        return backend.update(key, decide);
+      },
+    };
+    return {held, backend: delayed};
+  };
+  const one = slow();
+  const store = new GhostStore(one.backend);
+  const [first, second] = await Promise.all([store.submit('dusk', lap(90), true), store.submit('dusk', lap(95), true)]);
+  assert.deepEqual([first, second], [true, false], 'the slower lap offered second does not replace the faster');
+  assert.equal(one.held.get('dusk')!.time, 90);
+  assert.equal((await store.load('dusk'))!.time, 90);
+  // Two tabs: each has its own store on the same storage and neither has loaded the other's lap.
+  const two = slow();
+  const tabA = new GhostStore(two.backend),
+    tabB = new GhostStore(two.backend);
+  const answers = await Promise.all([tabA.submit('dusk', lap(80), true), tabB.submit('dusk', lap(85), true)]);
+  assert.equal(two.held.get('dusk')!.time, 80, 'storage keeps the faster lap whichever tab wrote last');
+  assert.deepEqual(answers, [true, false], 'and the slower tab is told its lap is not the ghost');
+  assert.equal((await tabB.load('dusk'))!.time, 80, 'the slower tab now races the faster ghost');
+  assert.equal(await tabB.submit('dusk', lap(82), true), false, 'a lap that beats only its own tab is not stored');
+  assert.equal(two.held.get('dusk')!.time, 80);
+});
+
+test('a ghost saved by a newer version of the game is never written over', async () => {
+  const {held, backend} = memoryBackend();
+  const newer = {...dusk.ghost, physics: PHYSICS_VERSION + 1, time: 70};
+  held.set('dusk', newer);
+  const store = new GhostStore(backend);
+  assert.equal(await store.load('dusk'), null, 'this version cannot race it');
+  assert.equal(await store.submit('dusk', {...dusk.ghost, time: 90}, true), true, 'a lap here is the ghost for now');
+  assert.equal((await store.load('dusk'))!.time, 90);
+  assert.equal(held.get('dusk'), newer, 'but the newer ghost is still what the browser keeps');
+});
+
+test('storage that never answers shows the notice and the lap still becomes the ghost', async () => {
+  const {held, backend} = memoryBackend();
+  let release: () => void = () => {};
+  const gate = new Promise<void>(resolve => (release = resolve));
+  const hanging: GhostBackend = {
+    get: async key => (await gate, backend.get(key)),
+    update: async (key, decide) => (await gate, backend.update(key, decide)),
+  };
+  held.set('coast', {...dusk.ghost, time: 60});
+  const store = new GhostStore(hanging, PHYSICS_VERSION, 20);
+  const late: [string, number][] = [];
+  store.onLate = (key, ghost) => ghost && late.push([key, ghost.time]);
+  assert.equal(await store.load('dusk'), null, 'the game stops waiting');
+  assert.equal(store.sessionOnly, true, 'and says ghosts may not be kept');
+  assert.equal(await store.submit('dusk', {...dusk.ghost, time: 90}, true), true);
+  assert.equal((await store.load('dusk'))!.time, 90, 'the lap is the ghost for the session');
+  assert.equal(await store.load('coast'), null);
+  release();
+  await new Promise(resolve => setTimeout(resolve, 20));
+  assert.equal(store.sessionOnly, false, 'when storage answers after all, the notice goes');
+  assert.equal(held.get('dusk')!.time, 90, 'the lap was saved');
+  assert.deepEqual(late, [['coast', 60]], 'and the ghost that was waiting in storage is handed over');
+  assert.equal((await store.load('coast'))!.time, 60);
 });

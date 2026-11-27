@@ -15,9 +15,15 @@ function harness(mode: 'trial' | 'practice' | 'race') {
   const log: string[] = [];
   const ghosts: {lap: LapTime; ghost: Ghost | null}[] = [];
   let idle = false;
+  let pausing = false;
   const session: RaceSession = new RaceSession(
     {
-      sample: () => (idle ? idleControl() : npcControl(session.riders[0], track, session.riders, 'expert')),
+      sample: () => {
+        const control = idle ? idleControl() : npcControl(session.riders[0], track, session.riders, 'expert');
+        if (pausing) control.pause = true;
+        pausing = false;
+        return control;
+      },
       connectedGamepads: () => [],
     },
     {
@@ -49,7 +55,16 @@ function harness(mode: 'trial' | 'practice' | 'race') {
     assert.fail('condition not reached');
   };
   runUntil(() => session.phase === 'racing');
-  return {session, log, ghosts, runUntil, setIdle: (value: boolean) => (idle = value)};
+  /** Presses the pause button for one step, as Esc, P or Start does, then resumes. */
+  const pauseAndResume = () => {
+    pausing = true;
+    session.step(STEP);
+    assert.equal(session.paused, true);
+    for (let i = 0; i < 30; i++) session.step(STEP);
+    session.togglePause();
+    assert.equal(session.paused, false);
+  };
+  return {session, log, ghosts, runUntil, pauseAndResume, setIdle: (value: boolean) => (idle = value)};
 }
 const pose = (r: GhostPose) => [r.x, r.y, r.z, r.heading, r.pitch, r.lean];
 
@@ -168,4 +183,44 @@ test('restart lap puts the rider back on the line and starts the clock again', (
   const playback = new GhostPlayback(ghosts.at(-1)!.ghost!);
   const first = playback.at(0);
   assert.ok(Math.hypot(first.x - start[0], first.z - start[2]) < 0.05, 'the ghost begins on the start line');
+});
+
+test('pausing in the middle of a lap does not move the ghost off the ride', () => {
+  const {session, ghosts, runUntil, pauseAndResume} = harness('trial');
+  const ride: {lapTime: number; x: number; y: number; z: number}[] = [];
+  const note = () => {
+    const r = session.riders[0];
+    if (session.timing[0].laps.length === 1)
+      ride.push({lapTime: currentLapTime(session.timing[0], session.raceTime), x: r.x, y: r.y, z: r.z});
+  };
+  runUntil(() => session.timing[0].laps.length === 1);
+  for (const seconds of [8, 30, 31]) {
+    runUntil(() => currentLapTime(session.timing[0], session.raceTime) > seconds, note);
+    assert.ok(session.riders[0].speed > 5, 'paused while moving');
+    pauseAndResume();
+    note();
+  }
+  runUntil(() => ghosts.length >= 2, note);
+  const {lap, ghost} = ghosts[1];
+  assert.ok(ghost);
+  assert.equal(ghost!.time, lap.time);
+  const playback = new GhostPlayback(ghost!);
+  let worst = 0;
+  for (const at of ride) {
+    const g = playback.at(at.lapTime);
+    worst = Math.max(worst, Math.hypot(g.x - at.x, g.y - at.y, g.z - at.z));
+  }
+  assert.ok(worst <= 0.1, `the ghost is ${worst.toFixed(3)} m from the ride at worst after three pauses`);
+});
+
+test("a flying lap's ghost is already moving at the start of its lap", () => {
+  const {ghosts, runUntil} = harness('trial');
+  runUntil(() => ghosts.length >= 2);
+  const playback = new GhostPlayback(ghosts[1].ghost!);
+  const a = {...playback.at(0)},
+    b = {...playback.at(STEP / 4)},
+    c = {...playback.at(STEP)};
+  const moved = (p: GhostPose, q: GhostPose) => Math.hypot(q.x - p.x, q.z - p.z);
+  assert.ok(moved(a, b) > 0.02, `it moves ${moved(a, b).toFixed(3)} m in the first quarter step`);
+  assert.ok(Math.abs(moved(a, c) / STEP - moved(a, b) / (STEP / 4)) < 3, 'at a steady speed across the line');
 });

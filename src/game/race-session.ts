@@ -2,7 +2,7 @@
 // Input and screen are passed in, so tests can run whole races in Node.
 import {COLORS, TUNING} from '../config';
 import {uniqueDevices, type Control, type Device} from '../input';
-import {GhostRecorder, type Ghost} from '../ghost';
+import {GhostRecorder, type Ghost, type GhostPose} from '../ghost';
 import {collide, idleControl, makeRider, npcControl, stepRider, type Rider} from '../physics';
 import {createTiming, fasterLap, recordStep, type LapTime, type RiderTiming} from '../timing';
 import type {Track} from '../track';
@@ -90,6 +90,10 @@ export class RaceSession {
   track!: Track;
   private lastTickSound = 4;
   private recorder = new GhostRecorder();
+  /** The race time of the first pose the recorder was given for the lap being ridden. */
+  private ghostFrom = 0;
+  /** Where the Time Trial rider was before the step being worked on. */
+  private poseBefore: GhostPose = {x: 0, y: 0, z: 0, heading: 0, pitch: 0, lean: 0};
 
   constructor(
     private input: SessionInput,
@@ -111,11 +115,22 @@ export class RaceSession {
     this.timing = this.riders.map(() => createTiming());
     this.beginGhost(0);
   }
-  /** Starts recording a lap that began `since` seconds ago, from where the rider is now. */
-  private beginGhost(since: number) {
+  /**
+   * Starts recording a lap that began `since` seconds ago, from where the rider is now. A lap that starts as
+   * the rider crosses the line also gets `before`, where the rider was one step earlier, so the ghost is
+   * already moving at the very start of its lap.
+   */
+  private beginGhost(since: number, before?: GhostPose) {
     if (!this.trial) return;
-    this.recorder.begin(since);
-    this.recorder.push(this.riders[0]);
+    const lead = before ? TUNING.step : 0;
+    this.recorder.begin(since - lead);
+    this.ghostFrom = this.raceTime - lead;
+    if (before) this.recorder.push(before, 0);
+    this.pushGhost();
+  }
+  /** Records where the Time Trial rider is now, at the step the lap clock says it is. */
+  private pushGhost() {
+    this.recorder.push(this.riders[0], Math.round((this.raceTime - this.ghostFrom) / TUNING.step));
   }
   /**
    * Time Trial: puts the rider back on the start line at a standstill and starts the lap again. The laps
@@ -155,6 +170,7 @@ export class RaceSession {
     this.accumulator = 0;
     this.override.clear();
     this.timing = this.riders.map(() => createTiming());
+    this.beginGhost(0);
   }
   /** The lap a rider's sector times are compared with: the saved best (humans only) or their best this session. */
   referenceLap(index: number) {
@@ -242,21 +258,27 @@ export class RaceSession {
           ? npcControl(r, track, riders, 'relaxed')
           : humanControl || npcControl(r, track, riders, this.difficulty, this.seed);
       if (humanControl?.pause) {
+        // The lap clock has already moved on by this step, so the ghost records the rider standing still for it.
+        if (this.trial) this.pushGhost();
         this.togglePause();
         return;
       }
       if (this.reviewCrashTest === 'Rider contact') Object.assign(c, idleControl());
+      if (this.trial && index === 0) {
+        const p = this.poseBefore;
+        [p.x, p.y, p.z, p.heading, p.pitch, p.lean] = [r.x, r.y, r.z, r.heading, r.pitch, r.lean];
+      }
       stepRider(r, c, track, dt, riders, r.human ? this.slideAggression : 1);
       // Laps are timed until the rider takes the flag; the cool-down lap after it is not.
       if (r.finished === null || this.practice) {
         const lap = recordStep(this.timing[index], r.progress, this.raceTime - dt, dt, this.referenceLap(index));
-        if (this.trial && index === 0) this.recorder.push(r);
+        if (this.trial && index === 0) this.pushGhost();
         if (lap) {
           screen.lap?.(r, lap);
           if (this.trial && index === 0) {
             screen.ghostLap?.(r, lap, this.recorder.finish(lap.time));
             // The next lap began at the line, part of the way through this step.
-            this.beginGhost(this.raceTime - this.timing[index].lapStart);
+            this.beginGhost(this.raceTime - this.timing[index].lapStart, this.poseBefore);
           }
         }
       } else r.progress.crossings.length = 0;

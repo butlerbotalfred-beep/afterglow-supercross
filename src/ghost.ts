@@ -32,8 +32,8 @@ export const GHOST_SAMPLE_STEPS = 8;
 const KEEP_WITHIN = 0.04;
 /** Playback is never further than this from the recorded ride, in metres. */
 export const GHOST_ACCURACY = 0.1;
-/** The longest lap a ghost can hold: step numbers are stored in 16 bits. */
-export const GHOST_MAX_SECONDS = 65535 * TUNING.step;
+/** A stored ghost is never larger than this. A lap that would need more (a very slow one) gets no ghost. */
+export const GHOST_MAX_BYTES = 40 * 1024;
 
 const MAGIC = 0x31474741; // "AGG1"
 const HEADER_BYTES = 36;
@@ -52,26 +52,36 @@ export class GhostRecorder {
   private kept: Sample[] = [];
   /** Steps since the last kept sample, not yet known to be needed. */
   private pending: Sample[] = [];
-  private step = 0;
-  /** Seconds from the start of the lap to the first sample: the lap starts part of the way through a step. */
+  private next = 0;
+  private full = false;
+  /** Seconds from the start of the lap to step 0. Negative when step 0 is the pose just before the line. */
   private offset = 0;
 
-  /** Starts a new lap. `offset` is how long after the lap began the first `push` happens, in seconds. */
+  /** Starts a new lap. `offset` is the lap time of the first pose pushed, in seconds. */
   begin(offset = 0) {
     this.kept = [];
     this.pending = [];
-    this.step = 0;
+    this.next = 0;
+    this.full = false;
     this.offset = offset;
   }
-  /** True while the lap is still short enough to be stored. */
+  /** True while the lap is still small enough to be stored. */
   get recording() {
-    return this.step < 65535;
+    return !this.full;
   }
-  /** Adds the bike's pose after one physics step. */
-  push(pose: GhostPose) {
-    if (!this.recording) return;
+  /**
+   * Adds the bike's pose. `step` is how many physics steps of lap time have passed since the first pose; left
+   * out, it is one more than the last. Passing it keeps the ghost on the lap clock when a step is skipped.
+   */
+  push(pose: GhostPose, step = this.next) {
+    if (this.full || step < this.next) return;
+    if (step > 65535 || HEADER_BYTES + (this.kept.length + 2) * SAMPLE_BYTES > GHOST_MAX_BYTES) {
+      this.full = true;
+      return;
+    }
+    this.next = step + 1;
     const now: Sample = {
-      step: this.step++,
+      step,
       x: pose.x,
       y: pose.y,
       z: pose.z,
@@ -104,7 +114,7 @@ export class GhostRecorder {
   }
   /** The finished lap, or null when it was too long to store or nothing was recorded. */
   finish(time: number): Ghost | null {
-    if (!this.recording || !this.kept.length || !(time > 0)) return null;
+    if (this.full || !this.kept.length || !(time > 0)) return null;
     const samples = this.kept.slice();
     const tail = this.pending[this.pending.length - 1];
     if (tail) samples.push(tail);
@@ -208,25 +218,37 @@ export class GhostPlayback {
   }
 }
 
-/** Where ghosts are kept. Both calls may fail: a browser can refuse storage at any time. */
+/** Where ghosts are kept. Either call may fail or never answer: a browser can refuse storage at any time. */
 export interface GhostBackend {
   get(key: string): Promise<Ghost | null>;
-  put(key: string, ghost: Ghost): Promise<void>;
+  /**
+   * Reads the stored ghost and writes back whatever `decide` returns for it, as one step that nothing else can
+   * come between (another tab included). `decide` returns null to leave storage alone. Resolves with what is
+   * stored afterwards.
+   */
+  update(key: string, decide: (stored: Ghost | null) => Ghost | null): Promise<Ghost | null>;
 }
-/** One ghost per circuit and layout. */
-export const ghostKey = (courseId: string, layoutId = '') => (layoutId ? `${courseId}/${layoutId}` : courseId);
+
+/** How long the browser's storage gets to answer before the game carries on without it, in milliseconds. */
+const STORAGE_PATIENCE = 4000;
 
 /**
- * The best-lap ghost for each track. Reads and writes go to the backend when there is one that works; when it
- * is missing or fails, ghosts are kept for this session only and `sessionOnly` turns true so the game can say so.
+ * The best-lap ghost for each track. Reads and writes go to the backend when there is one that works. When it
+ * is missing, fails or does not answer, ghosts are kept for this session only and `sessionOnly` turns true so
+ * the game can say so.
  */
 export class GhostStore {
   sessionOnly: boolean;
+  /** Called when storage answers after the game stopped waiting, with a ghost if one turned out to be the best. */
+  onLate: ((key: string, ghost: Ghost | null) => void) | null = null;
   private memory = new Map<string, Ghost>();
+  /** Offers are handled one at a time, so two laps finishing close together cannot overwrite each other. */
+  private queue: Promise<unknown> = Promise.resolve();
 
   constructor(
     private backend: GhostBackend | null,
     private physics: number = PHYSICS_VERSION,
+    private patience = STORAGE_PATIENCE,
   ) {
     this.sessionOnly = !backend;
   }
@@ -239,37 +261,70 @@ export class GhostStore {
       return null;
     }
   }
-  /** The stored ghost for a track, or null. A ghost from another physics version is never returned. */
-  async load(key: string): Promise<Ghost | null> {
-    const held = this.usable(this.memory.get(key));
-    if (held || !this.backend) return held;
-    try {
-      const stored = this.usable(await this.backend.get(key));
-      if (stored) this.memory.set(key, stored);
-      return stored;
-    } catch {
-      this.sessionOnly = true;
-      this.backend = null;
-      return null;
-    }
+  /** The faster of the session's ghost and one from storage becomes the session's ghost. */
+  private adopt(key: string, stored: Ghost | null | undefined) {
+    const found = this.usable(stored),
+      held = this.usable(this.memory.get(key));
+    const best = !held ? found : !found ? held : found.time < held.time ? found : held;
+    if (best) this.memory.set(key, best);
+    return best;
   }
   /**
-   * Offers a finished lap. It replaces the stored ghost only when the lap was valid and faster (or there is no
-   * usable ghost yet). Returns true when it became the ghost.
+   * Waits for storage, but not for ever. A failure turns storage off for the session; no answer in time shows
+   * the notice and carries on, and if the answer does come later it is taken in and the notice cleared.
    */
-  async submit(key: string, ghost: Ghost | null, valid: boolean): Promise<boolean> {
-    if (!ghost || !valid || !this.usable(ghost)) return false;
-    const current = await this.load(key);
-    if (current && current.time <= ghost.time) return false;
-    this.memory.set(key, ghost);
-    if (this.backend)
-      try {
-        await this.backend.put(key, ghost);
-      } catch {
+  private async ask(key: string, work: (backend: GhostBackend) => Promise<Ghost | null>) {
+    const backend = this.backend;
+    if (!backend) return;
+    let waiting = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const answer = work(backend).then(
+      stored => {
+        const before = this.memory.get(key);
+        const best = this.adopt(key, stored);
+        if (!waiting) {
+          this.sessionOnly = !this.backend;
+          this.onLate?.(key, best && best !== before ? best : null);
+        }
+      },
+      () => {
         this.sessionOnly = true;
         this.backend = null;
-      }
-    return true;
+      },
+    );
+    const gaveUp = new Promise<void>(resolve => (timer = setTimeout(resolve, this.patience)));
+    await Promise.race([answer, gaveUp.then(() => waiting && (this.sessionOnly = true))]);
+    waiting = false;
+    clearTimeout(timer);
+  }
+  /** The ghost for a track, or null. A ghost from another physics version is never returned. */
+  async load(key: string): Promise<Ghost | null> {
+    await this.ask(key, backend => backend.get(key));
+    return this.usable(this.memory.get(key));
+  }
+  /**
+   * Offers a finished lap. It becomes the ghost only when the lap was valid and faster than the one held here
+   * and the one in storage (or there is none yet). Returns true when it became the ghost.
+   */
+  submit(key: string, ghost: Ghost | null, valid: boolean): Promise<boolean> {
+    const offer = async () => {
+      if (!ghost || !valid || !this.usable(ghost)) return false;
+      const held = this.usable(this.memory.get(key));
+      if (held && held.time <= ghost.time) return false;
+      this.memory.set(key, ghost);
+      await this.ask(key, backend =>
+        backend.update(key, stored => {
+          // A ghost from a newer build of the game is somebody's best lap there: never write over it.
+          if (stored && stored.physics > this.physics) return null;
+          const current = this.usable(stored);
+          return current && current.time <= ghost.time ? null : ghost;
+        }),
+      );
+      return this.memory.get(key) === ghost;
+    };
+    const result = this.queue.then(offer, offer);
+    this.queue = result.catch(() => {});
+    return result;
   }
 }
 
@@ -301,6 +356,22 @@ export function indexedDbGhosts(factory: IDBFactory | undefined = globalThis.ind
   };
   return {
     get: async key => (await run<Ghost | undefined>('readonly', store => store.get(key))) ?? null,
-    put: async (key, ghost) => void (await run('readwrite', store => store.put(ghost, key))),
+    async update(key, decide) {
+      const db = await open();
+      return new Promise<Ghost | null>((resolve, reject) => {
+        const transaction = db.transaction(DB_STORE, 'readwrite');
+        const store = transaction.objectStore(DB_STORE);
+        let after: Ghost | null = null;
+        const read = store.get(key);
+        read.onsuccess = () => {
+          const stored = (read.result as Ghost | undefined) ?? null;
+          const next = decide(stored);
+          after = next ?? stored;
+          if (next) store.put(next, key);
+        };
+        transaction.oncomplete = () => resolve(after);
+        transaction.onerror = transaction.onabort = () => reject(transaction.error);
+      });
+    },
   };
 }

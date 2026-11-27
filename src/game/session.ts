@@ -28,7 +28,7 @@ import {
 import {npcControl, idleControl, type Rider} from '../physics';
 import {prepareTakeoffAdvice} from '../takeoff';
 import {TUNING} from '../config';
-import {GhostPlayback, GhostStore, indexedDbGhosts, type GhostPose} from '../ghost';
+import {GhostPlayback, GhostStore, indexedDbGhosts, type Ghost, type GhostPose} from '../ghost';
 import {currentLapTime} from '../timing';
 import {browserStorage, lapCountsForRecord, recordKey, SaveStore} from '../save';
 import {devicesReady, RaceSession} from './race-session';
@@ -102,12 +102,8 @@ const session = new RaceSession(input, {
     // Autopilot laps never become a ghost, except when a development check asks for one.
     const assisted = !ghost.fromAutopilot && (session.reviewDrive || session.override.size > 0);
     const counts = lapCountsForRecord(lap, rider, assisted);
-    void ghosts.submit(key, lapGhost, counts).then(became => {
-      // The player may have left for another track while the browser was saving.
-      if (became && lapGhost && session.trial && key === recordKey(track.course.id, activeLayout))
-        ghost.playback = new GhostPlayback(lapGhost);
-      setVisible('ghost-notice', session.trial && ghosts.sessionOnly);
-    });
+    // The player may have left for another track while the browser was saving: showGhostFor checks.
+    void ghosts.submit(key, lapGhost, counts).then(became => showGhostFor(key, became ? lapGhost : null));
   },
   restarted: () => (prevPoses = []),
   results() {
@@ -148,19 +144,25 @@ scene.add(ghost.model.root);
 function loadGhost() {
   ghost.playback = null;
   const key = recordKey(track.course.id, activeLayout);
-  void ghosts.load(key).then(stored => {
-    if (stored && session.trial && key === recordKey(track.course.id, activeLayout))
-      ghost.playback = new GhostPlayback(stored);
-    setVisible('ghost-notice', session.trial && ghosts.sessionOnly);
-  });
+  void ghosts.load(key).then(stored => showGhostFor(key, stored));
 }
+/** Makes a ghost the one being drawn, if the player is still in Time Trial on the track it belongs to. */
+function showGhostFor(key: string, found: Ghost | null) {
+  if (found && session.trial && key === recordKey(track.course.id, activeLayout))
+    ghost.playback = new GhostPlayback(found);
+  setVisible('ghost-notice', session.trial && ghosts.sessionOnly);
+}
+// The browser's storage can answer after the game stopped waiting for it.
+ghosts.onLate = showGhostFor;
 /** Puts the ghost where the best lap was at this moment of the lap. It is drawn only; physics never sees it. */
 function syncGhost(dt: number) {
   const {playback, model, pose} = ghost;
   const riding = session.trial && (session.phase === 'racing' || session.phase === 'countdown');
-  const lapTime = riding
-    ? currentLapTime(session.timing[0], session.raceTime + (session.paused ? 0 : session.accumulator))
-    : 0;
+  // Riders are drawn part of the way from their last physics step to the next; the ghost is drawn at the same
+  // moment, which is one step behind the lap clock plus that part.
+  const drawnAt =
+    session.raceTime + (session.paused || session.phase !== 'racing' ? 0 : session.accumulator - TUNING.step);
+  const lapTime = riding ? Math.max(0, currentLapTime(session.timing[0], drawnAt)) : 0;
   // The ghost stops being drawn a moment after it finishes its lap, so it does not park on the line.
   ghost.shown = !!playback && riding && save.showGhost && lapTime <= playback.time + 0.25;
   model.root.visible = ghost.shown;
@@ -171,6 +173,7 @@ function syncGhost(dt: number) {
   ghost.last.z = pose.z;
   model.root.position.set(pose.x, pose.y, pose.z);
   model.root.rotation.y = pose.heading;
+  const under = track.project(pose.x, pose.z);
   model.animate(
     {
       speed: Math.min(TUNING.maxSpeed, speed),
@@ -183,10 +186,7 @@ function syncGhost(dt: number) {
       time: globalTime,
       throttle: 1,
       brake: 0,
-      groundDistance: Math.max(
-        0,
-        pose.y - track.height(track.project(pose.x, pose.z).s, track.project(pose.x, pose.z).lateral),
-      ),
+      groundDistance: Math.max(0, pose.y - track.height(under.s, under.lateral)),
       crashed: false,
       crashAge: 0,
       airLean: 0,
@@ -268,11 +268,14 @@ async function openEditor() {
 function rebuildTrack(next: Track) {
   touchControls.clear();
   session.override.clear();
+  // The ghost belongs to no track: it is taken out before the old world is thrown away and put into the new one.
+  scene.remove(ghost.model.root);
   disposeWorld(scene);
   models = [];
   track = next;
   warmTakeoffAdvice(track);
   scene = lightWorld(createWorld(track));
+  scene.add(ghost.model.root);
   dust = new Dust(scene);
   testMarkers = new THREE.Group();
   track.obstacles.forEach((j, i) => {
@@ -912,6 +915,7 @@ if (import.meta.env.DEV) {
         loaded: !!ghost.playback,
         time: ghost.playback?.time ?? null,
         shown: ghost.shown,
+        inScene: ghost.model.root.parent === scene,
         sessionOnly: ghosts.sessionOnly,
         x: ghost.pose.x,
         y: ghost.pose.y,

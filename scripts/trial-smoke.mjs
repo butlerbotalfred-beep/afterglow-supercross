@@ -103,7 +103,8 @@ try {
   await settle(page, () => window.__game.snapshot().ghost.shown);
   state = await page.evaluate(() => window.__game.snapshot());
   const rider = state.riders[0];
-  check(state.ghost.shown, 'the ghost is drawn while riding');
+  // The circuit was changed before this trial, which rebuilds the world: the ghost has to be in the new one.
+  check(state.ghost.shown && state.ghost.inScene, 'the ghost is drawn, in the world being shown, while riding');
   check(
     Math.hypot(state.ghost.x - rider.x, state.ghost.z - rider.z) < 60,
     'and rides close to an equally quick rider',
