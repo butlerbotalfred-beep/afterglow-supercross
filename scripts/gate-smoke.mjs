@@ -88,7 +88,7 @@ try {
   // The keyboard throttle moves the needle while the board is up, and costs nothing yet.
   state = await page.evaluate(() => {
     window.dispatchEvent(new KeyboardEvent('keydown', {code: 'KeyW'}));
-    window.__game.step(1.2);
+    window.__game.step(1.8);
     return window.__game.snapshot();
   });
   seen = await page.evaluate(hud);
@@ -161,9 +161,10 @@ try {
   state = await page.evaluate(() => {
     const g = window.__game;
     const gate = () => g.snapshot().gate;
-    while (!gate().live) g.step(1 / 120);
+    // The needle takes over a second and a half to reach the red, so the key goes down a second before the gate is live.
+    while (gate().elapsed < 4) g.step(1 / 120);
     window.dispatchEvent(new KeyboardEvent('keydown', {code: 'KeyW'}));
-    g.step(0.95);
+    g.step(1.95);
     return g.snapshot();
   });
   seen = await page.evaluate(hud);
