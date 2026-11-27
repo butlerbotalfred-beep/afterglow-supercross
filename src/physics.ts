@@ -68,6 +68,11 @@ export interface Rider {
   scrub: boolean;
   /** The stick has been off the side since takeoff, so a sideways flick now counts as a scrub. */
   scrubArmed: boolean;
+  /**
+   * Set at a gated race start: the lane a computer rider holds from the grid to the holeshot line, so the pack
+   * runs the first corner side by side instead of crossing over each other.
+   */
+  startLane?: number;
 }
 export const idleControl = (): Control => ({throttle: 0, brake: 0, steer: 0, pitch: 0, reset: false, pause: false});
 export function makeRider(track: Track, id: number, human: boolean, color: number, device?: Device): Rider {
@@ -499,6 +504,8 @@ function landingPitch(r: Rider, track: Track) {
   }
   return 0;
 }
+/** Metres after the holeshot line over which a computer rider leaves its start lane for the racing line. */
+const NPC_START_MERGE = 80;
 /** How far ahead of a takeoff the AI starts picking a speed for it. */
 const NPC_TAKEOFF_REACH = 45;
 /** The AI will not close on a rider ahead in its line faster than this, in m/s, inside NPC_FOLLOW_REACH metres. */
@@ -531,9 +538,20 @@ export function npcControl(r: Rider, track: Track, others: Rider[], difficulty: 
   const pace = difficulty === 'relaxed' ? 0.78 : difficulty === 'expert' ? 1.04 : 0.91;
   const ahead = 4 + r.speed * 0.32;
   let lane = Math.sin(r.surface.s * 0.043 + r.id * 2) * 0.65 + ((r.id % 3) - 1) * 0.55;
-  for (const o of others)
-    if (o !== r && Math.hypot(o.x - r.x, o.z - r.z) < 4 && o.speed < r.speed + 2)
-      lane += o.surface.lateral > r.surface.lateral ? -1 : 1;
+  // Off a gate the pack keeps its grid lanes to the holeshot line, then drifts onto the racing line.
+  let hold = 0;
+  if (r.startLane !== undefined && r.progress.lap === 0) {
+    const run = r.surface.s > track.length - 20 ? 0 : r.surface.s;
+    hold = clamp((track.holeshot + NPC_START_MERGE - run) / NPC_START_MERGE, 0, 1);
+    lane += (r.startLane - lane) * hold;
+  }
+  for (const o of others) {
+    if (o === r || Math.hypot(o.x - r.x, o.z - r.z) >= 4 || o.speed >= r.speed + 2) continue;
+    // In its start lane a rider gives way only to a slower bike in front of it, not to the bikes alongside.
+    const gap = (o.surface.s - r.surface.s + track.length) % track.length;
+    const blocked = gap < 4 && o.speed < r.speed - 1 && Math.abs(o.surface.lateral - r.surface.lateral) < 1.2;
+    lane += (o.surface.lateral > r.surface.lateral ? -1 : 1) * (blocked ? 1 : 1 - hold);
+  }
   lane = clamp(lane, -2.5, 2.5);
   const target = track.at(r.surface.s + ahead, lane);
   const desired = Math.atan2(target.x - r.x, target.z - r.z);

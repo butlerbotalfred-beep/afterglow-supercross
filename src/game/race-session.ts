@@ -2,6 +2,7 @@
 // Input and screen are passed in, so tests can run whole races in Node.
 import {COLORS, TUNING} from '../config';
 import {uniqueDevices, type Control, type Device} from '../input';
+import {StartGate, pastHoleshot} from '../gate';
 import {GhostRecorder, type Ghost, type GhostPose} from '../ghost';
 import {collide, idleControl, makeRider, npcControl, stepRider, type Rider} from '../physics';
 import {createTiming, fasterLap, recordStep, type LapTime, type RiderTiming} from '../timing';
@@ -16,10 +17,19 @@ export interface SessionInput {
 }
 /** What the session tells the screen and speakers. Every method is a notification; none returns a value. */
 export interface SessionScreen {
-  /** The countdown number to show. It starts at 4 for the first 0.8 s, then 3, 2, 1. */
+  /**
+   * The number to show before the start. Free Practice and Time Trial count 3, 2, 1 (4 for the first 0.8 s).
+   * A race shows the board, 5 down to 1, then 0 while the gate is live and may drop at any moment.
+   */
   countdown(n: number): void;
-  /** The gate has dropped: racing has begun. */
+  /** Racing has begun: the countdown ended or the gate dropped. */
   racing(): void;
+  /** A race's gate fell. */
+  gateDropped?(): void;
+  /** A rider crept into the gate before it dropped and will be held when it falls. */
+  jumpedGate?(rider: Rider): void;
+  /** The first rider of the race crossed the holeshot line. */
+  holeshot?(rider: Rider): void;
   /** A short beep. */
   cue(frequency: number, seconds: number): void;
   /** A human rider landed hard. */
@@ -72,6 +82,10 @@ export class RaceSession {
   raceTime = 0;
   countdown = COUNTDOWN_SECONDS;
   firstFinish: number | null = null;
+  /** The start gate of the race being run. Free Practice and Time Trial have none. */
+  gate: StartGate | null = null;
+  /** The id of the rider who took the holeshot in this race, once somebody has. */
+  holeshot: number | null = null;
   riders: Rider[] = [];
   /** Lap and sector timing, one entry per rider in the same order as `riders`. */
   timing: RiderTiming[] = [];
@@ -171,6 +185,8 @@ export class RaceSession {
     this.override.clear();
     this.timing = this.riders.map(() => createTiming());
     this.beginGhost(0);
+    this.holeshot = null;
+    this.gate = this.practice ? null : new StartGate(this.seed, this.riders, difficulty);
   }
   /** The lap a rider's sector times are compared with: the saved best (humans only) or their best this session. */
   referenceLap(index: number) {
@@ -226,11 +242,30 @@ export class RaceSession {
     const {riders, track, input, screen} = this;
     if (this.phase === 'setup' || this.phase === 'results' || this.paused || this.reviewFrozen) return;
     if (this.phase === 'countdown') {
-      for (const r of riders.filter(r => r.human))
-        if (input.sample(r.device!).pause) {
-          this.togglePause();
-          return;
+      const controls = riders.map(r => (r.human ? this.override.get(r.id) || input.sample(r.device!) : null));
+      if (controls.some(c => c?.pause)) {
+        this.togglePause();
+        return;
+      }
+      const gate = this.gate;
+      if (gate) {
+        const board = gate.board;
+        // A computer rider, or the autopilot, holds the revs in the band (null).
+        const {jumped, dropped} = gate.wait(dt, i =>
+          this.reviewDrive || this.override.has(riders[i].id) ? null : (controls[i]?.throttle ?? null),
+        );
+        // The engine is heard and the bike shakes at the revs being held.
+        riders.forEach((r, i) => (r.throttle = gate.launches[i].revs));
+        for (const i of jumped) screen.jumpedGate?.(riders[i]);
+        if (gate.board !== board && gate.board > 0) screen.cue(600, 0.13);
+        screen.countdown(gate.board);
+        if (dropped) {
+          this.phase = 'racing';
+          screen.gateDropped?.();
+          screen.racing();
         }
+        return;
+      }
       this.countdown -= dt;
       const n = Math.ceil(this.countdown);
       if (n !== this.lastTickSound && n > 0 && n <= 3) {
@@ -256,7 +291,15 @@ export class RaceSession {
       const c =
         r.finished !== null
           ? npcControl(r, track, riders, 'relaxed')
-          : humanControl || npcControl(r, track, riders, this.difficulty, this.seed);
+          : // No computer rider is made to make a mistake in the pack before the holeshot line.
+            humanControl ||
+            npcControl(
+              r,
+              track,
+              riders,
+              this.difficulty,
+              this.gate && !pastHoleshot(r.progress, track) ? 0 : this.seed,
+            );
       if (humanControl?.pause) {
         // The lap clock has already moved on by this step, so the ghost records the rider standing still for it.
         if (this.trial) this.pushGhost();
@@ -264,11 +307,25 @@ export class RaceSession {
         return;
       }
       if (this.reviewCrashTest === 'Rider contact') Object.assign(c, idleControl());
+      // Off the gate a rider may be held (a reaction time, or the penalty) or short of drive (a poor launch).
+      const drive = this.gate ? this.gate.release(index, r) : 1;
+      if (drive === 0) continue;
       if (this.trial && index === 0) {
         const p = this.poseBefore;
         [p.x, p.y, p.z, p.heading, p.pitch, p.lean] = [r.x, r.y, r.z, r.heading, r.pitch, r.lean];
       }
-      stepRider(r, c, track, dt, riders, r.human ? this.slideAggression : 1);
+      stepRider(
+        r,
+        drive < 1 ? {...c, throttle: c.throttle * drive} : c,
+        track,
+        dt,
+        riders,
+        r.human ? this.slideAggression : 1,
+      );
+      if (this.gate && this.holeshot === null && pastHoleshot(r.progress, track)) {
+        this.holeshot = r.id;
+        screen.holeshot?.(r);
+      }
       // Laps are timed until the rider takes the flag; the cool-down lap after it is not.
       if (r.finished === null || this.practice) {
         const lap = recordStep(this.timing[index], r.progress, this.raceTime - dt, dt, this.referenceLap(index));
