@@ -207,6 +207,33 @@ export function createWorld(track: Track) {
   arch.rotation.y = Math.atan2(start.tx, start.tz);
   arch.castShadow = true;
   scene.add(arch);
+  // The holeshot line after the first corner: a stripe across the dirt under a low banner.
+  const shot = track.at(track.holeshot);
+  for (let i = 0; i < 16; i++) {
+    const p = track.at(track.holeshot, ((i + 0.5) / 16 - 0.5) * track.halfWidth * 2);
+    box(
+      p.x,
+      track.height(p.s, p.lateral) + 0.021,
+      p.z,
+      track.halfWidth / 8,
+      0.015,
+      0.6,
+      i % 2 ? mats.light : mats.navy,
+      Math.atan2(p.tx, p.tz),
+    );
+  }
+  for (const lateral of [-6.2, 6.2]) {
+    const p = track.at(track.holeshot, lateral);
+    box(p.x, track.height(track.holeshot, lateral) + 2.6, p.z, 0.3, 5.2, 0.3, mats.metal);
+  }
+  const shotBanner = new THREE.Mesh(
+    new THREE.BoxGeometry(12.7, 0.9, 0.3),
+    new THREE.MeshStandardMaterial({map: textTexture('HOLESHOT', '#252b3e', '#ffb648'), roughness: 0.8}),
+  );
+  shotBanner.position.set(shot.x, track.height(track.holeshot) + 5.3, shot.z);
+  shotBanner.rotation.y = Math.atan2(shot.tx, shot.tz);
+  shotBanner.name = 'Holeshot banner';
+  scene.add(shotBanner);
   addStadium(scene, track);
   // Floodlights with visible trusses and additive halos, without per-lamp shadow maps.
   const glowCanvas = document.createElement('canvas');

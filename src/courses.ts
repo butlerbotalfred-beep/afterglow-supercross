@@ -13,6 +13,8 @@ export interface Course {
   skyHorizon: string;
   elevation: number;
   coordinates?: number[][];
+  /** Metres from the start line to the holeshot line, just after the first corner. Left out, the track finds it. */
+  holeshot?: number;
 }
 export const COURSES: Course[] = [
   {
@@ -28,6 +30,7 @@ export const COURSES: Course[] = [
     skyTop: '#55517e',
     skyHorizon: '#eca27e',
     elevation: 0,
+    holeshot: 240,
   },
   {
     id: 'canyon',
@@ -42,6 +45,7 @@ export const COURSES: Course[] = [
     skyTop: '#405d8e',
     skyHorizon: '#ffd1a0',
     elevation: 16,
+    holeshot: 325,
     coordinates: [
       [-120, -110],
       [-120, 0],
@@ -82,6 +86,7 @@ export const COURSES: Course[] = [
     skyTop: '#42678c',
     skyHorizon: '#e5debd',
     elevation: 24,
+    holeshot: 445,
     coordinates: [
       [-140, -120],
       [-140, -30],
@@ -118,6 +123,7 @@ export const COURSES: Course[] = [
     skyTop: '#4e8fb3',
     skyHorizon: '#ffe2ae',
     elevation: 10,
+    holeshot: 415,
     coordinates: [
       [-120, -100],
       [-120, 0],
@@ -153,6 +159,7 @@ export const COURSES: Course[] = [
     skyTop: '#36384e',
     skyHorizon: '#e8af82',
     elevation: 20,
+    holeshot: 350,
     coordinates: [
       [-140, -110],
       [-140, 0],

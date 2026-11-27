@@ -9,6 +9,7 @@ import {COURSES, courseById} from '../courses';
 import {disposeWorld} from '../scenery';
 import {createWorld} from '../world';
 import {createBike} from '../bike-model';
+import {createGateBars, type GateBars} from '../start-gate-model';
 import {RaceEffects} from '../race-effects';
 import {ChaseCamera} from '../camera';
 import {GameAudio, normalizeVolumes, VOLUME_KEYS, type SoundFrame} from '../audio';
@@ -79,8 +80,11 @@ let practice = false,
 const save = new SaveStore(browserStorage());
 // Race flow and rules live in RaceSession; this file is the browser around it.
 const session = new RaceSession(input, {
-  countdown: n => (el('countdown').innerHTML = `<small>FIND YOUR LINE</small><strong>${n}</strong>`),
+  countdown: n => (el('countdown').innerHTML = countdownHtml(n)),
   racing: () => setVisible('countdown', false),
+  gateDropped: () => audio.clang(),
+  jumpedGate: () => audio.cue(180, 0.25),
+  holeshot: rider => (holeshot = {name: rider.name, id: rider.id, time: session.raceTime}),
   cue: (frequency, seconds) => audio.cue(frequency, seconds),
   landing: impact => audio.landing(impact),
   pause(nowPaused, missing) {
@@ -110,10 +114,38 @@ const session = new RaceSession(input, {
     touchControls.show(false);
     setVisible('results', true);
     setVisible('countdown', false);
-    showResultsTable(track, session.riders, session.lapCount, session.raceTime, session.timing, session.trial);
+    showResultsTable(
+      track,
+      session.riders,
+      session.lapCount,
+      session.raceTime,
+      session.timing,
+      session.trial,
+      session.holeshot,
+    );
   },
 });
 session.slideAggression = save.slideAggression;
+/** Who took the holeshot in the race being run, for the banner. */
+let holeshot: HudContext['holeshot'] = null;
+/** The big text before a start: the board and then the wait for a race's gate, or 3-2-1 without a gate. */
+function countdownHtml(n: number) {
+  // With a gate the number sits high and small, so the bars and the rev meter stay in view.
+  el('countdown').classList.toggle('at-gate', !!session.gate);
+  if (!session.gate) return `<small>FIND YOUR LINE</small><strong>${n}</strong>`;
+  return n > 0
+    ? `<small>THE GATE DROPS AFTER THE BOARD</small><strong>${n}</strong>`
+    : `<small>WATCH THE GATE</small><strong class="gate-live">READY</strong>`;
+}
+/** The gate bars on the grid of a race, and how far they have fallen (0 standing, 1 flat). */
+let gateBars: GateBars | null = null,
+  gateOpen = 0;
+function syncGate(dt: number) {
+  if (!gateBars) return;
+  const waiting = session.phase === 'countdown' || session.phase === 'setup';
+  gateOpen = waiting ? 0 : Math.min(1, gateOpen + dt / 0.14);
+  gateBars.set(gateOpen);
+}
 // The best lap of the track being ridden in Time Trial, drawn as a translucent bike nobody can touch.
 const ghosts = new GhostStore(indexedDbGhosts());
 const ghost = {
@@ -272,6 +304,8 @@ function rebuildTrack(next: Track) {
   scene.remove(ghost.model.root);
   disposeWorld(scene);
   models = [];
+  // The old world took the gate with it; the next grid builds a new one.
+  gateBars = null;
   track = next;
   warmTakeoffAdvice(track);
   scene = lightWorld(createWorld(track));
@@ -363,6 +397,17 @@ function buildGrid() {
     });
   }
   session.grid({track, humanCount, npcCount, practice, trial, assignments});
+  if (gateBars) {
+    scene.remove(gateBars.group);
+    gateBars.dispose();
+    gateBars = null;
+  }
+  if (!practice && !trial) {
+    gateBars = createGateBars(track, session.riders.length);
+    scene.add(gateBars.group);
+    gateOpen = 0;
+    gateBars.set(0);
+  }
   models = session.riders.map(r => {
     const m = createBike(r.color, r.id + 1);
     scene.add(m.root);
@@ -402,6 +447,7 @@ function startRace() {
   el('setup-pause').textContent = trial ? 'END TIME TRIAL' : 'RACE SETUP';
   // A new seed every race: the computer riders' mistakes fall on different jumps each time.
   session.start({lapCount, difficulty, seed: (Date.now() % 4294967295) + 1});
+  holeshot = null;
   prevPoses = [];
   setVisible('setup', false);
   setVisible('results', false);
@@ -413,7 +459,7 @@ function startRace() {
   audio.start();
   el('session-label').textContent =
     `${(track.customName || track.course.name).toUpperCase()} / ${trial ? 'TIME TRIAL' : practice ? 'FREE PRACTICE' : 'RACE NIGHT'}`;
-  el('countdown').innerHTML = '<small>FIND YOUR LINE</small><strong>3</strong>';
+  el('countdown').innerHTML = countdownHtml(session.gate ? session.gate.board : 3);
   updateHud(hudContext());
 }
 function toSetup() {
@@ -476,6 +522,8 @@ function hudContext(): HudContext {
     iphoneMode,
     timing: session.timing,
     referenceLap: index => session.referenceLap(index),
+    gate: session.gate,
+    holeshot,
   };
 }
 const audioCost: number[] = [];
@@ -691,9 +739,11 @@ function frame(now: number) {
   }
   syncModels(session.paused || session.reviewFrozen ? 0 : dt);
   syncGhost(session.paused || session.reviewFrozen ? 0 : dt);
+  syncGate(session.paused || session.reviewFrozen ? 0 : dt);
   dust.update(session.riders, session.paused || session.reviewFrozen || session.phase !== 'racing' ? 0 : dt);
   sceneDrawCalls = renderViews(renderContext(), dt);
-  if (now - lastHud > 100 && session.phase !== 'setup') {
+  // The rev meter has to follow the throttle closely; the rest of the HUD is happy with ten updates a second.
+  if (now - lastHud > (session.phase === 'countdown' && session.gate ? 30 : 100) && session.phase !== 'setup') {
     updateHud(hudContext());
     lastHud = now;
   }
@@ -921,6 +971,18 @@ if (import.meta.env.DEV) {
         y: ghost.pose.y,
         z: ghost.pose.z,
       },
+      gate: session.gate && {
+        elapsed: session.gate.elapsed,
+        dropAt: session.gate.dropAt,
+        live: session.gate.live,
+        dropped: session.gate.dropped,
+        launches: session.gate.launches.map(({revs, jumped, result, held}) => ({revs, jumped, result, held})),
+        bars: gateBars
+          ? {inScene: gateBars.group.parent === scene, count: gateBars.group.children.length, open: gateOpen}
+          : null,
+      },
+      holeshot: session.holeshot,
+      holeshotLine: track.holeshot,
       raceTime: session.raceTime,
       humanCount,
       npcCount,
@@ -966,6 +1028,13 @@ if (import.meta.env.DEV) {
       for (let t = 0; t < seconds; t += TUNING.step) session.step(TUNING.step);
       syncModels(0);
       updateHud(hudContext());
+    },
+    /** Runs the countdown or the gate sequence to its end, so a check can begin with the bikes moving. */
+    toRacing: () => {
+      for (let t = 0; t < 12 && session.phase === 'countdown'; t += TUNING.step) session.step(TUNING.step);
+      syncModels(0);
+      updateHud(hudContext());
+      return session.phase;
     },
     renderer: () => renderer.info,
   };

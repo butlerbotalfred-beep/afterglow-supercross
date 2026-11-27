@@ -160,6 +160,7 @@ export class GameAudio {
     buffer('crackle', synth.crackle(rate));
     buffer('thud', synth.thud(rate));
     buffer('crash', synth.crash(rate));
+    buffer('clang', synth.clang(rate));
     buffer('lap', synth.tones(rate, LAP_NOTES, 0.11));
     buffer('finish', synth.tones(rate, FINISH_NOTES, 0.16, 3));
     this.crowdLevel = loop(buffer('crowd', synth.crowd(rate)), crowd.node, 'bandpass', 900);
@@ -192,6 +193,10 @@ export class GameAudio {
       this.buffers[name].getChannelData(0).set(data);
     }
     this.play(name, volume);
+  }
+  /** The start gate dropping. */
+  clang() {
+    this.play('clang', 0.7);
   }
   /** A human rider's landing. `impact` is the speed into the ground in m/s. */
   landing(impact: number) {

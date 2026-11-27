@@ -59,7 +59,7 @@ function harness() {
     }
     assert.fail(`condition not reached within ${limitSeconds} s of race time`);
   };
-  const toRacing = () => runUntil(() => session.phase === 'racing', 5);
+  const toRacing = () => runUntil(() => session.phase === 'racing', 9);
   return {session, log, pads, autopilot, held, begin, run, runUntil, toRacing};
 }
 
@@ -98,9 +98,9 @@ test('a race needs one device per human and no device shared', () => {
   assert.equal(devicesReady([{kind: 'keyboard'}, {kind: 'keyboard'}, null, null], 1), true);
 });
 
-test('the countdown runs 3.8 seconds, beeps on 3, 2 and 1, then the gate drops', () => {
+test('Free Practice counts down 3.8 seconds, beeps on 3, 2 and 1, then starts', () => {
   const {session, log, begin, run} = harness();
-  begin();
+  begin({practice: true});
   assert.equal(session.phase, 'countdown');
   run(COUNTDOWN_SECONDS - 0.05);
   assert.equal(session.phase, 'countdown');
@@ -310,7 +310,7 @@ test('practice never ends, however many laps are ridden', () => {
 
 test('the frame clock runs fixed 120 Hz steps and carries the remainder forward', () => {
   const {session, begin} = harness();
-  begin();
+  begin({practice: true});
   let before = 0;
   const count = () => before++;
   assert.equal(session.advance(1 / 60 + 0.001, count), 2);

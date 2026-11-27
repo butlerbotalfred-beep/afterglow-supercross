@@ -39,3 +39,5 @@ jobs:
         run: npm run landing-harness -- --check
       - name: Field check (60 AI races, 4 to 8 riders, every difficulty, no crashes)
         run: npm run field-check -- --check
+      - name: Start check (100 seeded 8-rider gate starts per circuit, no crashes before the holeshot line)
+        run: npm run start-check -- --check

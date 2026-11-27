@@ -1,5 +1,6 @@
 // In-race HUD: race chrome markup, split-screen viewports, per-rider panels and the mini map.
 import {CSS_COLORS, TUNING} from '../config';
+import {GATE, inBand, type StartGate} from '../gate';
 import type {Device} from '../input';
 import type {Rider} from '../physics';
 import {jumpCall, type JumpCall} from '../takeoff';
@@ -24,7 +25,14 @@ export type HudContext = {
   timing: RiderTiming[];
   /** The lap each rider's times are compared with (their saved or session best), or null. */
   referenceLap: (index: number) => LapTime | null;
+  /** The start gate of a race, for the launch meter. */
+  gate?: StartGate | null;
+  /** Who took the holeshot and the race time at which they did. */
+  holeshot?: {name: string; id: number; time: number} | null;
 };
+/** How long the result of a launch and the holeshot banner stay on screen, in seconds of race time. */
+const LAUNCH_RESULT_SECONDS = 1.8;
+const HOLESHOT_SECONDS = 3;
 /** How long a finished sector or lap stays on screen, in seconds of race time. */
 const SPLIT_SECONDS = 4;
 
@@ -81,7 +89,11 @@ export function hudHtml(
           `<div class="timing"><b class="lap-now">0:00.0</b>` +
           `<span>LAST <b class="lap-last">–</b></span><span>BEST <b class="lap-best">–</b></span>` +
           `<i class="lap-split"></i></div>` +
-          `<div class="rider-notice"></div><div class="test-target"></div><div class="hud-bottom">` +
+          `<div class="rider-notice"></div><div class="launch hidden"><div class="launch-track">` +
+          `<span class="launch-band" style="left:${GATE.bandLow * 100}%;` +
+          `width:${(GATE.bandHigh - GATE.bandLow) * 100}%"></span>` +
+          `<span class="launch-red" style="left:${GATE.creep * 100}%"></span><i></i></div><em></em></div>` +
+          `<div class="test-target"></div><div class="hud-bottom">` +
           `<div class="mini-map"><canvas width="150" height="130"></canvas>` +
           `<span class="sector">FINISH STRAIGHT</span></div><div class="speed"><strong>00</strong>` +
           `<small>KM/H</small><div class="speed-track"><i></i></div>` +
@@ -242,6 +254,37 @@ export function landingNotice(r: Pick<Rider, 'landingCue' | 'landingBonus'>) {
   }
   return '<b class="flat-landing">FLAT LANDING</b><small>MATCH THE SLOPE TO KEEP SPEED</small>';
 }
+/**
+ * The launch meter of one rider: the revs against the green band while the gate is up, then for a moment how
+ * the launch went. Null when there is nothing to show.
+ */
+export function launchMeter(gate: StartGate | null | undefined, index: number, raceTime: number) {
+  const launch = gate?.launches[index];
+  if (!gate || !launch) return null;
+  if (!gate.dropped)
+    return {
+      share: launch.revs,
+      state: launch.jumped ? 'jumped' : launch.revs >= GATE.creep ? 'creep' : inBand(launch.revs) ? 'good' : '',
+      label: launch.jumped
+        ? 'HIT THE GATE: YOU WILL BE HELD'
+        : gate.live
+          ? 'GATE IS LIVE · HOLD THE GREEN'
+          : 'THROTTLE SETS THE REVS · HOLD THE GREEN',
+    };
+  if (raceTime >= LAUNCH_RESULT_SECONDS) return null;
+  return {
+    share: launch.revs,
+    state: launch.result === 'good' ? 'good' : launch.result === 'jumped' ? 'jumped' : 'poor',
+    label:
+      launch.result === 'good'
+        ? 'GOOD LAUNCH'
+        : launch.result === 'jumped'
+          ? `JUMPED THE GATE · HELD ${GATE.penalty} s`
+          : launch.revs < GATE.bandLow
+            ? 'BOGGED · REVS TOO LOW'
+            : 'WHEELSPIN · REVS TOO HIGH',
+  };
+}
 export function updateHud(ctx: HudContext) {
   const {track, riders, viewHud, phase, practice, lapCount, humanCount, raceTime, firstFinish, iphoneMode} = ctx;
   const ordered = ranking(riders, track);
@@ -261,6 +304,14 @@ export function updateHud(ctx: HudContext) {
     (loadBar.firstElementChild as HTMLElement).style.width = `${load.share * 100}%`;
     loadBar.lastElementChild!.textContent = load.label;
     h.querySelector('.sector')!.textContent = track.sector(r.surface.s);
+    const meter = launchMeter(ctx.gate, i, raceTime),
+      launchBox = h.querySelector('.launch') as HTMLElement;
+    launchBox.className = `launch ${meter ? meter.state : 'hidden'}`;
+    if (meter) {
+      (launchBox.querySelector('i') as HTMLElement).style.left = `${meter.share * 100}%`;
+      launchBox.lastElementChild!.textContent = meter.label;
+    }
+    const shot = ctx.holeshot && raceTime - ctx.holeshot.time < HOLESHOT_SECONDS ? ctx.holeshot : null;
     const call = phase === 'racing' ? jumpCall(track, r.surface.s, JUMP_CALL_REACH) : null;
     const paceNotice = call ? jumpNotice(call, r.speed) : '';
     const remaining =
@@ -285,18 +336,21 @@ export function updateHud(ctx: HudContext) {
               ? `<b>RETURN TO TRACK EXIT</b><small>${iphoneMode ? 'TAP ↺ RECOVER' : 'R / B TO RECOVER'}</small>`
               : r.progress.wrongWay
                 ? '<b>WRONG WAY</b>'
-                : !r.grounded && r.airTime > 0.2
-                  ? r.scrub && Math.abs(r.airLean) > TUNING.airLeanLimit
-                    ? `<b class="air-label">SCRUB</b><small>CENTER THE STICK BEFORE YOU LAND</small>`
-                    : `<b class="air-label">${r.pitch < -0.18 ? 'NOSE DOWN' : 'AIR TIME'}</b>` +
-                      `<small>${airHint}` +
-                      `</small>`
-                  : r.powerSlide > 0.18
-                    ? `<b class="pace-label">${r.brake > 0.1 ? 'BRAKE SLIDE' : 'POWER SLIDE'}</b>` +
-                      `<small>CENTER THE STICK TO REGAIN GRIP</small>`
-                    : r.landingCue && r.landingCueAge < LANDING_CUE_SECONDS && !callOutranksLanding(call)
-                      ? landingNotice(r)
-                      : paceNotice;
+                : shot
+                  ? `<b class="holeshot-label">HOLESHOT</b>` +
+                    `<small>${shot.id === r.id ? 'FIRST THROUGH THE FIRST CORNER' : shot.name}</small>`
+                  : !r.grounded && r.airTime > 0.2
+                    ? r.scrub && Math.abs(r.airLean) > TUNING.airLeanLimit
+                      ? `<b class="air-label">SCRUB</b><small>CENTER THE STICK BEFORE YOU LAND</small>`
+                      : `<b class="air-label">${r.pitch < -0.18 ? 'NOSE DOWN' : 'AIR TIME'}</b>` +
+                        `<small>${airHint}` +
+                        `</small>`
+                    : r.powerSlide > 0.18
+                      ? `<b class="pace-label">${r.brake > 0.1 ? 'BRAKE SLIDE' : 'POWER SLIDE'}</b>` +
+                        `<small>CENTER THE STICK TO REGAIN GRIP</small>`
+                      : r.landingCue && r.landingCueAge < LANDING_CUE_SECONDS && !callOutranksLanding(call)
+                        ? landingNotice(r)
+                        : paceNotice;
     const targets = practice
       ? track.obstacles
           .map((j, index) => ({

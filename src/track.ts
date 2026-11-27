@@ -25,6 +25,8 @@ export class Track {
   readonly jumps: {start: number; rise: number; flat: number; fall: number; height: number}[] = [];
   readonly sections: {start: number; name: string}[] = [];
   readonly rhythms: {start: number; end: number; pace: number; name: string}[] = [];
+  /** Metres from the start line to the holeshot line, just after the first corner. */
+  readonly holeshot: number;
   private readonly cells = new Map<string, number[]>();
   private readonly cellSize = 20;
   constructor(
@@ -183,6 +185,7 @@ export class Track {
         this.sections.push({start, name: `CUSTOM / JUMP ${i + 1}`});
       });
       this.sections.sort((a, b) => a.start - b.start);
+      this.holeshot = this.afterFirstCorner();
       return;
     }
     this.sections.push({start: 0, name: 'GATE / OPENING TABLETOP'});
@@ -259,6 +262,16 @@ export class Track {
     this.obstacles.push(...this.jumps.map(j => ({...j, position: j.start / this.length})));
     this.sections.push({start: this.length - 35, name: 'FINISH STRAIGHT'});
     this.sections.sort((a, b) => a.start - b.start);
+    this.holeshot = course.holeshot || this.afterFirstCorner();
+  }
+  /** Where the first real corner of the lap has straightened out, for circuits that do not name a holeshot line. */
+  private afterFirstCorner() {
+    const limit = this.length * 0.6;
+    let s = 60;
+    while (s < limit && Math.abs(this.curvature(s)) < 0.03) s++;
+    let straight = 0;
+    for (; s < limit && straight < 12; s++) straight = Math.abs(this.curvature(s)) < 0.011 ? straight + 1 : 0;
+    return Math.min(s, limit);
   }
   at(s: number, lateral = 0): TrackPoint {
     const u = (wrap(s, this.length) / this.length) * this.count;

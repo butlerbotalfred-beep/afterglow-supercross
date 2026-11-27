@@ -160,6 +160,16 @@ Your best valid lap on each circuit and layout is kept as a **ghost**: a see-thr
 
 The ghost records where the bike was (position, heading, pitch and lean), not what was pressed, at least 15 times a second with extra samples at takeoffs, landings and crashes, packed as 16-bit values: about 19 KB for a Dusk Valley lap. Playback is never more than 0.10 m from the lap as ridden. Ghosts are stored in the browser's IndexedDB (`afterglow-ghosts`), stamped with the physics version; a ghost from an older version is not loaded. A ghost is never larger than 40 KB, about three minutes of riding; a slower lap leaves no ghost. Saving compares and writes in one step, so a second tab cannot replace a faster ghost with a slower one. If the browser has no IndexedDB, refuses it or does not answer within four seconds, the ghost still works until the page is closed and the top bar says it is not being saved. `src/ghost.ts` holds all of it; `npm run test:trial` checks it in a real browser.
 
+## Start gate and holeshot
+
+A Race Night start is a gate start. The grid is two rows of four with a gate bar in front of every bike. A board counts 5 to 1, then the gate goes live and drops at a moment between 1 and 3 seconds later that nobody can time, the same for every rider and the same every time for the same race seed. From **DROP THE GATE** to the drop is never more than 8 seconds. Free Practice and Time Trial have no gate.
+
+While you wait, the throttle sets the revs on the launch meter under your bike. Hold the needle in the **green band** (55 to 80% throttle) as the gate falls and the bike leaves with full drive. Too few revs or too many and it bogs or spins: 70% drive for the first 14 m, which costs about 0.3 s down the start straight. Pin the throttle into the red (93% or more) once the gate is live and the bike creeps into the bar: **JUMPED THE GATE**, and it is held for exactly half a second after the drop. Revving as hard as you like while the board is still counting costs nothing. The launch works the same from the keyboard (W), a controller trigger, the Mac Xbox bridge and the touch GAS button; a key or the touch button is on or off, so tap it and watch the needle, which rises and falls slowly enough to hold in the band. A jumped gate always costs more than a poor launch.
+
+Computer riders hold the band and leave after a reaction time of 0.06 to 0.30 s that comes from the race seed (shorter on Expert, longer on Relaxed). They keep their own lane to the first corner, and the second row never leaves before the bike in front of it.
+
+The **holeshot** goes to the first rider across the striped line after the first corner (Dusk Valley 240 m, Red Mesa 325 m, Pine Summit 445 m, Saltwind Coast 415 m, Iron Quarry 350 m; a custom layout places it after its own first corner). A banner names the rider and the results screen marks them. There is exactly one a race. `src/gate.ts` holds the rules; `npm run start-check` runs 100 seeded eight-rider starts on every circuit and `npm run test:gate` checks the gate in a real browser.
+
 ## Circuit selection
 
 Choose a circuit in pre-race setup. Each has its own centerline, jump sequence and scenery; selection is retained on restart. Returning to setup and changing circuit rebuilds the environment and releases its previous graphics resources.
