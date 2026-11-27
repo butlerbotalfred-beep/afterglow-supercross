@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {TUNING} from '../src/config.ts';
 import {COURSES} from '../src/courses.ts';
-import {makeRider, npcControl, stepRider} from '../src/physics.ts';
+import {collide, makeRider, NPC_MISTAKE_RATE, npcControl, npcMistake, stepRider} from '../src/physics.ts';
 import {hardestLanding, lipDistance, prepareTakeoffAdvice, safeTakeoffSpeed} from '../src/takeoff.ts';
 import {Track} from '../src/track.ts';
 
@@ -96,4 +96,58 @@ test('the AI does not slow for a fallen rider', () => {
   const r = place(track, 0, 300, 30);
   const fallen = Object.assign(place(track, 1, 312, 0), {crashTime: 1});
   assert.equal(npcControl(r, track, [r, fallen], 'club').brake, 0);
+});
+
+test('a computer rider misjudges a jump now and then, the same way for the same seed', () => {
+  const draws = (difficulty: string) => {
+    let wrong = 0;
+    for (let rider = 0; rider < 8; rider++)
+      for (let lap = 0; lap < 25; lap++)
+        for (let jump = 0; jump < 50; jump++) {
+          const hot = npcMistake(1234, rider, lap, jump, difficulty);
+          assert.equal(hot, npcMistake(1234, rider, lap, jump, difficulty), 'the same draw every time');
+          if (hot) {
+            wrong++;
+            assert.ok(hot >= 0.1 && hot < 0.3, `too fast by ${hot}`);
+          }
+        }
+    return wrong / 10000;
+  };
+  for (const difficulty of ['relaxed', 'club', 'expert']) {
+    const share = draws(difficulty);
+    const rate = NPC_MISTAKE_RATE[difficulty];
+    assert.ok(Math.abs(share - rate) < rate * 0.35, `${difficulty}: ${share} of jumps against ${rate}`);
+  }
+  assert.ok(NPC_MISTAKE_RATE.relaxed > NPC_MISTAKE_RATE.club && NPC_MISTAKE_RATE.club > NPC_MISTAKE_RATE.expert);
+  assert.equal(draws('standard'), 0, 'an unknown difficulty makes none');
+});
+
+test('a fallible field overshoots, crashes under the same landing rule as a player, and still finishes', () => {
+  const race = (seed: number) => {
+    const track = new Track(COURSES[0]);
+    const riders = Array.from({length: 6}, (_, id) => makeRider(track, id, false, 0xffffff));
+    const reasons: string[] = [];
+    for (let f = 0; f < 420 / TUNING.step && riders.some(r => r.progress.lap < 3); f++) {
+      for (const r of riders) {
+        const before = r.crashes;
+        stepRider(r, npcControl(r, track, riders, 'club', seed), track, TUNING.step, riders);
+        if (r.crashes > before) {
+          reasons.push(r.crashReason);
+          assert.ok(r.lastLanding > TUNING.landingCrashImpact, `crashed at ${r.lastLanding}, over the limit`);
+        }
+      }
+      collide(riders, track);
+    }
+    return {reasons, finished: riders.filter(r => r.progress.lap >= 3).length};
+  };
+  const perfect = race(0);
+  assert.deepEqual(perfect.reasons, [], 'without a seed nobody crashes');
+  const fallible = race(11);
+  assert.ok(fallible.reasons.length >= 1 && fallible.reasons.length <= 6, `${fallible.reasons.length} crashes`);
+  assert.ok(
+    fallible.reasons.every(reason => reason === 'HARD LANDING'),
+    fallible.reasons.join(),
+  );
+  assert.equal(fallible.finished, 6, 'a crash costs time, not the race');
+  assert.deepEqual(race(11).reasons, fallible.reasons, 'the same seed replays the same race');
 });

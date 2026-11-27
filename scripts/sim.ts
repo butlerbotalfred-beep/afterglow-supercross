@@ -11,6 +11,8 @@ export interface RaceResult {
   course: string;
   difficulty: string;
   winner: number;
+  /** The last finisher's time in seconds. */
+  last: number;
   crashes: number;
   recoveries: number;
   finishers: number;
@@ -18,8 +20,8 @@ export interface RaceResult {
   maxBonusKmh?: number;
 }
 
-/** Four NPC riders race three laps; returns the winning time in seconds. */
-export function aiRace(course: Course, difficulty: string, riderCount = 4, maxSeconds = 650): RaceResult {
+/** Four NPC riders race three laps; returns the winning time in seconds. A `seed` lets them make mistakes. */
+export function aiRace(course: Course, difficulty: string, riderCount = 4, maxSeconds = 650, seed = 0): RaceResult {
   const track = new Track(course);
   const riders = Array.from({length: riderCount}, (_, id) => makeRider(track, id, false, 0xffffff));
   const times = new Map<number, number>();
@@ -28,7 +30,7 @@ export function aiRace(course: Course, difficulty: string, riderCount = 4, maxSe
   for (let f = 0; f < maxSeconds / STEP && times.size < riderCount; f++) {
     for (const r of riders) {
       const before = r.recovery;
-      stepRider(r, npcControl(r, track, riders, difficulty), track, STEP, riders);
+      stepRider(r, npcControl(r, track, riders, difficulty, seed), track, STEP, riders);
       if (!before && r.recovery > 0) recoveries++;
       maxBonus = Math.max(maxBonus, r.landingBonus);
       if (r.progress.lap >= LAPS && !times.has(r.id)) times.set(r.id, (f + 1) * STEP);
@@ -39,6 +41,7 @@ export function aiRace(course: Course, difficulty: string, riderCount = 4, maxSe
     course: course.id,
     difficulty,
     winner: round(Math.min(...times.values())),
+    last: round(Math.max(...times.values())),
     crashes: riders.reduce((n, r) => n + r.crashes, 0),
     recoveries,
     finishers: times.size,

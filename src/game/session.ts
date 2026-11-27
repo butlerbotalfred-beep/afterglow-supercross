@@ -296,7 +296,8 @@ function startRace() {
   document.body.classList.toggle('iphone-session', iphoneMode);
   buildGrid();
   buildHud(lapCount);
-  session.start({lapCount, difficulty});
+  // A new seed every race: the computer riders' mistakes fall on different jumps each time.
+  session.start({lapCount, difficulty, seed: (Date.now() % 4294967295) + 1});
   prevPoses = [];
   setVisible('setup', false);
   setVisible('results', false);
@@ -777,6 +778,7 @@ if (import.meta.env.DEV) {
       humanCount,
       npcCount,
       fps: fpsFrames.length / fpsFrames.reduce((a, b) => a + b, 0),
+      seed: session.seed,
       audioMs: audioCost.reduce((a, b) => a + b, 0) / Math.max(1, audioCost.length),
       audio: {open: audio.open, muted: audio.muted, oscillators: audio.oscillators, played: audio.played},
       frameCount,
