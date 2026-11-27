@@ -3,7 +3,8 @@ import {Track, type TrackPoint} from './track';
 import {TUNING, clamp, angleDelta} from './config';
 import {createProgress, updateProgress, restoreDeparture, trackDeferred, type Progress} from './race';
 import type {Control, Device} from './input';
-import {lipDistance, safeTakeoffSpeed} from './takeoff';
+import {lipAhead, lipDistance, safeTakeoffSpeed} from './takeoff';
+import {Rng} from './rng';
 export interface Rider {
   id: number;
   human: boolean;
@@ -503,7 +504,30 @@ const NPC_TAKEOFF_REACH = 45;
 /** The AI will not close on a rider ahead in its line faster than this, in m/s, inside NPC_FOLLOW_REACH metres. */
 const NPC_CLOSING_MAX = 5;
 const NPC_FOLLOW_REACH = 25;
-export function npcControl(r: Rider, track: Track, others: Rider[], difficulty: string): Control {
+/** How often a computer rider misjudges a jump, as a share of the jumps it takes. */
+export const NPC_MISTAKE_RATE: Record<string, number> = {relaxed: 0.03, club: 0.015, expert: 0.007};
+/** A misjudged jump is taken this much too fast, from the least to the most. */
+const NPC_MISTAKE_HOT = [0.1, 0.3];
+/** How far ahead a rider commits to its speed for a jump: beyond the rhythm braking look, so it never brakes late. */
+const NPC_MISTAKE_REACH = 120;
+/**
+ * How much too fast this rider will take this jump on this lap: 0 almost always. It depends only on the race
+ * seed, the rider, the lap and the jump, so a race replays exactly.
+ */
+export function npcMistake(seed: number, rider: number, lap: number, jump: number, difficulty: string) {
+  const rng = new Rng(
+    (seed ^ Math.imul(rider + 1, 0x9e3779b1) ^ Math.imul(lap + 1, 0x85ebca6b) ^ Math.imul(jump + 1, 0xc2b2ae35)) >>> 0,
+  );
+  rng.next();
+  if (!rng.chance(NPC_MISTAKE_RATE[difficulty] ?? 0)) return 0;
+  return rng.range(NPC_MISTAKE_HOT[0], NPC_MISTAKE_HOT[1]);
+}
+/**
+ * `mistakes` is the race seed that makes computer riders fallible; 0 keeps them perfect, as the pace checks need.
+ */
+export function npcControl(r: Rider, track: Track, others: Rider[], difficulty: string, mistakes = 0): Control {
+  const committed = mistakes ? lipAhead(track, r.surface.s, NPC_MISTAKE_REACH) : null;
+  const hot = committed ? npcMistake(mistakes, r.id, r.progress.lap, committed.index, difficulty) : 0;
   const pace = difficulty === 'relaxed' ? 0.78 : difficulty === 'expert' ? 1.04 : 0.91;
   const ahead = 4 + r.speed * 0.32;
   let lane = Math.sin(r.surface.s * 0.043 + r.id * 2) * 0.65 + ((r.id % 3) - 1) * 0.55;
@@ -519,9 +543,12 @@ export function npcControl(r: Rider, track: Track, others: Rider[], difficulty: 
   let curvature = 0;
   for (let distance = 5; distance <= brakingLook; distance += 6)
     curvature = Math.max(curvature, Math.abs(track.curvature(r.surface.s + distance)));
-  let targetSpeed = clamp(46.875 - curvature * 460, 11.8, 45) * pace;
+  // A rider misjudging a jump is also carrying more speed down the straight towards it than its pace allows.
+  let targetSpeed = clamp(46.875 - curvature * 460, 11.8, 45) * pace * (curvature < 0.004 ? 1 + hot : 1);
   for (const rhythm of track.rhythms) {
-    const entrySpeed = rhythm.pace * (difficulty === 'relaxed' ? 0.98 : difficulty === 'expert' ? 1.02 : 1);
+    const inLane = hot > 0 && committed!.lip >= rhythm.start - 1 && committed!.lip < rhythm.end;
+    const entrySpeed =
+      rhythm.pace * (difficulty === 'relaxed' ? 0.98 : difficulty === 'expert' ? 1.02 : 1) * (inLane ? 1 + hot : 1);
     if (r.surface.s >= rhythm.start && r.surface.s < rhythm.end) targetSpeed = Math.min(targetSpeed, entrySpeed);
     else {
       const distance = (rhythm.start - r.surface.s + track.length) % track.length;
@@ -546,7 +573,7 @@ export function npcControl(r: Rider, track: Track, others: Rider[], difficulty: 
       const fastest = Math.min(targetSpeed, Math.sqrt(r.speed * r.speed + 2 * drive * lip));
       const slowest = Math.sqrt(Math.max(0, r.speed * r.speed - 2 * TUNING.braking * 0.7 * lip));
       const safe = safeTakeoffSpeed(track, r.surface.s, NPC_TAKEOFF_REACH, slowest, fastest);
-      if (safe !== null) targetSpeed = Math.min(targetSpeed, safe);
+      if (safe !== null) targetSpeed = Math.min(targetSpeed, safe * (1 + hot));
     }
   }
   return {

@@ -195,6 +195,8 @@ Primary values live in `src/config.ts`. Units are metres, seconds and radians.
 
 `src/track.ts` controls the centerline, analytic jump profiles and berm banking; the mesh is sampled from that same height function. `src/physics.ts` contains weight, landing and NPC pace tuning. NPCs steer, throttle, brake, jump, collide and validate gates using the same movement logic as humans. They can lose time and recover; they are not position-animated along the circuit.
 
+**Computer riders make mistakes.** In a race each computer rider misjudges a small share of its jumps (3% on Relaxed, 1.5% on Club, 0.7% on Expert) and takes them 10 to 30% too fast. It then overshoots under the same landing rule as a player: a heavy landing that costs speed, or a HARD LANDING crash and the usual recovery. Which jumps go wrong comes from a seed chosen when the race starts (shown as `seed` in `window.__game.snapshot()`), so a race can be replayed exactly. The pace gate and landing harness run with the seed at 0, where the riders are perfect; `npm run field-check` also runs seeded fields and fails if anyone fails to finish or the crash rate leaves 0.2 to 3 a race.
+
 The camera maintains a stable horizon, smooths heading and position, stays above terrain, and hides an opponent mesh only when it intersects the camera's near region. Render scale (100%, 75%, 50%) is in setup. Pixel ratio is capped at 1.5; one directional shadow map focused around active riders, batched scenery, layered crowd cards and a small dust pool limit rendering cost.
 
 ## Sound

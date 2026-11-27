@@ -40,6 +40,8 @@ export interface GridConfig {
 export interface RaceConfig {
   lapCount: number;
   difficulty: string;
+  /** Makes the computer riders fallible, the same way every time for the same seed. Left out or 0, they are perfect. */
+  seed?: number;
 }
 export const NPC_NAMES = ['S. MORA', 'J. REYES', 'K. NOVA', 'A. RIVERS', 'T. FOX', 'R. VALE', 'M. PARK'];
 export const COUNTDOWN_SECONDS = 3.8;
@@ -56,6 +58,8 @@ export class RaceSession {
   practice = false;
   lapCount = 3;
   difficulty = 'club';
+  /** The seed for the computer riders' mistakes in this race; 0 means they make none. */
+  seed = 0;
   raceTime = 0;
   countdown = COUNTDOWN_SECONDS;
   firstFinish: number | null = null;
@@ -95,9 +99,10 @@ export class RaceSession {
     this.timing = this.riders.map(() => createTiming());
   }
   /** Starts the countdown for the riders already on the grid. */
-  start({lapCount, difficulty}: RaceConfig) {
+  start({lapCount, difficulty, seed = 0}: RaceConfig) {
     this.lapCount = lapCount;
     this.difficulty = difficulty;
+    this.seed = seed >>> 0;
     this.raceTime = 0;
     this.countdown = COUNTDOWN_SECONDS;
     this.firstFinish = null;
@@ -192,7 +197,7 @@ export class RaceSession {
       const c =
         r.finished !== null
           ? npcControl(r, track, riders, 'relaxed')
-          : humanControl || npcControl(r, track, riders, this.difficulty);
+          : humanControl || npcControl(r, track, riders, this.difficulty, this.seed);
       if (humanControl?.pause) {
         this.togglePause();
         return;

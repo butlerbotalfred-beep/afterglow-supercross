@@ -175,8 +175,10 @@ function nextLip(track: Track, s: number, reach: number) {
       index = i;
     }
   }
-  return index < 0 ? null : {index, distance};
+  return index < 0 ? null : {index, distance, lip: advice[Math.max(0, index)].lip};
 }
+/** The nearest lip within `reach` metres ahead of `s`: its number on this track, its distance and its position. */
+export const lipAhead = nextLip;
 /**
  * The speed to take the next jump at: the highest safe speed between `slowest` and `fastest`, the range the
  * rider can still reach before the lip. Returns null when no lip lies within `reach` metres ahead of `s`, and
