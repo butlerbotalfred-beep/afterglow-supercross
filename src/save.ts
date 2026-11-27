@@ -15,7 +15,7 @@ export const DAMAGED_SAVE_KEY = 'afterglow.save.damaged';
 
 export interface SaveData {
   version: number;
-  settings: {slideAggression: number; volumes: Volumes};
+  settings: {slideAggression: number; volumes: Volumes; showGhost: boolean};
   layouts: Partial<Record<CourseId, TrackLayout>>;
   /** Best times and similar; filled in by later milestones and kept as stored until then. */
   records: Record<string, unknown>;
@@ -99,7 +99,7 @@ const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v =
 export function defaultSave(): SaveData {
   return {
     version: SAVE_VERSION,
-    settings: {slideAggression: 1, volumes: {...DEFAULT_VOLUMES}},
+    settings: {slideAggression: 1, volumes: {...DEFAULT_VOLUMES}, showGhost: true},
     layouts: {},
     records: {},
     career: {},
@@ -122,6 +122,7 @@ function fromStored(v: Record<string, unknown>, physics: number): SaveData {
   if (isObject(v.settings) && typeof v.settings.slideAggression === 'number')
     data.settings.slideAggression = normalizeSlideAggression(v.settings.slideAggression);
   if (isObject(v.settings)) data.settings.volumes = normalizeVolumes(v.settings.volumes);
+  if (isObject(v.settings) && typeof v.settings.showGhost === 'boolean') data.settings.showGhost = v.settings.showGhost;
   if (isObject(v.layouts))
     for (const id of COURSE_IDS) {
       try {
@@ -225,6 +226,17 @@ export class SaveStore {
     } catch {}
     this.data.settings.slideAggression = next;
     return next;
+  }
+  /** Whether Time Trial shows the ghost of the best lap. */
+  get showGhost() {
+    return this.data.settings.showGhost;
+  }
+  setShowGhost(show: boolean) {
+    try {
+      this.update(stored => (stored.settings.showGhost = show));
+    } catch {}
+    this.data.settings.showGhost = show;
+    return show;
   }
   get volumes() {
     return this.data.settings.volumes;

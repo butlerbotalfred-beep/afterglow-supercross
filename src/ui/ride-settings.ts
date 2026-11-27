@@ -20,6 +20,13 @@ export function slideSettings(prefix = '') {
     `and brake slides. Applies immediately.</p></div>`
   );
 }
+/** The Time Trial ghost switch. */
+export function ghostSetting(prefix = '') {
+  return (
+    `<label class="ghost-setting hidden" id="${prefix}ghost-setting"><input id="${prefix}show-ghost" ` +
+    `type="checkbox" checked> Show the ghost of my best lap</label>`
+  );
+}
 const VOLUME_LABELS = {master: 'Master volume', engine: 'Engines', effects: 'Effects', crowd: 'Crowd'};
 /** The four volume sliders. Their ids are `vol-master`, `vol-engine`, `vol-effects` and `vol-crowd` after the prefix. */
 export function volumeSettings(prefix = '') {

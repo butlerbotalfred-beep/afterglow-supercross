@@ -2,6 +2,7 @@
 // Input and screen are passed in, so tests can run whole races in Node.
 import {COLORS, TUNING} from '../config';
 import {uniqueDevices, type Control, type Device} from '../input';
+import {GhostRecorder, type Ghost, type GhostPose} from '../ghost';
 import {collide, idleControl, makeRider, npcControl, stepRider, type Rider} from '../physics';
 import {createTiming, fasterLap, recordStep, type LapTime, type RiderTiming} from '../timing';
 import type {Track} from '../track';
@@ -29,12 +30,18 @@ export interface SessionScreen {
   lap?(rider: Rider, lap: LapTime): void;
   /** The race is over and riders are classified. */
   results(): void;
+  /** Time Trial: the rider finished a lap, recorded as `ghost` (null when the lap was too long to record). */
+  ghostLap?(rider: Rider, lap: LapTime, ghost: Ghost | null): void;
+  /** Time Trial: the rider was put back on the start line, so nothing drawn should blend from the old place. */
+  restarted?(): void;
 }
 export interface GridConfig {
   track: Track;
   humanCount: number;
   npcCount: number;
   practice: boolean;
+  /** Time Trial: one rider alone against the clock, lap after lap, with a ghost of the best lap. */
+  trial?: boolean;
   assignments: (Device | null)[];
 }
 export interface RaceConfig {
@@ -56,6 +63,8 @@ export class RaceSession {
   phase: Phase = 'setup';
   paused = false;
   practice = false;
+  /** Time Trial. It is run like practice (no computer riders, no finish) with a ghost recorded each lap. */
+  trial = false;
   lapCount = 3;
   difficulty = 'club';
   /** The seed for the computer riders' mistakes in this race; 0 means they make none. */
@@ -80,6 +89,11 @@ export class RaceSession {
   reviewCrashTest = '';
   track!: Track;
   private lastTickSound = 4;
+  private recorder = new GhostRecorder();
+  /** The race time of the first pose the recorder was given for the lap being ridden. */
+  private ghostFrom = 0;
+  /** Where the Time Trial rider was before the step being worked on. */
+  private poseBefore: GhostPose = {x: 0, y: 0, z: 0, heading: 0, pitch: 0, lean: 0};
 
   constructor(
     private input: SessionInput,
@@ -87,16 +101,60 @@ export class RaceSession {
   ) {}
 
   /** Lines riders up on the start grid. Humans come first, then NPCs (none in practice). */
-  grid({track, humanCount, npcCount, practice, assignments}: GridConfig) {
+  grid({track, humanCount, npcCount, practice, trial = false, assignments}: GridConfig) {
     this.track = track;
-    this.practice = practice;
-    this.riders = Array.from({length: humanCount + (practice ? 0 : npcCount)}, (_, i) =>
+    this.trial = trial;
+    this.practice = practice || trial;
+    if (trial) humanCount = 1;
+    this.riders = Array.from({length: humanCount + (this.practice ? 0 : npcCount)}, (_, i) =>
       makeRider(track, i, i < humanCount, COLORS[i], i < humanCount ? assignments[i] || undefined : undefined),
     );
     this.riders.forEach((r, i) => {
       if (!r.human) r.name = NPC_NAMES[(i - humanCount) % NPC_NAMES.length];
     });
     this.timing = this.riders.map(() => createTiming());
+    this.beginGhost(0);
+  }
+  /**
+   * Starts recording a lap that began `since` seconds ago, from where the rider is now. A lap that starts as
+   * the rider crosses the line also gets `before`, where the rider was one step earlier, so the ghost is
+   * already moving at the very start of its lap.
+   */
+  private beginGhost(since: number, before?: GhostPose) {
+    if (!this.trial) return;
+    const lead = before ? TUNING.step : 0;
+    this.recorder.begin(since - lead);
+    this.ghostFrom = this.raceTime - lead;
+    if (before) this.recorder.push(before, 0);
+    this.pushGhost();
+  }
+  /** Records where the Time Trial rider is now, at the step the lap clock says it is. */
+  private pushGhost() {
+    this.recorder.push(this.riders[0], Math.round((this.raceTime - this.ghostFrom) / TUNING.step));
+  }
+  /**
+   * Time Trial: puts the rider back on the start line at a standstill and starts the lap again. The laps
+   * already ridden and the best of them are kept.
+   */
+  restartLap() {
+    if (!this.trial || this.phase !== 'racing' || this.paused) return false;
+    const [r] = this.riders,
+      [timing] = this.timing;
+    const {name, crashes} = r;
+    Object.assign(r, makeRider(this.track, r.id, true, r.color, r.device), {name, crashes});
+    Object.assign(timing, createTiming(this.raceTime), {laps: timing.laps, best: timing.best});
+    this.beginGhost(0);
+    this.override.clear();
+    this.screen.restarted?.();
+    return true;
+  }
+  /** Time Trial: the player is done. Shows the laps of the session. */
+  leaveTrial() {
+    if (!this.trial || (this.phase !== 'racing' && this.phase !== 'countdown')) return false;
+    this.paused = false;
+    this.phase = 'results';
+    this.screen.results();
+    return true;
   }
   /** Starts the countdown for the riders already on the grid. */
   start({lapCount, difficulty, seed = 0}: RaceConfig) {
@@ -112,6 +170,7 @@ export class RaceSession {
     this.accumulator = 0;
     this.override.clear();
     this.timing = this.riders.map(() => createTiming());
+    this.beginGhost(0);
   }
   /** The lap a rider's sector times are compared with: the saved best (humans only) or their best this session. */
   referenceLap(index: number) {
@@ -199,15 +258,29 @@ export class RaceSession {
           ? npcControl(r, track, riders, 'relaxed')
           : humanControl || npcControl(r, track, riders, this.difficulty, this.seed);
       if (humanControl?.pause) {
+        // The lap clock has already moved on by this step, so the ghost records the rider standing still for it.
+        if (this.trial) this.pushGhost();
         this.togglePause();
         return;
       }
       if (this.reviewCrashTest === 'Rider contact') Object.assign(c, idleControl());
+      if (this.trial && index === 0) {
+        const p = this.poseBefore;
+        [p.x, p.y, p.z, p.heading, p.pitch, p.lean] = [r.x, r.y, r.z, r.heading, r.pitch, r.lean];
+      }
       stepRider(r, c, track, dt, riders, r.human ? this.slideAggression : 1);
       // Laps are timed until the rider takes the flag; the cool-down lap after it is not.
       if (r.finished === null || this.practice) {
         const lap = recordStep(this.timing[index], r.progress, this.raceTime - dt, dt, this.referenceLap(index));
-        if (lap) screen.lap?.(r, lap);
+        if (this.trial && index === 0) this.pushGhost();
+        if (lap) {
+          screen.lap?.(r, lap);
+          if (this.trial && index === 0) {
+            screen.ghostLap?.(r, lap, this.recorder.finish(lap.time));
+            // The next lap began at the line, part of the way through this step.
+            this.beginGhost(this.raceTime - this.timing[index].lapStart, this.poseBefore);
+          }
+        }
       } else r.progress.crossings.length = 0;
       if (r.lastLanding > 3 && r.human) screen.landing(r.lastLanding);
       if (!this.practice && r.finished === null && r.progress.lap >= this.lapCount) {

@@ -4,7 +4,7 @@ import {CSS_COLORS} from '../config';
 import {readGamepadStatus, type Device} from '../input';
 import {nativeControllerStatus} from '../native-controller';
 import type {Track} from '../track';
-import {directionSettings, slideSettings, volumeSettings} from './ride-settings';
+import {directionSettings, ghostSetting, slideSettings, volumeSettings} from './ride-settings';
 import {raceChromeHtml} from './hud';
 import {pauseMenuHtml} from './pause-menu';
 import {resultsScreenHtml} from './results-screen';
@@ -26,6 +26,7 @@ export function setupScreenHtml() {
 <section class="setup-card"><div class="card-heading">` +
     `<span class="eyebrow">YOUR NEXT RIDE</span><span class="tag">LOCAL SESSION</span></div>` +
     `<div class="mode-tabs"><button id="race-mode" class="active">RACE NIGHT</button>` +
+    `<button id="trial-mode">TIME TRIAL</button>` +
     `<button id="practice-mode">FREE PRACTICE</button>` +
     `</div>
 <label class="course-label">CIRCUIT<select ` +
@@ -75,7 +76,7 @@ export function setupScreenHtml() {
     `<p class="ride-tip">Match the rhythm pace before a jump,` +
     ` then dip the nose to meet the landing. Crashes remount at the wreck. Short track exits ` +
     `are forgiven; gaining over 30 m outside returns you to where you ` +
-    `left.</p>${slideSettings()}${volumeSettings()}<div class="settings">` +
+    `left.</p>${ghostSetting()}${slideSettings()}${volumeSettings()}<div class="settings">` +
     `<label>Chase distance <input id="camera-distance" type="range" min="2.5" max="6" ` +
     `step=".1" value="3.2"></label>` +
     `<label>Camera shake <input id="camera-shake" type="range" min="0" max="1" step=".05" ` +

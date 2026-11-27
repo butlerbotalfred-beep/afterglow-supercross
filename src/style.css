@@ -2418,3 +2418,20 @@ footer i {
 .iphone-session .rider-notice:has(.takeoff-meter) small {
   display: none;
 }
+
+/* Time Trial */
+.ghost-setting {
+  flex-direction: row;
+  align-items: center;
+  gap: 9px;
+  margin-top: 15px;
+  cursor: pointer;
+}
+.ghost-setting input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--orange);
+}
+#ghost-notice {
+  color: #ffdc69;
+}
