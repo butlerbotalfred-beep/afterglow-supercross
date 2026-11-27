@@ -376,8 +376,10 @@ export function stepRider(r: Rider, c: Control, track: Track, dt: number, others
       r.compression = clamp(impact * 0.035, 0.04, 1);
       // A scrub has to be brought back upright before the wheels touch.
       const laidOver = r.scrub && Math.abs(r.airLean) > TUNING.airLeanLimit;
-      const badLanding =
-        impact > TUNING.landingCrashImpact || (alignment > TUNING.landingCrashAngle && impact > 5 && r.speed > 7);
+      // Overjumping onto flat ground is a heavy hit that costs speed; only ploughing into a face keeps the tighter limit.
+      const tooHard =
+        impact > (slope <= TUNING.landingFlatSlope ? TUNING.landingFlatCrashImpact : TUNING.landingCrashImpact);
+      const badLanding = tooHard || (alignment > TUNING.landingCrashAngle && impact > 5 && r.speed > 7);
       if (laidOver || badLanding) {
         r.y = floor;
         r.vy = 0;
@@ -385,11 +387,7 @@ export function stepRider(r: Rider, c: Control, track: Track, dt: number, others
         updateProgress(r.progress, r.surface.s, r.surface.lateral, track.length, track.halfWidth + 0.45, dt);
         const side = laidOver ? -r.airLean : r.lean || r.steer || (r.id % 2) * 2 - 1;
         // A scrub still laid over is named first: holding it also dives the nose, which would read as awkward.
-        const reason = laidOver
-          ? 'SCRUB NOT RECOVERED'
-          : impact > TUNING.landingCrashImpact
-            ? 'HARD LANDING'
-            : 'AWKWARD LANDING';
+        const reason = laidOver ? 'SCRUB NOT RECOVERED' : tooHard ? 'HARD LANDING' : 'AWKWARD LANDING';
         crash(r, reason, side);
         return;
       }

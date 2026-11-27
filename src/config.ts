@@ -2,7 +2,7 @@
  * Bump this whenever a change alters how a bike moves for the same inputs. Saved times and replays carry the
  * number, so results from different physics are never compared.
  */
-export const PHYSICS_VERSION = 5;
+export const PHYSICS_VERSION = 6;
 /** Metres, seconds, radians. See README for handling/camera tuning. */
 export const TUNING = {
   step: 1 / 120,
@@ -20,6 +20,10 @@ export const TUNING = {
   finishTimeout: 60,
   contactCrashSpeed: 9,
   landingCrashImpact: 21,
+  /** The limit when the ground at the landing is flat or falls away: overjumping costs speed before it costs a crash. */
+  landingFlatCrashImpact: 26,
+  /** Landing ground no steeper uphill than this counts as flat. Anything steeper is casing the next face. */
+  landingFlatSlope: 0.05,
   landingCrashAngle: 0.95,
   /** Radians between the bike's pitch and the landing slope before a landing starts to cost speed. */
   landingPenaltyStart: 0.1,

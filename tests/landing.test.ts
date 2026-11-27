@@ -108,8 +108,27 @@ test('the bonus stays inside the top speed, on the track, and is not paid for a 
   assert.equal(heavy.landingCue, '', 'a landing that scrubbed speed on impact is not called clean');
 });
 
-test('PHYSICS_VERSION is 5 and best laps from earlier versions are archived', () => {
-  assert.equal(PHYSICS_VERSION, 5);
+test('overjumping onto flat ground costs speed; ploughing into a face still crashes', () => {
+  assert.ok(TUNING.landingFlatCrashImpact > TUNING.landingCrashImpact);
+  // Between the two limits: the hit that used to throw the rider however level the bike was.
+  for (const gradient of [0, 0.3]) {
+    const {r, kept} = land(0, {gradient, sink: 23 * Math.sqrt(1 + gradient * gradient)});
+    assert.ok(Math.abs(r.lastLanding - 23) < 0.2, `impact ${r.lastLanding}`);
+    assert.equal(r.crashes, 0, `gradient ${gradient}: a 23 m/s hit on flat or falling ground is ridden out`);
+    assert.ok(kept < 0.86 && kept > 0.8, `and costs about a sixth of the speed, kept ${kept}`);
+  }
+  const flat = land(0, {sink: 27}).r;
+  assert.equal(flat.crashes, 1, 'past the flat limit is still a crash');
+  assert.equal(flat.crashReason, 'HARD LANDING');
+  const face = land(0, {gradient: -0.3, sink: 23 * Math.sqrt(1.09)}).r;
+  assert.ok(Math.abs(face.lastLanding - 23) < 0.2, `impact ${face.lastLanding}`);
+  assert.equal(face.crashes, 1, 'the same hit into an upslope is casing the jump');
+  const awkward = land(0.99, {sink: 8}).r;
+  assert.equal(awkward.crashes, 1, 'a badly pitched landing crashes as before');
+});
+
+test('PHYSICS_VERSION is 6 and best laps from earlier versions are archived', () => {
+  assert.equal(PHYSICS_VERSION, 6);
   const values = new Map<string, string>();
   const storage = {
     getItem: (k: string) => values.get(k) ?? null,
