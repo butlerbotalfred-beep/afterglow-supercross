@@ -6,7 +6,7 @@ import type {Control, Device} from './input';
 import {lipAhead, lipDistance, safeTakeoffSpeed} from './takeoff';
 import {Rng} from './rng';
 import {cornerPace, landingError, preloads, rhythmPace, slipFor, type RiderProfile, type SlipKind} from './riders';
-import {ROSTER} from './riders';
+import {ROSTER, relaxedPace} from './riders';
 export interface Rider {
   id: number;
   human: boolean;
@@ -541,20 +541,26 @@ export function npcMistake(seed: number, rider: number, lap: number, jump: numbe
 /** The catch-up assist may slow a computer rider by 5% at most and speed one up by 3% at most. */
 export const ASSIST_EASE_MIN = 0.95;
 export const ASSIST_GAIN_MAX = 1.03;
-/** A rider braking late sees this share of its usual braking distance, then goes through the corner this slowly. */
-const SLIP_LATE_LOOK = 0.55;
-const SLIP_LATE_PACE = 0.8;
+/**
+ * A rider braking late sees this share of its usual braking distance, then has to scrub down to this share of its
+ * pace through the corner and for a few metres out of it (as a rider running wide does too). The slow corner is
+ * what makes the mistake cost time.
+ */
+const SLIP_LATE_LOOK = 0.7;
+const SLIP_LATE_PACE = 0.62;
+const SLIP_EXIT = 14;
 /** A rider running wide goes round the outside at this share of its pace. */
-const SLIP_WIDE_PACE = 0.9;
-/** Radians of nose-high a rider landing flat is out by. */
+const SLIP_WIDE_PACE = 0.82;
+/** Radians of nose-high a rider landing flat is out by, and the share of its pace it gathers itself at afterwards. */
 const SLIP_FLAT_NOSE = 0.24;
+const SLIP_FLAT_PACE = 0.72;
 /** A preloading rider pulls back this many seconds before a lip and holds it through, which keeps the bike low. */
 const NPC_PRELOAD_REACH = 30;
 const NPC_PRELOAD_SECONDS = 0.5;
 /** Where a mistake can happen on a track: its corners (which way they turn) and its jumps. */
 interface Spots {
   corners: {start: number; end: number; inside: number}[];
-  jumps: {start: number; end: number}[];
+  jumps: {start: number; down: number; end: number}[];
 }
 const spots = new WeakMap<Track, Spots>();
 function spotsOf(track: Track): Spots {
@@ -575,7 +581,11 @@ function spotsOf(track: Track): Spots {
   }
   const jumps = track.jumps
     .filter(j => j.start > 40 && j.start + j.rise + j.flat + j.fall < track.length - 60)
-    .map(j => ({start: j.start - 4, end: j.start + j.rise + j.flat + j.fall + 40}));
+    .map(j => ({
+      start: j.start - 4,
+      down: j.start + j.rise + j.flat + j.fall,
+      end: j.start + j.rise + j.flat + j.fall + 40,
+    }));
   found = {corners, jumps};
   spots.set(track, found);
   return found;
@@ -606,16 +616,18 @@ function activeSlip(seed: number, r: Rider, track: Track, p: RiderProfile) {
   // On the first lap the pack is still in its start lanes as far as the holeshot line.
   const clear = (x: {start: number}) => lap > 0 || x.start > track.holeshot + NPC_START_MERGE + 80;
   const s = r.surface.s;
+  /** `inCorner` is the part of the mistake where the rider is slowed: in the corner, or on the ground after the jump. */
   let hit: {kind: SlipKind; inCorner: boolean; inside: number} | null = null;
   if (slip.kind === 'flat') {
     const list = all.jumps.filter(clear);
     const jump = list[Math.floor(slip.where * list.length)];
-    if (jump && s >= jump.start && s < jump.end) hit = {kind: 'flat', inCorner: false, inside: 0};
+    if (jump && s >= jump.start && s < jump.end)
+      hit = {kind: 'flat', inCorner: s >= jump.down && r.grounded, inside: 0};
   } else {
     const list = all.corners.filter(clear);
     const corner = list[Math.floor(slip.where * list.length)];
     const approach = slip.kind === 'late' ? 90 : 20;
-    if (corner && s >= corner.start - approach && s < corner.end)
+    if (corner && s >= corner.start - approach && s < corner.end + SLIP_EXIT)
       hit = {kind: slip.kind, inCorner: s >= corner.start - 4, inside: corner.inside};
   }
   if (hit && r.slipLap !== lap) {
@@ -640,7 +652,7 @@ function insideLine(r: Rider, track: Track, others: Rider[], p: RiderProfile, la
   for (const o of others) {
     if (o === r || o.crashTime > 0 || o.recovery > 0) continue;
     const gap = (o.surface.s - s + track.length) % track.length;
-    if (gap < 2 || gap > 12 || Math.abs(o.surface.lateral - r.surface.lateral) > 1.8 || o.speed > r.speed + 1) continue;
+    if (gap < 5 || gap > 14 || Math.abs(o.surface.lateral - r.surface.lateral) > 1.8 || o.speed > r.speed + 1) continue;
     const corner = spotsOf(track).corners.find(c => c.end > s && c.start < s + 46);
     if (!corner) return lane;
     const want = clamp(o.surface.lateral + corner.inside * 1.7, -2.5, 2.5);
@@ -660,12 +672,21 @@ export function npcControl(
   mistakes = 0,
   ease = 1,
 ): Control {
-  const p = r.profile;
+  // After the flag a rider cruises round as before: no ratings, no mistakes.
+  const p = r.finished === null ? r.profile : undefined;
   // A rider from the roster makes the mistakes of its consistency rating instead of misjudging jumps.
   const slip = p && mistakes ? activeSlip(mistakes, r, track, p) : null;
   const committed = !p && mistakes ? lipAhead(track, r.surface.s, NPC_MISTAKE_REACH) : null;
   const hot = committed ? npcMistake(mistakes, r.id, r.progress.lap, committed.index, difficulty) : 0;
-  let pace = p ? cornerPace(p) : difficulty === 'relaxed' ? 0.78 : difficulty === 'expert' ? 1.04 : 0.91;
+  let pace = p
+    ? difficulty === 'relaxed'
+      ? relaxedPace(p)
+      : cornerPace(p)
+    : difficulty === 'relaxed'
+      ? 0.78
+      : difficulty === 'expert'
+        ? 1.04
+        : 0.91;
   // The catch-up assist: 1 unless it is switched on, and then never more than 3% up or 5% down.
   if (ease !== 1) pace *= clamp(ease, ASSIST_EASE_MIN, ASSIST_GAIN_MAX);
   const ahead = 4 + r.speed * 0.32;
@@ -698,11 +719,18 @@ export function npcControl(
   // A rider misjudging a jump is also carrying more speed down the straight towards it than its pace allows.
   let targetSpeed = clamp(46.875 - curvature * 460, 11.8, 45) * pace * (curvature < 0.004 ? 1 + hot : 1);
   if (ease !== 1) targetSpeed = Math.min(targetSpeed, TUNING.maxSpeed);
-  if (slip?.inCorner) targetSpeed *= slip.kind === 'late' ? SLIP_LATE_PACE : slip.kind === 'wide' ? SLIP_WIDE_PACE : 1;
+  if (slip?.inCorner)
+    targetSpeed *= slip.kind === 'late' ? SLIP_LATE_PACE : slip.kind === 'wide' ? SLIP_WIDE_PACE : SLIP_FLAT_PACE;
   let inRhythm = false;
   for (const rhythm of track.rhythms) {
     const inLane = hot > 0 && committed!.lip >= rhythm.start - 1 && committed!.lip < rhythm.end;
-    const skill = p ? rhythmPace(p) : difficulty === 'relaxed' ? 0.98 : difficulty === 'expert' ? 1.02 : 1;
+    const skill = p
+      ? rhythmPace(p) * (difficulty === 'relaxed' ? 0.985 : 1)
+      : difficulty === 'relaxed'
+        ? 0.98
+        : difficulty === 'expert'
+          ? 1.02
+          : 1;
     const entrySpeed = rhythm.pace * skill * (inLane ? 1 + hot : 1);
     if (r.surface.s >= rhythm.start && r.surface.s < rhythm.end) inRhythm = true;
     if (r.surface.s >= rhythm.start && r.surface.s < rhythm.end) targetSpeed = Math.min(targetSpeed, entrySpeed);

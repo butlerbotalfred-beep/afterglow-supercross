@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {TUNING} from '../src/config.ts';
+import {COLORS, TUNING} from '../src/config.ts';
 import {COURSES} from '../src/courses.ts';
 import {neutralControl} from '../src/input.ts';
 import {ASSIST_EASE_MIN, ASSIST_GAIN_MAX, makeRider, npcControl, stepRider, type Rider} from '../src/physics.ts';
@@ -11,6 +11,7 @@ import {
   gridFor,
   mistakeRate,
   overall,
+  relaxedPace,
   riderLabel,
   rhythmPace,
   slipFor,
@@ -75,6 +76,9 @@ test('the roster is twelve different riders with five ratings each', () => {
     for (const rating of [p.corner, p.rhythm, p.starts, p.aggression, p.consistency])
       assert.ok(Number.isInteger(rating) && rating >= 0 && rating <= 100, `${p.name}: ${rating}`);
     assert.match(riderLabel({name: p.name, profile: p}), /^#\d{1,2} [A-Z]\. [A-Z]+$/);
+    // Players have bike numbers 1 to 4 and the first four colours: no computer rider may be taken for one.
+    assert.ok(p.number > 4, `${p.name} has a player's number`);
+    assert.ok(!COLORS.slice(0, 4).includes(p.plate), `${p.name} has a player's colour`);
   }
   assert.deepEqual(
     ROSTER.map(overall),
@@ -94,6 +98,55 @@ test('each rating changes how the rider rides', () => {
   assert.ok(Math.abs(cornerPace({...ROSTER[0], corner: 84}) - 0.92) < 1e-9);
   assert.ok(Math.abs(cornerPace({...ROSTER[0], corner: 96}) - 1.04) < 1e-9);
   for (const p of ROSTER) assert.ok(rhythmPace(p) >= 0.98 && rhythmPace(p) <= 1.02, `${p.name} rhythm pace`);
+  // Off the gate a starts rating of 60 is the old Club reaction, 93 about the old Expert one, 40 the old Relaxed one.
+  const sharp = (starts: number) => startSharpness({...ROSTER[0], starts});
+  assert.ok(Math.abs(sharp(60) - 1) < 1e-9 && Math.abs(sharp(93) - 0.7525) < 1e-9 && Math.abs(sharp(40) - 1.15) < 1e-9);
+});
+
+/** One rider alone on Saltwind Coast: the time of each lap and the kind of mistake made on it, if any. */
+function alone(name: string, difficulty: string, seed: number, laps: number) {
+  const p = ROSTER.find(x => x.name === name)!;
+  const r: Rider = Object.assign(makeRider(coast, 0, false, p.plate), {profile: p});
+  const times: number[] = [];
+  const kinds: (string | null)[] = [];
+  let last = 0;
+  for (let t = STEP; r.progress.lap < laps; t += STEP) {
+    const lap = r.progress.lap;
+    stepRider(r, npcControl(r, coast, [r], difficulty, seed), coast, STEP, [r]);
+    if (r.progress.lap > lap) {
+      times.push(t - last);
+      kinds.push(r.slipLap === lap ? r.slipKind! : null);
+      last = t;
+    }
+  }
+  return {times, kinds, r};
+}
+
+test('every kind of mistake costs the rider time', () => {
+  const clean = alone('T. FOX', 'club', 0, 4).times[2];
+  const {times, kinds} = alone('T. FOX', 'club', 20261128, 60);
+  const least: Record<string, number> = {};
+  for (let lap = 2; lap + 1 < times.length; lap++) {
+    const kind = kinds[lap];
+    if (!kind || kinds[lap + 1] || kinds[lap - 1]) continue;
+    // The lap with the mistake and the lap after it, against two clean laps.
+    least[kind] = Math.min(least[kind] ?? Infinity, times[lap] + times[lap + 1] - 2 * clean);
+  }
+  for (const kind of ['late', 'flat', 'wide'])
+    assert.ok(least[kind] >= 0.1, `a ${kind} mistake cost ${least[kind]?.toFixed(3)} s at least`);
+});
+
+test('Relaxed riders ride at about the old Relaxed pace, and a finished rider cruises like any other', () => {
+  const club = alone('B. QUILL', 'club', 0, 3).times[2],
+    relaxed = alone('B. QUILL', 'relaxed', 0, 3).times[2];
+  for (const p of gridFor('relaxed', 8))
+    assert.ok(relaxedPace(p) >= 0.76 && relaxedPace(p) <= 0.79 + 1e-9, `${p.name} on Relaxed`);
+  assert.ok(relaxed > club * 1.02 && relaxed < club * 1.2, `${relaxed} s on Relaxed against ${club} s on Club`);
+  // After the flag: the same control as a rider with no ratings, so no race pace and no mistakes on the way round.
+  const p = ROSTER[0];
+  const done: Rider = Object.assign(makeRider(coast, 0, false, p.plate), {profile: p, finished: 100, speed: 20});
+  const plain: Rider = Object.assign(makeRider(coast, 0, false, p.plate), {finished: 100, speed: 20});
+  assert.deepEqual(npcControl(done, coast, [done], 'club', 7), npcControl(plain, coast, [plain], 'club', 7));
 });
 
 test('the pace setting chooses which riders are on the grid', () => {
@@ -214,7 +267,7 @@ test('catch-up off is identical to no assist code; on never exceeds the speed ca
   const base = lap(1),
     gain = lap(ASSIST_GAIN_MAX),
     eased = lap(ASSIST_EASE_MIN);
-  assert.ok(gain.top <= TUNING.maxSpeed + TUNING.landingBonusMax + 1e-9, `top speed ${gain.top}`);
+  assert.ok(gain.top <= TUNING.maxSpeed, `top speed ${gain.top}`);
   assert.ok(
     gain.seconds < base.seconds && gain.seconds >= base.seconds * 0.97,
     `${gain.seconds} against ${base.seconds}`,

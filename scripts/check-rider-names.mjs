@@ -5,8 +5,9 @@ import {readdirSync, readFileSync, statSync} from 'node:fs';
 import {join} from 'node:path';
 
 const root = new URL('../', import.meta.url).pathname;
-// "RIDER 3", "RIDER ${id + 1}", "RIDER-3", 'RIDER ' + n, and the same in lower or mixed case.
-const NAME = /\bRIDER[\s#-]*(\d|\$\{)|\bRIDER[\s#-]*['"`]\s*\+/i;
+// "RIDER 3", "RIDER ${id + 1}", "RIDER-3", "RIDER_3", "RIDER: 3", 'RIDER ' + n, the same for NPC, CPU and BOT,
+// and all of them in lower or mixed case.
+const NAME = /\b(RIDER|NPC|CPU|BOT)[\s#:_-]*(\d|\$\{)|\b(RIDER|NPC|CPU|BOT)[\s#:_-]*['"`]\s*\+/i;
 const offenders = [];
 let files = 0;
 (function walk(dir) {
@@ -22,8 +23,8 @@ function check(path) {
   readFileSync(path, 'utf8')
     .split('\n')
     .forEach((line, i) => {
-      // The 3D model's scene-graph label ("Motocross rider 3") is never shown to a player.
-      if (NAME.test(line) && !line.includes('root.name ='))
+      // Never shown to a player: a comment, and the 3D model's scene-graph label ("Motocross rider 3").
+      if (NAME.test(line) && !/^\s*(\*|\/\/|\/\*)/.test(line) && !line.includes('root.name ='))
         offenders.push(`${path.slice(root.length)}:${i + 1}: ${line.trim()}`);
     });
 }

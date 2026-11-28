@@ -4,6 +4,8 @@
 //   npx tsx scripts/roster-check.ts --check         also fail if a target is missed
 //   npx tsx scripts/roster-check.ts --write         record baselines/roster.json (needs sign-off, like pace.json)
 //   npx tsx scripts/roster-check.ts --mistakes [n]  every rider alone for n laps (500): mistakes made against rating
+//   npx tsx scripts/roster-check.ts --costs [n]     one rider alone for n laps (150) on every circuit: what each
+//                                                   kind of mistake costs against a clean lap (--name "K. NOVA")
 import {readFileSync, writeFileSync} from 'node:fs';
 import {makeRider, npcControl, stepRider} from '../src/physics';
 import {ROSTER, mistakeRate} from '../src/riders';
@@ -15,7 +17,49 @@ const check = args.includes('--check');
 const file = new URL('../baselines/roster.json', import.meta.url);
 const problems: string[] = [];
 
-if (args.includes('--mistakes')) {
+if (args.includes('--costs')) {
+  // What a mistake costs: one rider alone, the lap with the mistake and the lap after it against two clean laps.
+  const laps = Number(args[args.indexOf('--costs') + 1]) || 150;
+  const profile = ROSTER.find(p => p.name === (args.includes('--name') ? args[args.indexOf('--name') + 1] : 'T. FOX'))!;
+  for (const course of COURSES) {
+    const ride = (seed: number, count: number) => {
+      const track = new Track(course);
+      const r = Object.assign(makeRider(track, 0, false, profile.plate), {profile, name: profile.name});
+      const times: number[] = [];
+      const kinds: (string | null)[] = [];
+      let last = 0;
+      for (let t = STEP; r.progress.lap < count && t < count * 400; t += STEP) {
+        const lap = r.progress.lap;
+        stepRider(r, npcControl(r, track, [r], 'club', seed), track, STEP, [r]);
+        if (r.progress.lap > lap) {
+          times.push(t - last);
+          kinds.push(r.slipLap === lap ? r.slipKind! : null);
+          last = t;
+        }
+      }
+      return {times, kinds, crashes: r.crashes};
+    };
+    const clean = ride(0, 4).times[2];
+    const {times, kinds, crashes} = ride(20261128, laps);
+    const cost: Record<string, number[]> = {late: [], flat: [], wide: []};
+    for (let lap = 2; lap + 1 < times.length; lap++)
+      if (kinds[lap] && !kinds[lap + 1] && !kinds[lap - 1])
+        cost[kinds[lap]!].push(times[lap] + times[lap + 1] - 2 * clean);
+    for (const [kind, list] of Object.entries(cost)) {
+      const least = Math.min(...list);
+      const ok = list.length > 0 && least >= 0.1;
+      if (!ok) problems.push(`${course.id}: a ${kind} mistake cost ${least.toFixed(3)} s at least`);
+      console.log(
+        `roster-check: ${ok ? 'ok  ' : 'FAIL'} ${course.id.padEnd(6)} ${kind.padEnd(4)} ${list.length} mistakes by ${profile.name}: ` +
+          `cost ${least.toFixed(2)} to ${Math.max(...list).toFixed(2)} s, ` +
+          `average ${(list.reduce((a, b) => a + b, 0) / Math.max(1, list.length)).toFixed(2)} s`,
+      );
+    }
+    console.log(
+      `roster-check:      ${course.id.padEnd(6)} clean lap ${clean.toFixed(3)} s, ${crashes} crashes in ${times.length} laps`,
+    );
+  }
+} else if (args.includes('--mistakes')) {
   const laps = Number(args[args.indexOf('--mistakes') + 1]) || 500;
   // The shortest circuit: a mistake is one corner or jump of a lap wherever the lap is.
   const course = COURSES.find(c => c.id === 'coast')!;

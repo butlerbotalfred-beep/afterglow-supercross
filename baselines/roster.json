@@ -5,16 +5,16 @@
     {
       "course": "dusk",
       "difficulty": "relaxed",
-      "winner": 288.125,
-      "last": 313.592,
+      "winner": 313.6,
+      "last": 332.617,
       "order": [
         "T. FOX",
         "M. PARK",
-        "R. VALE",
-        "D. OKORO",
         "L. HARTE",
-        "E. SOLBERG",
+        "D. OKORO",
+        "R. VALE",
         "C. IBARRA",
+        "E. SOLBERG",
         "B. QUILL"
       ],
       "crashes": 0
@@ -22,13 +22,13 @@
     {
       "course": "canyon",
       "difficulty": "relaxed",
-      "winner": 187.575,
-      "last": 210.733,
+      "winner": 208.383,
+      "last": 224.95,
       "order": [
         "T. FOX",
-        "R. VALE",
-        "M. PARK",
         "D. OKORO",
+        "M. PARK",
+        "R. VALE",
         "L. HARTE",
         "E. SOLBERG",
         "C. IBARRA",
@@ -39,14 +39,14 @@
     {
       "course": "alpine",
       "difficulty": "relaxed",
-      "winner": 184.1,
-      "last": 204.225,
+      "winner": 206.25,
+      "last": 217.633,
       "order": [
         "T. FOX",
-        "R. VALE",
-        "M. PARK",
         "D. OKORO",
+        "M. PARK",
         "L. HARTE",
+        "R. VALE",
         "E. SOLBERG",
         "C. IBARRA",
         "B. QUILL"
@@ -56,31 +56,31 @@
     {
       "course": "coast",
       "difficulty": "relaxed",
-      "winner": 156.55,
-      "last": 174.433,
+      "winner": 175.467,
+      "last": 190.458,
       "order": [
         "T. FOX",
-        "R. VALE",
-        "M. PARK",
         "D. OKORO",
+        "M. PARK",
         "L. HARTE",
+        "R. VALE",
         "E. SOLBERG",
         "C. IBARRA",
         "B. QUILL"
       ],
-      "crashes": 0
+      "crashes": 2
     },
     {
       "course": "quarry",
       "difficulty": "relaxed",
-      "winner": 198.975,
-      "last": 223.2,
+      "winner": 219.833,
+      "last": 240.192,
       "order": [
         "T. FOX",
-        "R. VALE",
-        "M. PARK",
         "D. OKORO",
+        "M. PARK",
         "L. HARTE",
+        "R. VALE",
         "E. SOLBERG",
         "C. IBARRA",
         "B. QUILL"
@@ -90,33 +90,33 @@
     {
       "course": "dusk",
       "difficulty": "club",
-      "winner": 286.875,
-      "last": 305.158,
+      "winner": 288.517,
+      "last": 307.808,
       "order": [
         "J. REYES",
         "T. FOX",
-        "L. HARTE",
-        "A. RIVERS",
         "R. VALE",
-        "M. PARK",
+        "L. HARTE",
         "D. OKORO",
+        "M. PARK",
+        "A. RIVERS",
         "E. SOLBERG"
       ],
-      "crashes": 0
+      "crashes": 2
     },
     {
       "course": "canyon",
       "difficulty": "club",
-      "winner": 186.833,
-      "last": 205.558,
+      "winner": 188.05,
+      "last": 205.475,
       "order": [
         "J. REYES",
         "A. RIVERS",
         "T. FOX",
         "R. VALE",
         "M. PARK",
-        "L. HARTE",
         "D. OKORO",
+        "L. HARTE",
         "E. SOLBERG"
       ],
       "crashes": 0
@@ -124,8 +124,8 @@
     {
       "course": "alpine",
       "difficulty": "club",
-      "winner": 183.675,
-      "last": 195.8,
+      "winner": 184.475,
+      "last": 196.225,
       "order": [
         "J. REYES",
         "T. FOX",
@@ -141,14 +141,14 @@
     {
       "course": "coast",
       "difficulty": "club",
-      "winner": 155.8,
-      "last": 167.508,
+      "winner": 156.958,
+      "last": 167.675,
       "order": [
-        "J. REYES",
         "T. FOX",
+        "J. REYES",
         "A. RIVERS",
-        "R. VALE",
         "M. PARK",
+        "R. VALE",
         "D. OKORO",
         "L. HARTE",
         "E. SOLBERG"
@@ -158,16 +158,16 @@
     {
       "course": "quarry",
       "difficulty": "club",
-      "winner": 198.3,
-      "last": 216.717,
+      "winner": 199.308,
+      "last": 216.942,
       "order": [
         "J. REYES",
         "T. FOX",
         "A. RIVERS",
         "R. VALE",
         "M. PARK",
-        "D. OKORO",
         "L. HARTE",
+        "D. OKORO",
         "E. SOLBERG"
       ],
       "crashes": 0
@@ -175,14 +175,14 @@
     {
       "course": "dusk",
       "difficulty": "expert",
-      "winner": 273.908,
-      "last": 299.275,
+      "winner": 273.1,
+      "last": 300.625,
       "order": [
         "S. MORA",
         "K. NOVA",
-        "J. REYES",
         "M. PARK",
         "T. FOX",
+        "J. REYES",
         "A. RIVERS",
         "R. VALE",
         "D. OKORO"
@@ -192,8 +192,8 @@
     {
       "course": "canyon",
       "difficulty": "expert",
-      "winner": 175.133,
-      "last": 201.592,
+      "winner": 174.742,
+      "last": 202.075,
       "order": [
         "S. MORA",
         "K. NOVA",
@@ -209,13 +209,13 @@
     {
       "course": "alpine",
       "difficulty": "expert",
-      "winner": 170.175,
-      "last": 190.283,
+      "winner": 169.992,
+      "last": 190.808,
       "order": [
         "S. MORA",
         "K. NOVA",
-        "J. REYES",
         "T. FOX",
+        "J. REYES",
         "R. VALE",
         "A. RIVERS",
         "M. PARK",
@@ -226,8 +226,8 @@
     {
       "course": "coast",
       "difficulty": "expert",
-      "winner": 144.425,
-      "last": 163.35,
+      "winner": 144.358,
+      "last": 165.192,
       "order": [
         "S. MORA",
         "K. NOVA",
@@ -243,8 +243,8 @@
     {
       "course": "quarry",
       "difficulty": "expert",
-      "winner": 186.5,
-      "last": 212.617,
+      "winner": 186.383,
+      "last": 212.65,
       "order": [
         "S. MORA",
         "K. NOVA",

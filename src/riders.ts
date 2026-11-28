@@ -35,15 +35,15 @@ const rider = (
 export const overall = (p: RiderProfile) => p.corner * 0.6 + p.rhythm * 0.4;
 /** Fastest first, by `overall`. */
 export const ROSTER: RiderProfile[] = [
-  rider('S. MORA', 1, 0xe44f63, 96, 92, 80, 70, 90),
-  rider('K. NOVA', 12, 0x41b9ec, 92, 97, 62, 55, 78),
+  rider('S. MORA', 7, 0xe44f63, 96, 92, 80, 70, 90),
+  rider('K. NOVA', 12, 0x2f7fd6, 92, 97, 62, 55, 78),
   rider('J. REYES', 27, 0xffcf61, 84, 80, 95, 88, 66),
-  rider('A. RIVERS', 4, 0xb5df55, 82, 86, 70, 40, 94),
-  rider('T. FOX', 51, 0xe589dc, 83, 76, 85, 96, 52),
+  rider('A. RIVERS', 14, 0x3fae6a, 82, 86, 70, 40, 94),
+  rider('T. FOX', 51, 0xb04fc0, 83, 76, 85, 96, 52),
   rider('R. VALE', 38, 0xa19aff, 81, 84, 58, 62, 82),
   rider('M. PARK', 9, 0xe9ede4, 80, 72, 90, 74, 70),
   rider('D. OKORO', 63, 0x5fd6b0, 74, 79, 66, 50, 88),
-  rider('L. HARTE', 72, 0xf08a4b, 73, 66, 76, 84, 58),
+  rider('L. HARTE', 72, 0x9c6b3f, 73, 66, 76, 84, 58),
   rider('E. SOLBERG', 19, 0x7fa6ff, 66, 70, 54, 45, 80),
   rider('C. IBARRA', 85, 0xd9c36a, 62, 58, 72, 66, 62),
   rider('B. QUILL', 44, 0xc48ad9, 55, 52, 60, 35, 72),
@@ -66,12 +66,22 @@ export function gridFor(difficulty: string, count: number): RiderProfile[] {
  * is the old Club pace (0.92), 96 the old Expert pace (1.04) and 55 about the old Relaxed pace (0.80).
  */
 export const cornerPace = (p: RiderProfile) => 0.92 + (p.corner - 84) * (p.corner > 84 ? 0.01 : 0.004);
+/**
+ * Pace on Relaxed. Relaxed has the slowest riders of the roster, but the middle of the roster is close together,
+ * so on their own pace the Relaxed winner would be within 2% of the Club winner. Instead the roster's range of
+ * corner pace is squeezed into 0.762 to 0.79: the fastest Relaxed rider is about where every Relaxed rider used
+ * to be (0.78), and nobody is slow enough to come up short on the first jumps (the start check fails below 0.76).
+ */
+export const relaxedPace = (p: RiderProfile) => 0.762 + (cornerPace(p) - 0.804) * 0.25;
 /** Entry pace through a rhythm section, as a share of the section's own pace. */
 export const rhythmPace = (p: RiderProfile) => 0.975 + p.rhythm * 0.00045;
 /** Radians a rider's landing pitch is out by: none for the best, a little nose-high for the rest. */
 export const landingError = (p: RiderProfile) => Math.max(0, 85 - p.rhythm) * 0.0016;
-/** How much quicker than the middle of the reaction range a rider is off the gate: 1 is the slowest. */
-export const startSharpness = (p: RiderProfile) => 1.25 - p.starts * 0.0075;
+/**
+ * A rider's share of the seeded reaction time off the gate: a starts rating of 60 is 1, the old Club reaction;
+ * 93 is 0.75, the old Expert one; 40 is 1.15, the old Relaxed one.
+ */
+export const startSharpness = (p: RiderProfile) => 1.45 - p.starts * 0.0075;
 /** Riders who preload the face of a jump in a rhythm section. */
 export const preloads = (p: RiderProfile) => p.rhythm >= 84;
 /** Mistakes a lap: a consistency of 100 would never make one. */
