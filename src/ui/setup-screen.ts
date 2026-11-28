@@ -1,6 +1,6 @@
 // Setup screen markup and the pure helpers it uses: device slots, NPC options and controller status text.
 import {COURSES} from '../courses';
-import {CSS_COLORS} from '../config';
+import {CSS_COLORS, cssColor} from '../config';
 import {readGamepadStatus, type Device} from '../input';
 import {nativeControllerStatus} from '../native-controller';
 import type {Track} from '../track';
@@ -8,6 +8,8 @@ import {directionSettings, ghostSetting, slideSettings, volumeSettings} from './
 import {raceChromeHtml} from './hud';
 import {pauseMenuHtml} from './pause-menu';
 import {resultsScreenHtml} from './results-screen';
+import {riderButtonHtml, riderEditorHtml} from './rider-editor';
+import {defaultRiders, type RiderSettings} from '../rider-settings';
 
 export function setupScreenHtml() {
   return (
@@ -58,7 +60,8 @@ export function setupScreenHtml() {
     `<option value="3" selected>3 laps / Standard</option>` +
     `<option value="5">5 laps / Endurance</option></select></label>` +
     `<label>NPC PACE<select id="difficulty"><option value="relaxed">Relaxed</option>` +
-    `<option selected value="club">Club</option><option value="expert">Expert</option></select>` +
+    `<option selected value="club">Club</option><option value="expert">Expert</option>` +
+    `<option value="pro" disabled>Pro / win a championship to unlock</option></select>` +
     `</label></div><label class="catch-up-setting"><input id="catch-up" type="checkbox"> Catch-up assist: ` +
     `riders far ahead ease off, riders far behind push on</label>
 <div class="riders-label"><span>RIDERS & DEVICES</span>` +
@@ -102,7 +105,8 @@ export function appShellHtml() {
 ${setupScreenHtml()}
 ${raceChromeHtml()}
 ${pauseMenuHtml()}
-${resultsScreenHtml()}`;
+${resultsScreenHtml()}
+${riderEditorHtml()}`;
 }
 export function sameDevice(a: Device | null, b: Device | null) {
   return a && b && a.kind === b.kind && (a.kind !== 'gamepad' || (b.kind === 'gamepad' && a.index === b.index));
@@ -122,6 +126,8 @@ export function slotsHtml(
   ready: boolean[],
   iphoneMode: boolean,
   pads: {index: number; id: string}[],
+  /** The players' riders: each row is in its player's colour and has a button showing their number and name. */
+  riders: RiderSettings[] = defaultRiders(),
 ) {
   const padOptions = pads
     .map(
@@ -133,7 +139,7 @@ export function slotsHtml(
   return Array.from(
     {length: humanCount},
     (_, i) =>
-      `<div class="player-slot" style="--player:${CSS_COLORS[i]}">` +
+      `<div class="player-slot" style="--player:${riders[i] ? cssColor(riders[i].bike) : CSS_COLORS[i]}">` +
       `<span class="player-badge">P${i + 1}</span>` +
       `<select aria-label="Player ${i + 1} input device" data-device="${i}">` +
       `<option value="">Connect a controller</option>` +
@@ -141,7 +147,8 @@ export function slotsHtml(
       `WASD</option>${iphoneMode ? '<option value="touch">iPhone / Touch controls</option>' : ''}` +
       `${padOptions}` +
       `</select><button class="ready ${ready[i] ? 'is-ready' : ''}" ` +
-      `data-ready="${i}">${ready[i] ? '✓ READY' : 'READY?'}</button></div>`,
+      `data-ready="${i}">${ready[i] ? '✓ READY' : 'READY?'}</button>` +
+      `${riders[i] ? riderButtonHtml(i, riders[i]) : ''}</div>`,
   ).join('');
 }
 export function controllerStatusMessage(iphoneMode: boolean) {

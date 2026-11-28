@@ -6,12 +6,14 @@ import type {Control, Device} from './input';
 import {lipAhead, lipDistance, safeTakeoffSpeed} from './takeoff';
 import {Rng} from './rng';
 import {cornerPace, landingError, preloads, rhythmPace, slipFor, type RiderProfile, type SlipKind} from './riders';
-import {ROSTER, relaxedPace} from './riders';
+import {PRO_PACE, ROSTER, relaxedPace} from './riders';
 export interface Rider {
   id: number;
   human: boolean;
   device?: Device;
   name: string;
+  /** A player's race number. A computer rider's is in its profile. */
+  number?: number;
   color: number;
   x: number;
   z: number;
@@ -686,7 +688,7 @@ export function npcControl(
   let pace = p
     ? difficulty === 'relaxed'
       ? relaxedPace(p)
-      : cornerPace(p)
+      : cornerPace(p) * (difficulty === 'pro' ? PRO_PACE : 1)
     : difficulty === 'relaxed'
       ? 0.78
       : difficulty === 'expert'

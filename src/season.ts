@@ -51,7 +51,7 @@ export interface SeasonRace {
   slots: number[];
 }
 
-const DIFFICULTIES = ['relaxed', 'club', 'expert'];
+const DIFFICULTIES = ['relaxed', 'club', 'expert', 'pro'];
 const isOrder = (v: unknown): v is number[] =>
   Array.isArray(v) && v.length === SEASON_RIDERS && [...v].sort((a, b) => a - b).every((id, i) => id === i);
 
@@ -71,6 +71,18 @@ export function newSeason(humanCount: number, difficulty: string, seed: number):
     entrants,
     rounds: Array.from({length: SEASON_ROUNDS}, () => ({heat: null, main: null})),
   };
+}
+/**
+ * The season with its players as they are set up now: each human entrant takes the name, number and colour of
+ * that player's rider. The stored season keeps who is human and who is not; what a player is called is read
+ * from their settings every time, so a change shows everywhere at once.
+ */
+export function seasonWithRiders(season: Season, riders: readonly {name: string; number: number; bike: number}[]) {
+  const entrants = season.entrants.map(e => {
+    const rider = e.human ? riders[e.id] : undefined;
+    return rider ? {...e, name: rider.name, number: rider.number, color: rider.bike} : e;
+  });
+  return {...season, entrants};
 }
 /** An automated season: eight computer riders and nobody at the controls. */
 export function aiSeason(difficulty: string, seed: number): Season {
@@ -105,7 +117,9 @@ export function asSeason(v: unknown): Season | null {
     : aiSeason(s.difficulty as string, 1).entrants;
   for (const [id, e] of s.entrants.entries()) {
     const want = expected[id];
-    if (!e || typeof e !== 'object' || e.id !== id || e.human !== want.human || e.number !== want.number) return null;
+    if (!e || typeof e !== 'object' || e.id !== id || e.human !== want.human) return null;
+    // A player's number is theirs to change; a computer rider's says which rider it is.
+    if (!want.human && e.number !== want.number) return null;
   }
   const entrants = expected;
   if (!Array.isArray(s.rounds) || s.rounds.length !== SEASON_ROUNDS) return null;

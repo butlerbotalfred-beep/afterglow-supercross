@@ -6,11 +6,13 @@ export class ChaseCamera {
   camera = new THREE.PerspectiveCamera(66, 1, 0.08, 1800);
   initialized = false;
   yaw = 0;
+  /** Radians the camera is swung round the rider from straight behind. 0 in play; development checks set it. */
+  orbit = 0;
   update(r: Rider, track: Track, dt: number, distance: number, shake: number, time: number) {
     if (!this.initialized) this.yaw = r.heading;
     const delta = Math.atan2(Math.sin(r.heading - this.yaw), Math.cos(r.heading - this.yaw));
     this.yaw += delta * (1 - Math.exp(-dt * 8));
-    const f = new THREE.Vector3(Math.sin(this.yaw), 0, Math.cos(this.yaw));
+    const f = new THREE.Vector3(Math.sin(this.yaw + this.orbit), 0, Math.cos(this.yaw + this.orbit));
     const base = new THREE.Vector3(r.x, r.y, r.z);
     const framingDistance = distance + Math.max(0, Math.min(0.7, r.pitch)) * 0.8;
     const target = base.clone().addScaledVector(f, -framingDistance);

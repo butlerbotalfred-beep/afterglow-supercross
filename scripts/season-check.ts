@@ -39,7 +39,7 @@ if (args.includes('--round')) {
         (error, stdout) => (error ? reject(error) : resolve(JSON.parse(stdout))),
       ),
     );
-  for (const level of args.includes('--all') ? ['club', 'relaxed', 'expert'] : ['club']) {
+  for (const level of args.includes('--all') ? ['club', 'relaxed', 'expert', 'pro'] : ['club']) {
     const began = Date.now();
     const rounds = await Promise.all(Array.from({length: SEASON_ROUNDS}, (_, round) => worker(level, round)));
     let season = aiSeason(level, SEED);

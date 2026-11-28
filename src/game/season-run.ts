@@ -21,6 +21,7 @@ export function seasonGrid(season: Season, race: SeasonRace, track: Track, assig
     assignments,
     difficulty: season.difficulty,
     seed: race.seed,
+    humans: season.entrants.filter(e => e.human),
     lineup: {profiles, slots: race.slots},
   };
 }
