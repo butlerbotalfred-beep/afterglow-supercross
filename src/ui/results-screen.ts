@@ -1,18 +1,19 @@
 // Results screen markup, race ranking and the classification table.
-import {cssColor} from '../config';
+import {textColor} from '../config';
 import {riderLabel} from '../riders';
 import {POINTS, SEASON_ROUNDS, standings, type Season} from '../season';
 import type {Rider} from '../physics';
 import {progressDistance} from '../race';
 import {formatLap, type RiderTiming} from '../timing';
 import type {Track} from '../track';
-import {el} from './dom';
+import {el, escapeHtml} from './dom';
 
 export function resultsScreenHtml() {
   return (
     `<div id="results" class="modal hidden"><div class="modal-card results-card">` +
     `<div class="eyebrow">DUSK VALLEY / OFFICIAL CLASSIFICATION</div><h2 id="results-heading">THAT’S A WRAP.</h2>` +
-    `<p id="results-subtitle"></p><div id="results-table"></div>` +
+    `<p id="results-subtitle"></p><p id="results-unlock" class="unlock-notice hidden" role="status"></p>` +
+    `<div id="results-table"></div>` +
     `<button id="restart-results" class="primary">ONE MORE RIDE <span>↗</span></button>` +
     `<button id="setup-results" class="text-button">RETURN TO SETUP</button></div></div>`
   );
@@ -64,9 +65,22 @@ export function showResultsTable(
       : `${lapCount} ${lapCount === 1 ? 'lap' : 'laps'} · ${riders.length} riders · ${formatTime(raceTime)} session`;
   const winner = ordered[0]?.finished ?? null;
   const winnerLaps = ordered[0]?.finishedLaps ?? 0;
+  el('results-table').innerHTML = resultRowsHtml(riders, ordered, timing, trial, holeshot, season, winner, winnerLaps);
+}
+/** The rows of the classification, one for each rider in finishing order. Names are shown as plain text. */
+export function resultRowsHtml(
+  riders: Rider[],
+  ordered: Rider[],
+  timing: RiderTiming[],
+  trial: boolean,
+  holeshot: number | null,
+  season: {scores: boolean} | null,
+  winner: number | null,
+  winnerLaps: number,
+) {
   // The fastest lap of the race, by anyone, is marked as well as each rider's own best.
   const fastest = Math.min(...timing.flatMap(t => t.laps.filter(lap => lap.valid).map(lap => lap.time)));
-  el('results-table').innerHTML = ordered
+  return ordered
     .map((r, i) => {
       const laps = timing[riders.indexOf(r)]?.laps || [];
       const best = Math.min(...laps.filter(lap => lap.valid).map(lap => lap.time));
@@ -90,8 +104,8 @@ export function showResultsTable(
         .join('');
       return (
         `<div class="result-row"><b>${String(i + 1).padStart(2, '0')}</b>` +
-        `<span style="color:${cssColor(r.color)}">●</span>` +
-        `<strong>${riderLabel(r)}<small>${r.human ? 'HUMAN' : 'NPC'}` +
+        `<span style="color:${textColor(r.color)}">●</span>` +
+        `<strong>${escapeHtml(riderLabel(r))}<small>${r.human ? 'HUMAN' : 'NPC'}` +
         `${r.id === holeshot ? ' · <i class="holeshot-tag">HOLESHOT</i>' : ''}` +
         `${season?.scores ? ` · <i class="points-tag">+${POINTS[i] ?? 0} PTS</i>` : ''}</small></strong>` +
         `<span class="result-time">${gap}</span>` +
@@ -117,15 +131,15 @@ export function standingsRowsHtml(season: Season) {
       row =>
         `<div class="result-row standing-row${row.position <= 3 ? ' podium-' + row.position : ''}">` +
         `<b>${String(row.position).padStart(2, '0')}</b>` +
-        `<span style="color:${cssColor(row.entrant.color)}">●</span>` +
+        `<span style="color:${textColor(row.entrant.color)}">●</span>` +
         `<strong>${entrantLabel(row.entrant)}<small>${row.entrant.human ? 'HUMAN' : 'NPC'}` +
         `${row.results.length ? ' · ' + row.results.map(place => 'P' + place).join(' ') : ''}</small></strong>` +
         `<span class="result-time">${row.points} PTS</span></div>`,
     )
     .join('');
 }
-const entrantLabel = (e: {human: boolean; name: string; number: number}) =>
-  e.human ? e.name : `#${e.number} ${e.name}`;
+/** A name and number as text for HTML: whatever a player typed is shown as typed, never read as markup. */
+const entrantLabel = (e: {name: string; number: number}) => escapeHtml(`#${e.number} ${e.name}`);
 /** Shows the championship table in the results window, after a main. */
 export function showStandingsTable(season: Season) {
   const done = season.rounds.filter(r => r.main).length;
@@ -134,7 +148,9 @@ export function showStandingsTable(season: Season) {
   el('results').querySelector('.eyebrow')!.textContent = complete
     ? 'CHAMPIONSHIP / FINAL STANDINGS'
     : `CHAMPIONSHIP / AFTER ROUND ${done} OF ${SEASON_ROUNDS}`;
-  el('results-heading').textContent = complete ? `CHAMPION: ${entrantLabel(leader.entrant)}` : 'THE STANDINGS.';
+  el('results-heading').textContent = complete
+    ? `CHAMPION: #${leader.entrant.number} ${leader.entrant.name}`
+    : 'THE STANDINGS.';
   el('results-subtitle').textContent = complete
     ? `${leader.points} points and ${leader.wins} ${leader.wins === 1 ? 'win' : 'wins'} from ${SEASON_ROUNDS} rounds`
     : 'Points come from the mains. Level on points: most wins, then the better result in the latest round.';

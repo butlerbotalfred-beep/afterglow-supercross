@@ -1456,7 +1456,7 @@ footer i {
   margin-right: auto;
 }
 .solo .identity {
-  display: none;
+  max-width: 30%;
 }
 .lap {
   transform: skewX(-8deg);
@@ -2597,4 +2597,138 @@ footer i {
 }
 .standing-row.podium-3 > b {
   color: #d99a6c;
+}
+
+/* Rider editor: each player's name, number, colours and helmet. */
+.player-slot {
+  flex-wrap: wrap;
+}
+.rider-button {
+  flex: 1 1 100%;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  padding: 7px 9px;
+  border: 1px solid #ffffff1a;
+  border-left: 3px solid var(--player);
+  border-radius: 2px;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  color: #e6e9f0;
+  text-align: left;
+}
+.rider-button b {
+  font:
+    800 italic 16px 'Barlow Condensed',
+    Impact,
+    sans-serif;
+  color: var(--player);
+}
+.rider-button span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rider-button small {
+  font-size: 8px;
+  letter-spacing: 1px;
+  color: #8f98aa;
+}
+.rider-card {
+  width: 480px;
+}
+.rider-fields {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 12px;
+  margin: 16px 0 6px;
+}
+.rider-card label {
+  display: block;
+  font-size: 9px;
+  letter-spacing: 1px;
+  color: #8f98aa;
+}
+.rider-card input[type='text'],
+.rider-card select {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  padding: 10px;
+  border: 1px solid #ffffff24;
+  border-radius: 2px;
+  background: #121826;
+  color: #fff;
+  font-size: 16px;
+  text-transform: uppercase;
+}
+.swatch-label {
+  margin: 14px 0 6px;
+  font-size: 9px;
+  letter-spacing: 1px;
+  color: #8f98aa;
+}
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.swatch {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--swatch);
+  border: 2px solid #ffffff30;
+}
+.swatch[aria-checked='true'] {
+  border-color: #fff;
+  box-shadow:
+    0 0 0 2px #1a2030,
+    0 0 0 4px #fff;
+}
+.swatch.locked {
+  opacity: 0.28;
+  cursor: not-allowed;
+  background: repeating-linear-gradient(45deg, var(--swatch) 0 4px, #1a2030 4px 7px);
+}
+.rider-design {
+  margin-top: 14px;
+}
+.modal-card p.rider-locks {
+  margin: 14px 0 0;
+  font-size: 10px;
+}
+.modal-card p.rider-errors {
+  min-height: 16px;
+  margin: 10px 0 12px;
+  color: #ff8d7a;
+}
+.modal-card p.unlock-notice {
+  margin: -12px 0 16px;
+  padding: 9px 12px;
+  border: 1px solid #ffcf6166;
+  border-radius: 2px;
+  color: #ffcf61;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+}
+.identity-name {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+/* A name and number in place of "P1": smaller type, and never under the lap counter. */
+.compact .hud-top .identity {
+  font-size: 22px;
+  padding: 7px 10px;
+  max-width: calc(100% - 120px);
+}
+.compact .identity-name {
+  display: block;
 }

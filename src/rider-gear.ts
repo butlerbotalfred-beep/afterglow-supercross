@@ -35,7 +35,8 @@ export function jerseyGeometry() {
   g.computeVertexNormals();
   return g;
 }
-export function gearMaterials(color: number) {
+/** `number` is printed on the back of the jersey, where the chase camera sees it. */
+export function gearMaterials(color: number, number?: number) {
   if (!fabricHeight) {
     fabricHeight = loadTexture('jersey-height-v1.webp');
     fabricHeight.wrapS = fabricHeight.wrapT = THREE.RepeatWrapping;
@@ -104,6 +105,17 @@ export function gearMaterials(color: number) {
   c.font = 'italic 900 22px Arial';
   c.textAlign = 'center';
   c.fillText('AFTERGLOW', 512, 495);
+  if (number !== undefined) {
+    // The middle of the texture is the middle of the back. Smaller type for three digits, as on the plates.
+    const text = String(number);
+    c.fillStyle = '#1d2230';
+    c.font = `italic 900 ${text.length >= 3 ? 150 : 190}px Arial`;
+    c.textBaseline = 'middle';
+    c.fillText(text, 506, 268, 262);
+    c.textBaseline = 'alphabetic';
+    c.fillStyle = '#ece8dd';
+    c.font = 'italic 900 22px Arial';
+  }
   // Stitching and lower-back creases are subtle enough to remain material detail.
   for (let i = 0; i < 8; i++) {
     const y = 185 + i * 30,
@@ -207,26 +219,50 @@ export function contactShadow() {
   return mesh;
 }
 
-export function helmetMaterial(color: number) {
+/** `design` is the pattern painted round the shell: a wave (the original), a crown stripe, two halves or a chequered band. */
+export function helmetMaterial(color: number, design: string = 'wave') {
   const canvas = document.createElement('canvas');
   canvas.width = 1024;
   canvas.height = 512;
   const c = canvas.getContext('2d')!;
   c.fillStyle = '#' + color.toString(16).padStart(6, '0');
   c.fillRect(0, 0, 1024, 512);
-  for (const [offset, width, paint] of [
-    [0, 60, '#242838'],
-    [8, 37, '#f2f0e6'],
-  ] as const) {
-    c.strokeStyle = paint;
-    c.lineWidth = width;
-    c.beginPath();
-    for (let x = 0; x <= 1024; x += 8) {
-      const y = 185 + Math.sin((x / 1024) * Math.PI * 4) * 22 + offset;
-      x ? c.lineTo(x, y) : c.moveTo(x, y);
+  if (design === 'stripe') {
+    // The sphere's seam is at the back, so a band across the middle of the texture runs over the crown.
+    for (const [x, width, paint] of [
+      [452, 120, '#242838'],
+      [476, 72, '#f2f0e6'],
+    ] as const) {
+      c.fillStyle = paint;
+      c.fillRect(x, 0, width, 360);
+      c.fillRect(x - 512, 0, width, 360);
+      c.fillRect(x + 512, 0, width, 360);
     }
-    c.stroke();
-  }
+  } else if (design === 'split') {
+    c.fillStyle = '#f2f0e6';
+    c.fillRect(0, 0, 512, 360);
+    c.fillStyle = '#242838';
+    for (const x of [0, 506, 1018]) c.fillRect(x, 0, 6, 360);
+  } else if (design === 'checker') {
+    for (let row = 0; row < 3; row++)
+      for (let col = 0; col < 32; col++) {
+        c.fillStyle = (row + col) % 2 ? '#f2f0e6' : '#242838';
+        c.fillRect(col * 32, 150 + row * 32, 32, 32);
+      }
+  } else
+    for (const [offset, width, paint] of [
+      [0, 60, '#242838'],
+      [8, 37, '#f2f0e6'],
+    ] as const) {
+      c.strokeStyle = paint;
+      c.lineWidth = width;
+      c.beginPath();
+      for (let x = 0; x <= 1024; x += 8) {
+        const y = 185 + Math.sin((x / 1024) * Math.PI * 4) * 22 + offset;
+        x ? c.lineTo(x, y) : c.moveTo(x, y);
+      }
+      c.stroke();
+    }
   c.fillStyle = '#252838';
   c.fillRect(0, 365, 1024, 55);
   c.fillStyle = '#f2f0e6';

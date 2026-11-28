@@ -10,6 +10,8 @@ import {disposeWorld} from '../scenery';
 import {createWorld} from '../world';
 import {createBike} from '../bike-model';
 import {riderLabel} from '../riders';
+import {PRO_PACE, allowedPace} from '../rider-settings';
+import {chooseSwatch, readRiderEditor, showRiderEditor} from '../ui/rider-editor';
 import {createGateBars, type GateBars} from '../start-gate-model';
 import {RaceEffects} from '../race-effects';
 import {ChaseCamera} from '../camera';
@@ -40,6 +42,8 @@ import {
   recordRace,
   seasonComplete,
   seasonUnfinished,
+  seasonAwards,
+  seasonWithRiders,
   startNewSeason,
   type Season,
   type SeasonRace,
@@ -139,10 +143,14 @@ const session = new RaceSession(input, {
     racedInSeason = seasonRace;
     showingStandings = false;
     if (season && seasonRace) {
-      season = recordRace(season, seasonOrder(session));
+      const order = seasonOrder(session);
+      season = recordRace(season, order);
       seasonKept = save.setSeason(season);
+      unlockNotice = seasonUnlocks(season, seasonRace, order);
       seasonRace = null;
-    }
+    } else unlockNotice = '';
+    el('results-unlock').textContent = unlockNotice;
+    setVisible('results-unlock', !!unlockNotice);
     showResultsTable(
       track,
       session.riders,
@@ -161,6 +169,36 @@ const session = new RaceSession(input, {
   },
 });
 session.slideAggression = save.slideAggression;
+/** What the race just run unlocked, for the results window. */
+let unlockNotice = '';
+/**
+ * A championship main has been recorded: a human who won it unlocks the next colour set, and a human who has
+ * won the championship unlocks Pro pace. Each is given once. Returns what to tell the players.
+ */
+function seasonUnlocks(after: Season, race: SeasonRace, order: number[]) {
+  const earned = seasonAwards(after, race, order);
+  const notices: string[] = [];
+  if (earned.roundWin) {
+    const set = save.awardRoundWin(after, race.round);
+    if (set) notices.push(`ROUND WIN: THE ${set.name} COLOURS ARE UNLOCKED FOR EVERY RIDER.`);
+  }
+  if (earned.champion && save.awardSeasonWin()) notices.push('CHAMPION: PRO PACE IS UNLOCKED.');
+  if (notices.length) refreshUnlocks();
+  return notices.join(' ');
+}
+/** Pro pace can be chosen only once it is unlocked. */
+function refreshUnlocks() {
+  const select = el<HTMLSelectElement>('difficulty');
+  const pro = select.querySelector<HTMLOptionElement>('option[value="pro"]')!;
+  const open = save.unlocks.includes(PRO_PACE);
+  pro.disabled = !open;
+  pro.textContent = open ? 'Pro' : 'Pro / win a championship to unlock';
+  if (!open && select.value === 'pro') select.value = 'expert';
+}
+/** The pace setting chosen, never a locked one. */
+const chosenPace = () => allowedPace(el<HTMLSelectElement>('difficulty').value, save.unlocks);
+/** The season with its players under the names, numbers and colours they have now. */
+const dressed = (s: Season) => seasonWithRiders(s, save.riders);
 /** Who took the holeshot in the race being run, for the banner. */
 let holeshot: HudContext['holeshot'] = null;
 /** The big text before a start: the board and then the wait for a race's gate, or 3-2-1 without a gate. */
@@ -364,6 +402,39 @@ function layoutChoice() {
   el<HTMLSelectElement>('track-layout').value = activeLayout ? 'custom' : 'original';
 }
 
+/** The player whose rider is being edited, or null. */
+let editingRider: number | null = null;
+const riderEditorOpen = () => editingRider !== null;
+function openRiderEditor(player: number) {
+  if (session.phase !== 'setup' || !save.riders[player]) return;
+  editingRider = player;
+  showRiderEditor(player, save.riders[player], save.unlocks);
+}
+function closeRiderEditor() {
+  editingRider = null;
+  setVisible('rider-editor', false);
+}
+el('rider-editor').addEventListener('click', e => {
+  const swatch = (e.target as HTMLElement).closest<HTMLButtonElement>('.swatch');
+  if (swatch && !swatch.disabled) chooseSwatch(swatch);
+});
+el<HTMLFormElement>('rider-form').onsubmit = e => {
+  e.preventDefault();
+  if (editingRider === null) return;
+  // Refused with the reasons shown, and nothing changed, if a name or number is invalid or taken.
+  const result = save.setRider(editingRider, readRiderEditor());
+  if (!result.ok) {
+    el('rider-errors').textContent = result.errors.join(' ');
+    return;
+  }
+  closeRiderEditor();
+  refreshSlots();
+  refreshSeason();
+};
+el('rider-cancel').onclick = closeRiderEditor;
+el('rider-editor').addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeRiderEditor();
+});
 function refreshNpcOptions() {
   const s = el<HTMLSelectElement>('npcs');
   npcCount = practice || trial ? 0 : Math.min(npcCount, 8 - humanCount);
@@ -373,7 +444,10 @@ function refreshNpcOptions() {
 }
 function refreshSlots() {
   const pads = input.connectedGamepads();
-  el('slots').innerHTML = slotsHtml(humanCount, ready, iphoneMode, pads);
+  el('slots').innerHTML = slotsHtml(humanCount, ready, iphoneMode, pads, save.riders);
+  el('slots')
+    .querySelectorAll<HTMLButtonElement>('[data-rider]')
+    .forEach(b => (b.onclick = () => openRiderEditor(Number(b.dataset.rider))));
   el('slots')
     .querySelectorAll<HTMLSelectElement>('[data-device]')
     .forEach(s => {
@@ -436,11 +510,12 @@ function buildGrid() {
       }
     });
   }
-  const difficulty = el<HTMLSelectElement>('difficulty').value;
+  const difficulty = chosenPace();
+  const humans = save.riders.map(r => ({name: r.name, number: r.number, color: r.bike}));
   session.grid(
     season && seasonRace
-      ? seasonGrid(season, seasonRace, track, assignments)
-      : {track, humanCount, npcCount, practice, trial, assignments, difficulty, seed: gridSeed},
+      ? seasonGrid(dressed(season), seasonRace, track, assignments)
+      : {track, humanCount, npcCount, practice, trial, assignments, difficulty, seed: gridSeed, humans},
   );
   if (gateBars) {
     scene.remove(gateBars.group);
@@ -454,7 +529,12 @@ function buildGrid() {
     gateBars.set(0);
   }
   models = session.riders.map(r => {
-    const m = createBike(r.color, r.profile?.number ?? r.id + 1);
+    const mine = r.human ? save.riders[r.id] : undefined;
+    const m = createBike(
+      r.color,
+      r.profile?.number ?? r.number ?? r.id + 1,
+      mine && {kit: mine.kit, helmet: mine.helmet, design: mine.design},
+    );
     scene.add(m.root);
     return m;
   });
@@ -505,7 +585,7 @@ function afterResults() {
   if (!racedInSeason || !season) return startRace();
   if (racedInSeason.stage === 'main' && !showingStandings) {
     showingStandings = true;
-    showStandingsTable(season);
+    showStandingsTable(dressed(season));
     labelResultsButtons();
     return;
   }
@@ -524,12 +604,7 @@ function seasonRaceToRun() {
       return null;
     }
     const humans = Number(el<HTMLSelectElement>('humans').value);
-    const answer = startNewSeason(
-      season,
-      humans,
-      el<HTMLSelectElement>('difficulty').value,
-      (Date.now() % 4294967295) + 1,
-    );
+    const answer = startNewSeason(season, humans, chosenPace(), (Date.now() % 4294967295) + 1);
     if (!('started' in answer)) return null;
     season = answer.started;
     seasonKept = save.setSeason(season);
@@ -537,6 +612,7 @@ function seasonRaceToRun() {
   return nextRace(season);
 }
 function startRace() {
+  closeRiderEditor();
   if (seasonMode) {
     const humans = season && !seasonComplete(season) ? season.entrants.filter(e => e.human).length : humanCount;
     // Nothing changes if the race cannot start: a season race already running stays the one being run.
@@ -559,7 +635,7 @@ function startRace() {
   }
   racedInSeason = null;
   const lapCount = seasonRace ? 0 : Number(el<HTMLSelectElement>('laps').value);
-  const difficulty = season && seasonRace ? season.difficulty : el<HTMLSelectElement>('difficulty').value;
+  const difficulty = season && seasonRace ? season.difficulty : chosenPace();
   if (!devicesReady(assignments, humanCount)) return;
   testMarkers.visible = practice;
   touchControls.clear();
@@ -717,13 +793,15 @@ document.body.append(controllerHint);
 function menuRoot() {
   return editorOpen()
     ? el('track-editor')
-    : session.paused
-      ? el('pause')
-      : session.phase === 'setup'
-        ? el('setup')
-        : session.phase === 'results'
-          ? el('results')
-          : null;
+    : riderEditorOpen()
+      ? el('rider-editor')
+      : session.paused
+        ? el('pause')
+        : session.phase === 'setup'
+          ? el('setup')
+          : session.phase === 'results'
+            ? el('results')
+            : null;
 }
 function menuAction(event: MenuEvent) {
   const root = menuRoot();
@@ -754,7 +832,9 @@ function menuAction(event: MenuEvent) {
       }
     }
   } else if (action === 'back' || action === 'start') {
-    if (session.paused) session.togglePause();
+    if (riderEditorOpen()) {
+      if (action === 'back') closeRiderEditor();
+    } else if (session.paused) session.togglePause();
     else if (session.phase === 'setup' && action === 'start') el<HTMLButtonElement>('start').click();
     else if (session.phase === 'results') el(action === 'start' ? 'restart-results' : 'setup-results').click();
     else {
@@ -811,7 +891,7 @@ function pollJoins() {
     const pressed = !!p.buttons[0]?.pressed || (p.buttons[0]?.value || 0) > 0.5;
     const join = pressed && !padButtons.get(p.index);
     padButtons.set(p.index, pressed);
-    if (session.phase !== 'setup' || iphoneMode || editorOpen()) continue;
+    if (session.phase !== 'setup' || iphoneMode || editorOpen() || riderEditorOpen()) continue;
     // Only visible slots count: a pad left in a hidden slot (after lowering the rider count) can still join.
     const assigned = assignments.slice(0, humanCount).findIndex(d => d?.kind === 'gamepad' && d.index === p.index);
     if ((join && (assigned < 0 || !ready[assigned])) || (waitingForController && (pressed || p.index >= 1000))) {
@@ -940,7 +1020,7 @@ function refreshSeason() {
     : (season ? 'That season is finished. ' : '') +
       `A season is ${SEASON_ROUNDS} rounds, one on each circuit. Each round is a 3-minute heat that sets the ` +
       `gates and a 6-minute main for points, each plus a lap. Eight riders. Choose the riders and the pace below.`;
-  el('season-table').innerHTML = season && season.rounds[0].main ? standingsRowsHtml(season) : '';
+  el('season-table').innerHTML = season && season.rounds[0].main ? standingsRowsHtml(dressed(season)) : '';
 }
 function setMode(mode: 'race' | 'practice' | 'trial' | 'season') {
   practice = mode === 'practice';
@@ -1157,6 +1237,7 @@ addEventListener('resize', resize);
 refreshNpcOptions();
 // A season with races still to run is where the game opens.
 if (seasonUnfinished(season)) setMode('season');
+refreshUnlocks();
 refreshSlots();
 buildGrid();
 resize();
@@ -1213,6 +1294,8 @@ if (import.meta.env.DEV) {
       riders: session.riders.map(r => ({
         id: r.id,
         human: r.human,
+        name: r.name,
+        number: r.profile?.number ?? r.number,
         s: r.surface.s,
         speed: r.speed,
         lap: r.progress.lap,
@@ -1236,6 +1319,8 @@ if (import.meta.env.DEV) {
       session.override.set(id, npcControl(r, track, session.riders, 'club'));
     },
     restartLap: () => session.restartLap(),
+    /** Swings every chase camera round its rider, in radians from straight behind, for screenshots. */
+    orbit: (angle: number) => cameras.forEach(c => (c.orbit = angle)),
     ghostFromAutopilot: (on: boolean) => (ghost.fromAutopilot = on),
     clearPerf: () => {
       fpsFrames = [];

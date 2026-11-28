@@ -41,7 +41,8 @@ export function gateDelay(seed: number) {
 /** Seconds a computer rider takes to react to the drop. Quicker riders are a little sharper. */
 export function npcReaction(seed: number, rider: number, difficulty: string, sharpness?: number) {
   // A roster rider's starts rating sets how sharp it is; without one the pace setting does.
-  const sharp = sharpness ?? (difficulty === 'expert' ? 0.75 : difficulty === 'relaxed' ? 1.15 : 1);
+  const sharp =
+    sharpness ?? (difficulty === 'expert' || difficulty === 'pro' ? 0.75 : difficulty === 'relaxed' ? 1.15 : 1);
   return Math.min(GATE.maxReaction, mix(seed, 0x51ed + rider * 7).range(GATE.minReaction, GATE.maxReaction) * sharp);
 }
 export const inBand = (revs: number) => revs >= GATE.bandLow && revs <= GATE.bandHigh;

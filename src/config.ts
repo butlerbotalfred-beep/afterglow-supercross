@@ -101,6 +101,28 @@ export const COLORS = [0xff703e, 0x41b9ec, 0xb5df55, 0xe589dc, 0xffcf61, 0xa19af
 export const CSS_COLORS = COLORS.map(c => `#${c.toString(16).padStart(6, '0')}`);
 /** A rider's colour as CSS: a human's slot colour or a roster rider's plate. */
 export const cssColor = (color: number) => `#${color.toString(16).padStart(6, '0')}`;
+/** How bright a colour looks, 0 (black) to 1 (white). */
+export function luminance(color: number) {
+  const part = (shift: number) => {
+    const v = ((color >> shift) & 255) / 255;
+    return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * part(16) + 0.7152 * part(8) + 0.0722 * part(0);
+}
+/** The least a colour may look bright to be read as text, or seen as a dot, on the game's dark panels. */
+export const TEXT_LUMINANCE = 0.2;
+/**
+ * A colour for text and markers on dark panels: the colour itself when it is bright enough, otherwise mixed
+ * with white until it is. The bike keeps the true colour.
+ */
+export function textColor(color: number) {
+  let c = color;
+  for (let mix = 0.1; luminance(c) < TEXT_LUMINANCE && mix <= 1; mix += 0.1) {
+    const part = (shift: number) => Math.round(((color >> shift) & 255) * (1 - mix) + 255 * mix) << shift;
+    c = part(16) | part(8) | part(0);
+  }
+  return cssColor(c);
+}
 export const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 export const wrap = (v: number, length: number) => ((v % length) + length) % length;
 export const angleDelta = (a: number, b: number) => Math.atan2(Math.sin(a - b), Math.cos(a - b));

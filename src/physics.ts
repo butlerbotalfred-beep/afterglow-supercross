@@ -6,12 +6,14 @@ import type {Control, Device} from './input';
 import {lipAhead, lipDistance, safeTakeoffSpeed} from './takeoff';
 import {Rng} from './rng';
 import {cornerPace, landingError, preloads, rhythmPace, slipFor, type RiderProfile, type SlipKind} from './riders';
-import {ROSTER, relaxedPace} from './riders';
+import {PRO_PACE, ROSTER, relaxedPace} from './riders';
 export interface Rider {
   id: number;
   human: boolean;
   device?: Device;
   name: string;
+  /** A player's race number. A computer rider's is in its profile. */
+  number?: number;
   color: number;
   x: number;
   z: number;
@@ -526,7 +528,7 @@ const NPC_TAKEOFF_REACH = 45;
 const NPC_CLOSING_MAX = 5;
 const NPC_FOLLOW_REACH = 25;
 /** How often a computer rider misjudges a jump, as a share of the jumps it takes. */
-export const NPC_MISTAKE_RATE: Record<string, number> = {relaxed: 0.03, club: 0.015, expert: 0.007};
+export const NPC_MISTAKE_RATE: Record<string, number> = {relaxed: 0.03, club: 0.015, expert: 0.007, pro: 0.007};
 /** A misjudged jump is taken this much too fast, from the least to the most. */
 const NPC_MISTAKE_HOT = [0.1, 0.3];
 /** How far ahead a rider commits to its speed for a jump: beyond the rhythm braking look, so it never brakes late. */
@@ -686,10 +688,10 @@ export function npcControl(
   let pace = p
     ? difficulty === 'relaxed'
       ? relaxedPace(p)
-      : cornerPace(p)
+      : cornerPace(p) * (difficulty === 'pro' ? PRO_PACE : 1)
     : difficulty === 'relaxed'
       ? 0.78
-      : difficulty === 'expert'
+      : difficulty === 'expert' || difficulty === 'pro'
         ? 1.04
         : 0.91;
   // The catch-up assist: 1 unless it is switched on, and then never more than 3% up or 5% down.
@@ -733,7 +735,7 @@ export function npcControl(
       ? rhythmPace(p) * (difficulty === 'relaxed' ? 0.985 : 1)
       : difficulty === 'relaxed'
         ? 0.98
-        : difficulty === 'expert'
+        : difficulty === 'expert' || difficulty === 'pro'
           ? 1.02
           : 1;
     const entrySpeed = rhythm.pace * skill * (inLane ? 1 + hot : 1);

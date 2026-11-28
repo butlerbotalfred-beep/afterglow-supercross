@@ -6,6 +6,19 @@ import {PHYSICS_VERSION} from './config';
 import type {CourseId} from './courses';
 import {DEFAULT_VOLUMES, normalizeVolumes, type Volumes} from './audio';
 import {loadSlideAggression, normalizeSlideAggression} from './handling-settings';
+import {
+  allowedPace,
+  awardRoundWin,
+  awardSeasonWin,
+  checkRider,
+  defaultRiders,
+  normalizeProgress,
+  normalizeRiders,
+  type ColorSet,
+  type Progress,
+  type RiderInput,
+  type RiderSettings,
+} from './rider-settings';
 import {asSeason, type Season} from './season';
 import {COURSE_IDS, loadLayout, obstacleType, validateLayout, type TrackLayout} from './track-layout';
 
@@ -16,7 +29,14 @@ export const DAMAGED_SAVE_KEY = 'afterglow.save.damaged';
 
 export interface SaveData {
   version: number;
-  settings: {slideAggression: number; volumes: Volumes; showGhost: boolean; catchUp: boolean};
+  settings: {
+    slideAggression: number;
+    volumes: Volumes;
+    showGhost: boolean;
+    catchUp: boolean;
+    /** Each of the four players' rider: name, number, colours and helmet. */
+    riders: RiderSettings[];
+  };
   layouts: Partial<Record<CourseId, TrackLayout>>;
   /** Best times and similar; filled in by later milestones and kept as stored until then. */
   records: Record<string, unknown>;
@@ -100,7 +120,13 @@ const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v =
 export function defaultSave(): SaveData {
   return {
     version: SAVE_VERSION,
-    settings: {slideAggression: 1, volumes: {...DEFAULT_VOLUMES}, showGhost: true, catchUp: false},
+    settings: {
+      slideAggression: 1,
+      volumes: {...DEFAULT_VOLUMES},
+      showGhost: true,
+      catchUp: false,
+      riders: defaultRiders(),
+    },
     layouts: {},
     records: {},
     career: {},
@@ -137,6 +163,9 @@ function fromStored(v: Record<string, unknown>, physics: number): SaveData {
     archiveOldLaps(data.records, physics);
   }
   if (isObject(v.career)) data.career = v.career;
+  // A colour from a set that is not unlocked in this save is not kept.
+  if (isObject(v.settings))
+    data.settings.riders = normalizeRiders(v.settings.riders, normalizeProgress(data.career).unlocks);
   return data;
 }
 
@@ -299,11 +328,83 @@ export class SaveStore {
     // Not stored (blocked storage, or a save from a newer version): keep it for this visit.
     return stored ?? offer(this.data.records);
   }
+  /** The four players' riders. */
+  get riders() {
+    return this.data.settings.riders;
+  }
+  /**
+   * Changes one player's rider. Refused, with every reason, if a name or number is invalid, another player has
+   * the number or a colour is locked; nothing is changed then. A browser that refuses storage does not stop
+   * an accepted change applying for this visit.
+   */
+  setRider(player: number, input: RiderInput): {ok: true; value: RiderSettings} | {ok: false; errors: string[]} {
+    if (!Number.isInteger(player) || player < 0 || player >= this.riders.length)
+      return {ok: false, errors: ['There is no such player.']};
+    let result = checkRider(input, player, this.riders, this.unlocks);
+    if (!result.ok) return result;
+    try {
+      this.update(stored => {
+        // Checked again against what is stored now: another tab may have taken the number meanwhile.
+        const progress = normalizeProgress(stored.career);
+        const riders = normalizeRiders(stored.settings.riders, progress.unlocks);
+        result = checkRider(input, player, riders, progress.unlocks);
+        if (!result.ok) return;
+        riders[player] = result.value;
+        stored.settings.riders = riders;
+      });
+    } catch {}
+    if (result.ok) {
+      const riders = [...this.data.settings.riders];
+      riders[player] = result.value;
+      this.data.settings.riders = riders;
+    }
+    return result;
+  }
+  /** What has been unlocked: colour sets and Pro pace. */
+  get unlocks() {
+    return normalizeProgress(this.data.career).unlocks;
+  }
+  /** Applies an award to the stored career, read afresh so one made in another tab is not repeated. */
+  private award<T>(change: (progress: Progress) => {progress: Progress; awarded: T}, none: T): T {
+    let awarded = none,
+      stored = false;
+    const apply = (career: Record<string, unknown>) => {
+      const result = change(normalizeProgress(career));
+      awarded = result.awarded;
+      return {...career, ...result.progress};
+    };
+    try {
+      let changed = false;
+      this.update(save => {
+        save.career = apply(isObject(save.career) ? save.career : {});
+        changed = true;
+      });
+      // Only once the browser has taken the write: a refused one leaves nothing stored.
+      stored = changed;
+    } catch {}
+    // Not stored (blocked or full storage, or a save from a newer version): it counts for this visit.
+    if (!stored) this.data.career = apply(this.data.career);
+    return awarded;
+  }
+  /**
+   * A human won the main of a championship round. Unlocks the next colour set the first time it is reported
+   * for that round of that season, and returns the set; null when it was already rewarded or none is left.
+   */
+  awardRoundWin(season: Season, round: number): ColorSet | null {
+    return this.award(progress => awardRoundWin(progress, `${season.seed}:${round}`), null);
+  }
+  /** A human won the championship. Unlocks Pro pace; true the first time. */
+  awardSeasonWin(): boolean {
+    return this.award(awardSeasonWin, false);
+  }
   /** The championship season in progress or last finished, or null. */
   get season(): Season | null {
     // A season to play has somebody playing in it.
     const season = asSeason(this.data.career.season);
-    return season?.entrants[0].human ? season : null;
+    // And is on a pace setting this save has: Pro has to be unlocked.
+    return season?.entrants[0].human && allowedPace(season.difficulty, this.unlocks) === season.difficulty
+      ? season
+      : null;
   }
   /**
    * Stores the season (null forgets it). Returns false when it could not be kept beyond this visit: storage

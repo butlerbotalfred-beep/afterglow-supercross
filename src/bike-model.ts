@@ -22,10 +22,20 @@ export interface BikeAnimationState {
   airLean?: number;
 }
 
-/** Metres; +Z is forward. The outer root belongs to the vehicle simulation. */
+/** How a number is drawn on a plate 256 pixels wide: smaller type for more digits, so all of them fit unsquashed. */
+export function plateFont(number: number) {
+  const digits = String(number).length;
+  return {size: digits >= 3 ? 104 : digits === 2 ? 128 : 138, width: 228};
+}
+/**
+ * Metres; +Z is forward. The outer root belongs to the vehicle simulation.
+ * `color` is the bike's plastics. `look` gives a player's kit and helmet their own colours and the helmet its
+ * design; left out, everything is the bike's colour with the original helmet.
+ */
 export function createBike(
   color: number,
   number: number,
+  look: {kit: number; helmet: number; design: string} = {kit: color, helmet: color, design: 'wave'},
 ): {
   root: THREE.Group;
   animate: (state: BikeAnimationState, dt: number) => void;
@@ -46,7 +56,10 @@ export function createBike(
     clearcoat: 0.65,
     clearcoatRoughness: 0.3,
   });
-  const gear = typeof document !== 'undefined' ? gearMaterials(color) : null;
+  // The helmet's peak and side plates are its own colour when a player has chosen one.
+  const helmetPaint = look.helmet === color ? paint : paint.clone();
+  helmetPaint.color.set(look.helmet);
+  const gear = typeof document !== 'undefined' ? gearMaterials(look.kit, number > 0 ? number : undefined) : null;
   const darkPaint = new THREE.MeshStandardMaterial({
     color: new THREE.Color(color).multiplyScalar(0.43),
     roughness: 0.65,
@@ -334,10 +347,11 @@ export function createBike(
       ctx.fillStyle = '#f1f5fa';
       ctx.fillRect(0, 0, 256, 192);
       ctx.fillStyle = '#172033';
-      ctx.font = 'italic 900 138px Arial';
+      const font = plateFont(number);
+      ctx.font = `italic 900 ${font.size}px Arial`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(String(number), 122, 108, 228);
+      ctx.fillText(String(number), 122, 108, font.width);
       const texture = new THREE.CanvasTexture(canvas);
       texture.colorSpace = THREE.SRGBColorSpace;
       const material = new THREE.MeshStandardMaterial({map: texture, roughness: 0.58});
@@ -370,15 +384,16 @@ export function createBike(
   helmet.bar(black, [0, -0.17, -0.02], [0, -0.08, 0], 0.062);
   helmet.add(
     new THREE.SphereGeometry(0.175, 40, 28),
-    typeof document !== 'undefined' ? helmetMaterial(color) : paint,
+    typeof document !== 'undefined' ? helmetMaterial(look.helmet, look.design) : helmetPaint,
     [0, 0.02, 0],
     [0, 0, 0],
     [1, 1.16, 1.07],
   );
-  for (const side of [-1, 1]) helmet.box(paint, [0.017, 0.1, 0.19], [side * 0.163, 0.025, -0.015], [0, 0, side * 0.08]);
+  for (const side of [-1, 1])
+    helmet.box(helmetPaint, [0.017, 0.1, 0.19], [side * 0.163, 0.025, -0.015], [0, 0, side * 0.08]);
   helmet.box(black, [0.288, 0.098, 0.056], [0, 0.026, 0.147], [-0.08, 0, 0]);
   helmet.box(visor, [0.248, 0.063, 0.02], [0, 0.035, 0.181], [-0.08, 0, 0]);
-  helmet.box(paint, [0.28, 0.026, 0.24], [0, 0.124, 0.16], [-0.12, 0, 0]);
+  helmet.box(helmetPaint, [0.28, 0.026, 0.24], [0, 0.124, 0.16], [-0.12, 0, 0]);
   helmet.box(white, [0.21, 0.076, 0.15], [0, -0.078, 0.14], [-0.3, 0, 0]);
   helmet.box(black, [0.125, 0.026, 0.026], [0, -0.075, 0.22], [-0.3, 0, 0]);
   helmet.add(new THREE.TorusGeometry(0.12, 0.014, 8, 32), black, [0, -0.14, 0], [Math.PI / 2, 0, 0], [1, 1.05, 1]);

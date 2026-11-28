@@ -52,12 +52,17 @@ export const ROSTER: RiderProfile[] = [
 /**
  * The computer riders on the grid for a pace setting, fastest first: a run of `count` neighbours in the roster,
  * so the field is close. Expert is the fastest of the roster, Relaxed the slowest, and Club starts with the
- * third fastest. The pace setting picks who races; it is not a speed multiplier.
+ * third fastest. The pace setting picks who races; it is not a speed multiplier. Pro, which has to be unlocked,
+ * is the exception: the Expert field, each rider quicker by `PRO_PACE`.
  */
 export function gridFor(difficulty: string, count: number): RiderProfile[] {
   const n = Math.min(count, ROSTER.length);
   const top =
-    difficulty === 'expert' ? 0 : difficulty === 'relaxed' ? ROSTER.length - n : Math.min(2, ROSTER.length - n);
+    difficulty === 'expert' || difficulty === 'pro'
+      ? 0
+      : difficulty === 'relaxed'
+        ? ROSTER.length - n
+        : Math.min(2, ROSTER.length - n);
   return ROSTER.slice(top, top + n);
 }
 
@@ -73,6 +78,8 @@ export const cornerPace = (p: RiderProfile) => 0.92 + (p.corner - 84) * (p.corne
  * to be (0.78), and nobody is slow enough to come up short on the first jumps (the start check fails below 0.76).
  */
 export const relaxedPace = (p: RiderProfile) => 0.762 + (cornerPace(p) - 0.804) * 0.25;
+/** Pro pace: every rider's corner and straight pace is multiplied by this. Rhythm sections are ridden as on Expert. */
+export const PRO_PACE = 1.03;
 /** Entry pace through a rhythm section, as a share of the section's own pace. */
 export const rhythmPace = (p: RiderProfile) => 0.975 + p.rhythm * 0.00045;
 /** Radians a rider's landing pitch is out by: none for the best, a little nose-high for the rest. */
@@ -117,9 +124,11 @@ export function shuffled<T>(list: T[], seed: number) {
   }
   return out;
 }
-/** "#27 J. REYES" for a roster rider, the plain name for anybody else. */
-export const riderLabel = (r: {name: string; profile?: RiderProfile}) =>
-  r.profile ? `#${r.profile.number} ${r.name}` : r.name;
+/** "#27 J. REYES" for a roster rider or a player with a number, the plain name for anybody else. */
+export const riderLabel = (r: {name: string; number?: number; profile?: RiderProfile}) => {
+  const number = r.profile?.number ?? r.number;
+  return number === undefined ? r.name : `#${number} ${r.name}`;
+};
 
 /** The catch-up assist leaves riders within this many metres of the last human alone, and is at full strength this far beyond. */
 const ASSIST_NEAR = 40;

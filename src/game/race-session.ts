@@ -58,6 +58,8 @@ export interface GridConfig {
   /** The pace setting, which picks the computer riders from the roster, and the seed for their grid order. */
   difficulty?: string;
   seed?: number;
+  /** The players' names, numbers and colours, by player. Left out, they are PLAYER 1 and so on in the default colours. */
+  humans?: {name: string; number: number; color: number}[];
   /**
    * A championship race: exactly these computer riders, in this order after the humans, and every rider's
    * place on the grid (humans first, then the computer riders as listed). `npcCount` is then ignored.
@@ -144,7 +146,17 @@ export class RaceSession {
 
   /** Lines riders up on the start grid. Humans come first, then NPCs (none in practice). */
   grid(config: GridConfig) {
-    const {track, npcCount, practice, trial = false, assignments, difficulty = 'club', seed = 0, lineup} = config;
+    const {
+      track,
+      npcCount,
+      practice,
+      trial = false,
+      assignments,
+      difficulty = 'club',
+      seed = 0,
+      lineup,
+      humans,
+    } = config;
     let {humanCount} = config;
     this.track = track;
     this.trial = trial;
@@ -155,6 +167,8 @@ export class RaceSession {
       const device = i < humanCount ? assignments[i] || undefined : undefined;
       const slot = lineup?.slots[i] ?? i;
       const r = makeRider(track, i, i < humanCount, COLORS[i], device, slot);
+      const human = i < humanCount ? humans?.[i] : undefined;
+      if (human) Object.assign(r, {name: human.name, number: human.number, color: human.color});
       return lineup ? Object.assign(r, {slot}) : r;
     });
     const profiles = lineup ? lineup.profiles : shuffled(gridFor(difficulty, this.riders.length - humanCount), seed);

@@ -58,6 +58,9 @@ const measure = worst => {
     // The widest and busiest the HUD gets, written in just before measuring (the game redraws it next frame):
     // times of ten minutes or more, a lap result with its difference, a crash notice and a practice target.
     for (const view of document.querySelectorAll('.viewport-hud')) {
+      // The longest name and number a player can have.
+      const name = view.querySelector('.identity-name');
+      if (name) name.textContent = '#999 WWWWWWWWWWWW';
       view.querySelector('.lap-now').textContent = '12:34.5';
       view.querySelector('.lap-last').textContent = '12:34.567';
       view.querySelector('.lap-best').textContent = '12:34.567';

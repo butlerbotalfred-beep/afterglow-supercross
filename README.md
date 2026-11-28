@@ -199,6 +199,21 @@ A race replays exactly from its seed: the same seed and the same inputs give the
 
 Season rounds use the original circuits, not saved layouts. Race Night, Time Trial and Free Practice are as before. `npm run season-check` runs a whole Club season with eight computer riders (each round in its own process, about 20 seconds in all) and checks the round lengths and the final table; `npm run test:season` checks the season in a browser.
 
+## Your rider
+
+Each of the four players has a rider. **EDIT RIDER** on a player's row of the setup screen opens the editor:
+
+- **Name**: 1 to 12 characters, shown in capitals. Any printable characters are allowed and a name is always shown as plain text, never read as markup.
+- **Number**: 1 to 999. No two players can have the same number; the editor says who has it.
+- **Three colours**: bike, kit and helmet, each from eight colours to start with.
+- **Helmet design**: wave, crown stripe, split or chequered band.
+
+The number is on the bike's three plates and on the back of the jersey, where the chase camera sees it; computer riders carry theirs the same way. The name and number are on the player's HUD, in the results, and in the championship standings, and the player's colour on the HUD and the map is the bike colour. A change made in the middle of a season shows from the next race. Settings are kept in the save for each player.
+
+**Unlocks.** Winning the main of a championship round unlocks the next of five extra colour sets (NEON, EMBER, MIDNIGHT, FOREST, CHROME: three colours each, for every player). Winning a championship unlocks **Pro** pace: the Expert field with every rider's pace up by 3%. Each is given once; locked colours are shown struck through and cannot be chosen, and Pro cannot be picked until it is unlocked. The results window says when something is unlocked.
+
+`npm run test:rider` checks the editor in a browser and photographs the number on the bike at one, two and three digits.
+
 ## Circuit selection
 
 Choose a circuit in pre-race setup. Each has its own centerline, jump sequence and scenery; selection is retained on restart. Returning to setup and changing circuit rebuilds the environment and releases its previous graphics resources.

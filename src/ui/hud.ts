@@ -1,5 +1,5 @@
 // In-race HUD: race chrome markup, split-screen viewports, per-rider panels and the mini map.
-import {CSS_COLORS, TUNING, cssColor} from '../config';
+import {CSS_COLORS, TUNING, textColor} from '../config';
 import {riderLabel} from '../riders';
 import {GATE, inBand, type StartGate} from '../gate';
 import type {Device} from '../input';
@@ -8,7 +8,7 @@ import {jumpCall, type JumpCall} from '../takeoff';
 import {currentLapTime, formatDelta, formatLap, type LapTime, type RiderTiming} from '../timing';
 import type {Track} from '../track';
 import {obstacleLength, obstacleType} from '../track-layout';
-import {el} from './dom';
+import {el, escapeHtml} from './dom';
 import {formatTime, ranking} from './results-screen';
 
 export type HudContext = {
@@ -80,6 +80,10 @@ export function deviceLabel(d: Device | null) {
         ? 'IPHONE / TOUCH'
         : `GAMEPAD ${d.index >= 1000 ? d.index - 999 : d.index + 1}`;
 }
+/** "#12 MIKE" for a player with a number, "P1" otherwise. Safe to put in HTML. */
+function identityText(r: Rider | undefined, player: number) {
+  return r?.human && r.number !== undefined ? escapeHtml(`#${r.number} ${r.name}`) : `P${player + 1}`;
+}
 export function hudHtml(
   humanCount: number,
   riders: Rider[],
@@ -95,9 +99,11 @@ export function hudHtml(
         (v, i) =>
           `<section class="viewport-hud ${humanCount > 1 ? 'compact' : 'solo'}" ` +
           `style="left:${v.x * 100}%;top:${v.y * 100}%;width:${v.w * 100}%;height:${v.h * 100}%;` +
-          `--player:${CSS_COLORS[i]}"><div class="hud-top"><div class="position"><small>POS</small>` +
+          `--player:${riders[i] ? textColor(riders[i].color) : CSS_COLORS[i]}">` +
+          `<div class="hud-top"><div class="position"><small>POS</small>` +
           `<strong>01<span>/ ${riders.length}</span></strong></div>` +
-          `<span class="identity">P${i + 1}<small>${deviceLabel(assignments[i])}</small></span>` +
+          `<span class="identity"><span class="identity-name">${identityText(riders[i], i)}</span>` +
+          `<small>${deviceLabel(assignments[i])}</small></span>` +
           `<div class="lap">LAP <b>1</b><small>/ ${practice ? '∞' : lapCount}</small></div></div>` +
           `<div class="timing"><b class="lap-now">0:00.0</b>` +
           `<span>LAST <b class="lap-last">–</b></span><span>BEST <b class="lap-best">–</b></span>` +
@@ -147,7 +153,7 @@ export function drawMap(canvas: HTMLCanvasElement, r: Rider, track: Track, rider
       c.fillRect(x(p.x) - 3, z(p.z) - 3, 6, 6);
     }
   for (const o of riders) {
-    c.fillStyle = cssColor(o.color);
+    c.fillStyle = textColor(o.color);
     c.beginPath();
     c.arc(x(o.x), z(o.z), o === r ? 4 : 2.3, 0, Math.PI * 2);
     c.fill();
@@ -354,7 +360,7 @@ export function updateHud(ctx: HudContext) {
                 ? '<b>WRONG WAY</b>'
                 : shot
                   ? `<b class="holeshot-label">HOLESHOT</b>` +
-                    `<small>${shot.id === r.id ? 'FIRST THROUGH THE FIRST CORNER' : shot.name}</small>`
+                    `<small>${shot.id === r.id ? 'FIRST THROUGH THE FIRST CORNER' : escapeHtml(shot.name)}</small>`
                   : !r.grounded && r.airTime > 0.2
                     ? r.scrub && Math.abs(r.airLean) > TUNING.airLeanLimit
                       ? `<b class="air-label">SCRUB</b><small>CENTER THE STICK BEFORE YOU LAND</small>`
@@ -393,7 +399,7 @@ export function updateHud(ctx: HudContext) {
       .slice(0, 5)
       .map(
         (r, i) =>
-          `<div><b>${i + 1}</b><span style="color:${cssColor(r.color)}">${riderLabel(r)}</span>` +
+          `<div><b>${i + 1}</b><span style="color:${textColor(r.color)}">${escapeHtml(riderLabel(r))}</span>` +
           `<small>${r.finished !== null ? 'FINISHED' : 'LAP ' + Math.min(lapCount, r.progress.lap + 1)}` +
           `</small></div>`,
       )

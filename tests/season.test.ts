@@ -403,7 +403,7 @@ test('a stored season that is damaged is not resumed', () => {
     'a rider who is not in the roster',
   );
   assert.equal(
-    broken(s => (s.difficulty = 'pro')),
+    broken(s => (s.difficulty = 'turbo')),
     null,
   );
   assert.equal(
