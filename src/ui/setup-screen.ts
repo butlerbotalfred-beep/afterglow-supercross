@@ -1,6 +1,6 @@
 // Setup screen markup and the pure helpers it uses: device slots, NPC options and controller status text.
 import {COURSES} from '../courses';
-import {CSS_COLORS, cssColor} from '../config';
+import {CSS_COLORS, textColor} from '../config';
 import {readGamepadStatus, type Device} from '../input';
 import {nativeControllerStatus} from '../native-controller';
 import type {Track} from '../track';
@@ -139,7 +139,7 @@ export function slotsHtml(
   return Array.from(
     {length: humanCount},
     (_, i) =>
-      `<div class="player-slot" style="--player:${riders[i] ? cssColor(riders[i].bike) : CSS_COLORS[i]}">` +
+      `<div class="player-slot" style="--player:${riders[i] ? textColor(riders[i].bike) : CSS_COLORS[i]}">` +
       `<span class="player-badge">P${i + 1}</span>` +
       `<select aria-label="Player ${i + 1} input device" data-device="${i}">` +
       `<option value="">Connect a controller</option>` +

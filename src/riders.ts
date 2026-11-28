@@ -78,9 +78,9 @@ export const cornerPace = (p: RiderProfile) => 0.92 + (p.corner - 84) * (p.corne
  * to be (0.78), and nobody is slow enough to come up short on the first jumps (the start check fails below 0.76).
  */
 export const relaxedPace = (p: RiderProfile) => 0.762 + (cornerPace(p) - 0.804) * 0.25;
-/** Entry pace through a rhythm section, as a share of the section's own pace. */
 /** Pro pace: every rider's corner and straight pace is multiplied by this. Rhythm sections are ridden as on Expert. */
 export const PRO_PACE = 1.03;
+/** Entry pace through a rhythm section, as a share of the section's own pace. */
 export const rhythmPace = (p: RiderProfile) => 0.975 + p.rhythm * 0.00045;
 /** Radians a rider's landing pitch is out by: none for the best, a little nose-high for the rest. */
 export const landingError = (p: RiderProfile) => Math.max(0, 85 - p.rhythm) * 0.0016;

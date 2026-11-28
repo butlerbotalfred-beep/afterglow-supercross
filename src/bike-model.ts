@@ -22,13 +22,13 @@ export interface BikeAnimationState {
   airLean?: number;
 }
 
-/** Metres; +Z is forward. The outer root belongs to the vehicle simulation. */
 /** How a number is drawn on a plate 256 pixels wide: smaller type for more digits, so all of them fit unsquashed. */
 export function plateFont(number: number) {
   const digits = String(number).length;
   return {size: digits >= 3 ? 104 : digits === 2 ? 128 : 138, width: 228};
 }
 /**
+ * Metres; +Z is forward. The outer root belongs to the vehicle simulation.
  * `color` is the bike's plastics. `look` gives a player's kit and helmet their own colours and the helmet its
  * design; left out, everything is the bike's colour with the original helmet.
  */

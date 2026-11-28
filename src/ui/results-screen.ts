@@ -1,5 +1,5 @@
 // Results screen markup, race ranking and the classification table.
-import {cssColor} from '../config';
+import {textColor} from '../config';
 import {riderLabel} from '../riders';
 import {POINTS, SEASON_ROUNDS, standings, type Season} from '../season';
 import type {Rider} from '../physics';
@@ -104,7 +104,7 @@ export function resultRowsHtml(
         .join('');
       return (
         `<div class="result-row"><b>${String(i + 1).padStart(2, '0')}</b>` +
-        `<span style="color:${cssColor(r.color)}">●</span>` +
+        `<span style="color:${textColor(r.color)}">●</span>` +
         `<strong>${escapeHtml(riderLabel(r))}<small>${r.human ? 'HUMAN' : 'NPC'}` +
         `${r.id === holeshot ? ' · <i class="holeshot-tag">HOLESHOT</i>' : ''}` +
         `${season?.scores ? ` · <i class="points-tag">+${POINTS[i] ?? 0} PTS</i>` : ''}</small></strong>` +
@@ -131,7 +131,7 @@ export function standingsRowsHtml(season: Season) {
       row =>
         `<div class="result-row standing-row${row.position <= 3 ? ' podium-' + row.position : ''}">` +
         `<b>${String(row.position).padStart(2, '0')}</b>` +
-        `<span style="color:${cssColor(row.entrant.color)}">●</span>` +
+        `<span style="color:${textColor(row.entrant.color)}">●</span>` +
         `<strong>${entrantLabel(row.entrant)}<small>${row.entrant.human ? 'HUMAN' : 'NPC'}` +
         `${row.results.length ? ' · ' + row.results.map(place => 'P' + place).join(' ') : ''}</small></strong>` +
         `<span class="result-time">${row.points} PTS</span></div>`,

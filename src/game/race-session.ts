@@ -58,12 +58,12 @@ export interface GridConfig {
   /** The pace setting, which picks the computer riders from the roster, and the seed for their grid order. */
   difficulty?: string;
   seed?: number;
+  /** The players' names, numbers and colours, by player. Left out, they are PLAYER 1 and so on in the default colours. */
+  humans?: {name: string; number: number; color: number}[];
   /**
    * A championship race: exactly these computer riders, in this order after the humans, and every rider's
    * place on the grid (humans first, then the computer riders as listed). `npcCount` is then ignored.
    */
-  /** The players' names, numbers and colours, by player. Left out, they are PLAYER 1 and so on in the default colours. */
-  humans?: {name: string; number: number; color: number}[];
   lineup?: {profiles: RiderProfile[]; slots: number[]};
 }
 export interface RaceConfig {

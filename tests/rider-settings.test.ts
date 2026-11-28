@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {plateFont} from '../src/bike-model.ts';
-import {COLORS} from '../src/config.ts';
+import {COLORS, TEXT_LUMINANCE, cssColor, luminance, textColor} from '../src/config.ts';
 import {COURSES} from '../src/courses.ts';
 import {PRO_PACE as PRO_PACE_SHARE, gridFor, riderLabel} from '../src/riders.ts';
 import {TUNING} from '../src/config.ts';
@@ -12,6 +12,7 @@ import {
   NAME_MAX,
   PLAYERS,
   PRO_PACE,
+  UNLOCK_IDS,
   allowedPace,
   availableColors,
   awardRoundWin,
@@ -26,7 +27,17 @@ import {
   type RiderSettings,
 } from '../src/rider-settings.ts';
 import {SAVE_KEY, SaveStore} from '../src/save.ts';
-import {newSeason, nextRace, recordRace, seasonWithRiders, standings, type Season} from '../src/season.ts';
+import {
+  SEASON_ROUNDS,
+  newSeason,
+  nextRace,
+  recordRace,
+  seasonAwards,
+  seasonComplete,
+  seasonWithRiders,
+  standings,
+  type Season,
+} from '../src/season.ts';
 import {Track} from '../src/track.ts';
 import {RaceSession} from '../src/game/race-session.ts';
 import {seasonGrid} from '../src/game/season-run.ts';
@@ -101,6 +112,10 @@ test('an invalid name or number is rejected', () => {
   assert.equal(checkName('ÉLODIE 🏁').ok, true);
   for (const bad of ['', '   ', 'x'.repeat(NAME_MAX + 1), 'TWO\nLINES', 'TAB\tBED', 'NUL\u0000L', 'RTL‮X', null, 7, {}])
     assert.equal(checkName(bad).ok, false, `name ${JSON.stringify(bad)}`);
+  // Nothing that shows: soft hyphens, filler and blank characters, a lone accent. And half a character pair.
+  for (const bad of ['\u00ad', '\u3164\u3164', ' \u2800 ', '\u0301', '\u034f\u115f', 'A\ud83c', '\udfc1B', '\u180e'])
+    assert.equal(checkName(bad).ok, false, `name ${JSON.stringify(bad)}`);
+  assert.equal(checkName('A\u0301').ok, true);
   // Numbers: whole, 1 to 999, as a number or as typed digits.
   for (const good of [1, 9, 10, 99, 100, 999, '1', '042', ' 77 ', '999'])
     assert.equal(checkNumber(good).ok, true, `number ${JSON.stringify(good)}`);
@@ -399,4 +414,72 @@ test('Pro pace is the Expert field, every rider quicker, and it still gets round
   // Measured on Saltwind Coast: the winner about 1% quicker and the field about 1.7%.
   assert.ok(pro.winner < expert.winner, `winner ${pro.winner.toFixed(2)} against ${expert.winner.toFixed(2)}`);
   assert.ok(pro.mean < expert.mean * 0.995, `field ${pro.mean.toFixed(2)} against ${expert.mean.toFixed(2)}`);
+});
+
+test('an unlock is still awarded once when the browser refuses to store it', () => {
+  // Storage that reads but is full: every write throws.
+  const full = {getItem: () => null, setItem: () => void assert.fail('QuotaExceededError')};
+  const save = new SaveStore(full);
+  const season = newSeason(1, 'club', 77);
+  assert.equal(save.awardRoundWin(season, 0), COLOR_SETS[0]);
+  assert.deepEqual(save.unlocks, [COLOR_SETS[0].id]);
+  assert.equal(save.awardRoundWin(season, 0), null);
+  assert.equal(save.awardRoundWin(season, 1), COLOR_SETS[1]);
+  assert.equal(save.awardSeasonWin(), true);
+  assert.equal(save.awardSeasonWin(), false);
+  assert.deepEqual(save.unlocks, [COLOR_SETS[0].id, COLOR_SETS[1].id, PRO_PACE]);
+  // The unlocked colours can be chosen for the visit.
+  assert.equal(
+    checkRider(input(defaultRider(0), {bike: COLOR_SETS[0].colors[0]}), 0, save.riders, save.unlocks).ok,
+    true,
+  );
+});
+
+test('what a race earns: a human winning a main, and a human on top of the final table', () => {
+  const humanFirst = [0, 1, 2, 3, 4, 5, 6, 7];
+  const humanSecond = [1, 0, 2, 3, 4, 5, 6, 7];
+  const run = (season: Season, order: number[]) => {
+    const race = nextRace(season)!;
+    const after = recordRace(season, order);
+    return {after, earned: seasonAwards(after, race, order)};
+  };
+  let season = newSeason(1, 'club', 77);
+  // A heat earns nothing, whoever wins it.
+  let step = run(season, humanFirst);
+  assert.deepEqual(step.earned, {roundWin: false, champion: false});
+  // A main a computer rider wins earns nothing; one the human wins is a round win.
+  assert.deepEqual(run(step.after, humanSecond).earned, {roundWin: false, champion: false});
+  step = run(step.after, humanFirst);
+  assert.deepEqual(step.earned, {roundWin: true, champion: false});
+  // The human wins every round: champion only once the last main is in.
+  season = step.after;
+  for (let round = 1; round < SEASON_ROUNDS; round++) {
+    step = run(season, humanFirst);
+    assert.deepEqual(step.earned, {roundWin: false, champion: false});
+    step = run(step.after, humanFirst);
+    assert.deepEqual(step.earned, {roundWin: true, champion: round === SEASON_ROUNDS - 1}, `round ${round}`);
+    season = step.after;
+  }
+  assert.ok(seasonComplete(season));
+  // A computer rider takes the title though the human wins the last main: a round win, no championship.
+  season = newSeason(1, 'club', 78);
+  for (let round = 0; round < SEASON_ROUNDS; round++) {
+    const last = round === SEASON_ROUNDS - 1;
+    season = run(season, humanSecond).after;
+    step = run(season, last ? humanFirst : humanSecond);
+    season = step.after;
+  }
+  assert.deepEqual(step.earned, {roundWin: true, champion: false});
+  assert.equal(standings(season)[0].entrant.human, false);
+});
+
+test('every colour on offer can be read as text on the dark panels, and the starting colours are untouched', () => {
+  for (const color of COLORS) assert.equal(textColor(color), cssColor(color));
+  for (const color of availableColors(UNLOCK_IDS)) {
+    const shown = parseInt(textColor(color).slice(1), 16);
+    assert.ok(luminance(shown) >= TEXT_LUMINANCE, `${cssColor(color)} is shown as ${textColor(color)}`);
+  }
+  // The dark ones are lightened, not swapped for another colour: midnight blue stays blue.
+  const midnight = parseInt(textColor(0x24306e).slice(1), 16);
+  assert.ok(midnight !== 0x24306e && (midnight & 255) > ((midnight >> 16) & 255));
 });

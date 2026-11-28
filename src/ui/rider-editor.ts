@@ -18,7 +18,7 @@ export function riderEditorHtml() {
   return (
     `<div id="rider-editor" class="modal hidden"><form id="rider-form" class="modal-card rider-card" novalidate>` +
     `<div class="eyebrow" id="rider-editor-title">YOUR RIDER</div>` +
-    `<div class="rider-fields"><label>NAME<input id="rider-name" type="text" maxlength="${NAME_MAX}" ` +
+    `<div class="rider-fields"><label>NAME<input id="rider-name" type="text" maxlength="${NAME_MAX * 2}" ` +
     `autocomplete="off" autocapitalize="characters" spellcheck="false"></label>` +
     `<label>NUMBER<input id="rider-number" type="text" inputmode="numeric" maxlength="3" autocomplete="off">` +
     `</label></div>` +

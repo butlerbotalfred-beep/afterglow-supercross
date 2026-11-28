@@ -42,8 +42,8 @@ import {
   recordRace,
   seasonComplete,
   seasonUnfinished,
+  seasonAwards,
   seasonWithRiders,
-  standings,
   startNewSeason,
   type Season,
   type SeasonRace,
@@ -176,14 +176,13 @@ let unlockNotice = '';
  * won the championship unlocks Pro pace. Each is given once. Returns what to tell the players.
  */
 function seasonUnlocks(after: Season, race: SeasonRace, order: number[]) {
-  if (race.stage !== 'main') return '';
+  const earned = seasonAwards(after, race, order);
   const notices: string[] = [];
-  if (after.entrants[order[0]]?.human) {
+  if (earned.roundWin) {
     const set = save.awardRoundWin(after, race.round);
     if (set) notices.push(`ROUND WIN: THE ${set.name} COLOURS ARE UNLOCKED FOR EVERY RIDER.`);
   }
-  if (seasonComplete(after) && standings(after)[0].entrant.human && save.awardSeasonWin())
-    notices.push('CHAMPION: PRO PACE IS UNLOCKED.');
+  if (earned.champion && save.awardSeasonWin()) notices.push('CHAMPION: PRO PACE IS UNLOCKED.');
   if (notices.length) refreshUnlocks();
   return notices.join(' ');
 }
@@ -613,6 +612,7 @@ function seasonRaceToRun() {
   return nextRace(season);
 }
 function startRace() {
+  closeRiderEditor();
   if (seasonMode) {
     const humans = season && !seasonComplete(season) ? season.entrants.filter(e => e.human).length : humanCount;
     // Nothing changes if the race cannot start: a season race already running stays the one being run.

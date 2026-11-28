@@ -79,8 +79,15 @@ export function checkName(text: unknown): Checked<string> {
   // Line breaks, tabs and other control characters, and characters that change the direction of text.
   if (/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202f\u2060-\u206f\ufeff]/.test(text))
     return {ok: false, error: 'A name can only have letters, numbers, spaces and symbols.'};
+  // Half of a character pair on its own is not text.
+  if (/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/.test(text))
+    return {ok: false, error: 'A name can only have letters, numbers, spaces and symbols.'};
   const name = text.trim().replace(/\s+/g, ' ').toUpperCase();
-  if (!name) return {ok: false, error: 'Enter a name.'};
+  // Something has to show: characters that draw nothing do not make a name.
+  const visible = name
+    .replace(/[\p{Z}\p{Cf}\p{Mn}\p{Me}]/gu, '')
+    .replace(/[\u00ad\u034f\u061c\u115f\u1160\u17b4\u17b5\u180b-\u180e\u2800\u3164\uffa0]/g, '');
+  if (!visible) return {ok: false, error: 'Enter a name.'};
   if ([...name].length > NAME_MAX) return {ok: false, error: `A name can be up to ${NAME_MAX} characters.`};
   return {ok: true, value: name};
 }

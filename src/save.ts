@@ -374,10 +374,13 @@ export class SaveStore {
       return {...career, ...result.progress};
     };
     try {
+      let changed = false;
       this.update(save => {
         save.career = apply(isObject(save.career) ? save.career : {});
-        stored = true;
+        changed = true;
       });
+      // Only once the browser has taken the write: a refused one leaves nothing stored.
+      stored = changed;
     } catch {}
     // Not stored (blocked or full storage, or a save from a newer version): it counts for this visit.
     if (!stored) this.data.career = apply(this.data.career);

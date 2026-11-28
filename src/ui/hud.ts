@@ -1,5 +1,5 @@
 // In-race HUD: race chrome markup, split-screen viewports, per-rider panels and the mini map.
-import {CSS_COLORS, TUNING, cssColor} from '../config';
+import {CSS_COLORS, TUNING, textColor} from '../config';
 import {riderLabel} from '../riders';
 import {GATE, inBand, type StartGate} from '../gate';
 import type {Device} from '../input';
@@ -99,7 +99,7 @@ export function hudHtml(
         (v, i) =>
           `<section class="viewport-hud ${humanCount > 1 ? 'compact' : 'solo'}" ` +
           `style="left:${v.x * 100}%;top:${v.y * 100}%;width:${v.w * 100}%;height:${v.h * 100}%;` +
-          `--player:${riders[i] ? cssColor(riders[i].color) : CSS_COLORS[i]}">` +
+          `--player:${riders[i] ? textColor(riders[i].color) : CSS_COLORS[i]}">` +
           `<div class="hud-top"><div class="position"><small>POS</small>` +
           `<strong>01<span>/ ${riders.length}</span></strong></div>` +
           `<span class="identity"><span class="identity-name">${identityText(riders[i], i)}</span>` +
@@ -153,7 +153,7 @@ export function drawMap(canvas: HTMLCanvasElement, r: Rider, track: Track, rider
       c.fillRect(x(p.x) - 3, z(p.z) - 3, 6, 6);
     }
   for (const o of riders) {
-    c.fillStyle = cssColor(o.color);
+    c.fillStyle = textColor(o.color);
     c.beginPath();
     c.arc(x(o.x), z(o.z), o === r ? 4 : 2.3, 0, Math.PI * 2);
     c.fill();
@@ -399,7 +399,7 @@ export function updateHud(ctx: HudContext) {
       .slice(0, 5)
       .map(
         (r, i) =>
-          `<div><b>${i + 1}</b><span style="color:${cssColor(r.color)}">${escapeHtml(riderLabel(r))}</span>` +
+          `<div><b>${i + 1}</b><span style="color:${textColor(r.color)}">${escapeHtml(riderLabel(r))}</span>` +
           `<small>${r.finished !== null ? 'FINISHED' : 'LAP ' + Math.min(lapCount, r.progress.lap + 1)}` +
           `</small></div>`,
       )

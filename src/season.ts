@@ -231,6 +231,18 @@ export function standings(season: Season): Standing[] {
   return table;
 }
 
+/**
+ * What a race just recorded has earned the players. `after` is the season with the race in it, `race` the race
+ * and `order` its result. A round win is a human winning a main; heats earn nothing. The championship is a
+ * human on top of the table once the last main is run.
+ */
+export function seasonAwards(after: Season, race: SeasonRace, order: number[]) {
+  if (race.stage !== 'main') return {roundWin: false, champion: false};
+  return {
+    roundWin: !!after.entrants[order[0]]?.human,
+    champion: seasonComplete(after) && standings(after)[0].entrant.human,
+  };
+}
 /** What starting a new season would do to the one in hand. */
 export type NewSeasonAnswer = {started: Season} | {needsConfirmation: true; unfinished: Season};
 /**
