@@ -45,3 +45,5 @@ jobs:
         run: npm run start-check -- --check
       - name: Roster check (50 seeded Club races, fastest Club rider on every circuit, roster baselines)
         run: npm run roster-check -- --check
+      - name: Season check (a whole Club championship with eight computer riders, under 60 s)
+        run: npm run season-check -- --check

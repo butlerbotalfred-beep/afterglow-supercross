@@ -26,9 +26,16 @@ export function setupScreenHtml() {
 <section class="setup-card"><div class="card-heading">` +
     `<span class="eyebrow">YOUR NEXT RIDE</span><span class="tag">LOCAL SESSION</span></div>` +
     `<div class="mode-tabs"><button id="race-mode" class="active">RACE NIGHT</button>` +
+    `<button id="season-mode">CHAMPIONSHIP</button>` +
     `<button id="trial-mode">TIME TRIAL</button>` +
     `<button id="practice-mode">FREE PRACTICE</button>` +
-    `</div>
+    `</div><div id="season-panel" class="season-panel hidden"><p id="season-status"></p>` +
+    `<div id="season-table"></div>` +
+    `<button id="new-season" type="button" class="text-button hidden">START OVER WITH A NEW SEASON</button>` +
+    `<div id="season-confirm" class="season-confirm hidden" role="alertdialog" aria-labelledby="season-confirm-text">` +
+    `<p id="season-confirm-text"></p>` +
+    `<button id="season-confirm-yes" type="button">END IT AND START OVER</button>` +
+    `<button id="season-confirm-no" type="button">KEEP MY SEASON</button></div></div>
 <label class="course-label">CIRCUIT<select ` +
     `id="course">${COURSES.map(c => `<option value="${c.id}">${c.name}</option>`).join('')}</se` +
     `lect></label><p id="course-description" class="course-description"></p>` +

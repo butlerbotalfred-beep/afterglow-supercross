@@ -35,6 +35,10 @@ export interface Rider {
   recovery: number;
   stuck: number;
   finished: number | null;
+  /** Laps completed when the rider took the flag. In a timed race riders finish on different laps. */
+  finishedLaps?: number;
+  /** The rider's place on the start grid when it is not its id. */
+  slot?: number;
   dnf: boolean;
   lastLanding: number;
   /** How the last judged landing went, for the HUD: matched to the slope, or flat enough to cost speed. */
@@ -83,9 +87,10 @@ export interface Rider {
   slipKind?: SlipKind;
 }
 export const idleControl = (): Control => ({throttle: 0, brake: 0, steer: 0, pitch: 0, reset: false, pause: false});
-export function makeRider(track: Track, id: number, human: boolean, color: number, device?: Device): Rider {
-  const s = -3 - Math.floor(id / 4) * 2.8,
-    p = track.at(s, ((id % 4) - 1.5) * 1.9);
+/** `slot` is the place on the start grid, 0 to 7 in rows of four; left out, a rider's id is its place. */
+export function makeRider(track: Track, id: number, human: boolean, color: number, device?: Device, slot = id): Rider {
+  const s = -3 - Math.floor(slot / 4) * 2.8,
+    p = track.at(s, ((slot % 4) - 1.5) * 1.9);
   return {
     id,
     human,

@@ -33,6 +33,18 @@ import {TUNING} from '../config';
 import {GhostPlayback, GhostStore, indexedDbGhosts, type Ghost, type GhostPose} from '../ghost';
 import {currentLapTime} from '../timing';
 import {browserStorage, lapCountsForRecord, recordKey, SaveStore} from '../save';
+import {
+  SEASON_ROUNDS,
+  nextRace,
+  raceTitle,
+  recordRace,
+  seasonComplete,
+  seasonUnfinished,
+  startNewSeason,
+  type Season,
+  type SeasonRace,
+} from '../season';
+import {seasonGrid, seasonOrder, seasonStart} from './season-run';
 import {devicesReady, RaceSession} from './race-session';
 import {blendPose, capturePose, pacingStats, type Pose} from '../render-interp';
 import {createRenderer, renderViews, resizeRenderer, type RenderContext} from '../render/renderer';
@@ -40,7 +52,7 @@ import {el, setVisible} from '../ui/dom';
 import {isLoading, watchLoading} from '../ui/loading';
 import {hudHtml, updateHud, type HudContext} from '../ui/hud';
 import {pauseMessage} from '../ui/pause-menu';
-import {ranking, showResultsTable} from '../ui/results-screen';
+import {ranking, showResultsTable, showStandingsTable, standingsRowsHtml} from '../ui/results-screen';
 import {
   appShellHtml,
   controllerStatusMessage,
@@ -79,6 +91,14 @@ let practice = false,
   humanCount = 1,
   npcCount = 5;
 const save = new SaveStore(browserStorage());
+/** Championship mode, the season in hand, and the season race on the grid or being run (null otherwise). */
+let seasonMode = false,
+  season: Season | null = save.season,
+  seasonRace: SeasonRace | null = null;
+/** The season race whose result is on screen, and whether the window is showing the standings after it. */
+let racedInSeason: SeasonRace | null = null,
+  showingStandings = false,
+  seasonKept = true;
 // Race flow and rules live in RaceSession; this file is the browser around it.
 const session = new RaceSession(input, {
   countdown: n => (el('countdown').innerHTML = countdownHtml(n)),
@@ -115,6 +135,14 @@ const session = new RaceSession(input, {
     touchControls.show(false);
     setVisible('results', true);
     setVisible('countdown', false);
+    // A season race is recorded and saved the moment it ends, so closing the game now loses nothing.
+    racedInSeason = seasonRace;
+    showingStandings = false;
+    if (season && seasonRace) {
+      season = recordRace(season, seasonOrder(session));
+      seasonKept = save.setSeason(season);
+      seasonRace = null;
+    }
     showResultsTable(
       track,
       session.riders,
@@ -123,7 +151,13 @@ const session = new RaceSession(input, {
       session.timing,
       session.trial,
       session.holeshot,
+      racedInSeason && {
+        title: raceTitle(racedInSeason),
+        seconds: racedInSeason.seconds,
+        scores: racedInSeason.stage === 'main',
+      },
     );
+    labelResultsButtons();
   },
 });
 session.slideAggression = save.slideAggression;
@@ -335,7 +369,7 @@ function refreshNpcOptions() {
   npcCount = practice || trial ? 0 : Math.min(npcCount, 8 - humanCount);
   s.innerHTML = npcOptionsHtml(humanCount);
   s.value = String(npcCount);
-  s.disabled = practice || trial;
+  s.disabled = practice || trial || seasonMode;
 }
 function refreshSlots() {
   const pads = input.connectedGamepads();
@@ -382,9 +416,12 @@ function refreshSlots() {
       .slice(0, humanCount)
       .every((d, i) => d && ready[i] && (d.kind !== 'gamepad' || pads.some(p => p.index === d.index)));
   el<HTMLButtonElement>('start').disabled = !valid;
+  const riders = seasonRunning() ? season!.entrants.filter(e => e.human).length : 1;
   el('setup-status').textContent = valid
     ? 'All riders ready. See you at the gate.'
-    : 'Assign a unique device and ready each rider. Press a gamepad button to connect.';
+    : iphoneMode && riders > 1
+      ? `This season has ${riders} riders. Choose Mac / Keyboard & gamepads above to carry on with it.`
+      : 'Assign a unique device and ready each rider. Press a gamepad button to connect.';
 }
 function buildGrid() {
   for (const m of models) {
@@ -400,7 +437,11 @@ function buildGrid() {
     });
   }
   const difficulty = el<HTMLSelectElement>('difficulty').value;
-  session.grid({track, humanCount, npcCount, practice, trial, assignments, difficulty, seed: gridSeed});
+  session.grid(
+    season && seasonRace
+      ? seasonGrid(season, seasonRace, track, assignments)
+      : {track, humanCount, npcCount, practice, trial, assignments, difficulty, seed: gridSeed},
+  );
   if (gateBars) {
     scene.remove(gateBars.group);
     gateBars.dispose();
@@ -427,14 +468,98 @@ function loadPersonalBest() {
 }
 function buildHud(lapCount: number) {
   loadPersonalBest();
-  el('hud').innerHTML = hudHtml(humanCount, session.riders, assignments, practice || trial, lapCount);
+  el('hud').innerHTML = hudHtml(
+    humanCount,
+    session.riders,
+    assignments,
+    practice || trial,
+    lapCount,
+    seasonRace ? 'CHAMPIONSHIP' : undefined,
+  );
   viewHud = [...el('hud').querySelectorAll<HTMLElement>('.viewport-hud')];
 }
+/** True in Championship mode while the season in hand has races still to run. */
+const seasonRunning = () => seasonMode && !!season && !seasonComplete(season);
+/** What the two buttons under the results do next: another ride, the next season race, or the standings. */
+function labelResultsButtons() {
+  const next = season && racedInSeason ? nextRace(season) : null;
+  const label = !racedInSeason
+    ? 'ONE MORE RIDE'
+    : racedInSeason.stage === 'main' && !showingStandings
+      ? 'STANDINGS'
+      : next
+        ? next.stage === 'main'
+          ? 'LINE UP FOR THE MAIN'
+          : `ROUND ${next.round + 1} HEAT`
+        : 'RETURN TO SETUP';
+  el('restart-results').innerHTML = `${label} <span>↗</span>`;
+  el('setup-results').textContent = !racedInSeason
+    ? 'RETURN TO SETUP'
+    : seasonKept
+      ? 'SEASON SAVED · RETURN TO SETUP'
+      : 'RETURN TO SETUP · THIS BROWSER IS NOT KEEPING THE SEASON';
+  setVisible('setup-results', !racedInSeason || !!next || !showingStandings);
+}
+/** The main button under the results. */
+function afterResults() {
+  if (!racedInSeason || !season) return startRace();
+  if (racedInSeason.stage === 'main' && !showingStandings) {
+    showingStandings = true;
+    showStandingsTable(season);
+    labelResultsButtons();
+    return;
+  }
+  if (seasonComplete(season)) toSetup();
+  else startRace();
+}
+/** Championship: the race to run now, starting a new season first if there is none to carry on with. */
+function seasonRaceToRun() {
+  if (!season || seasonComplete(season)) {
+    // Another tab may have started a season since this page loaded. Show it instead of starting over it.
+    const stored = new SaveStore(browserStorage()).season;
+    if (stored && seasonUnfinished(stored)) {
+      season = stored;
+      refreshSeason();
+      refreshSlots();
+      return null;
+    }
+    const humans = Number(el<HTMLSelectElement>('humans').value);
+    const answer = startNewSeason(
+      season,
+      humans,
+      el<HTMLSelectElement>('difficulty').value,
+      (Date.now() % 4294967295) + 1,
+    );
+    if (!('started' in answer)) return null;
+    season = answer.started;
+    seasonKept = save.setSeason(season);
+  }
+  return nextRace(season);
+}
 function startRace() {
-  humanCount = Number(el<HTMLSelectElement>('humans').value);
-  npcCount = Number(el<HTMLSelectElement>('npcs').value);
-  const lapCount = Number(el<HTMLSelectElement>('laps').value);
-  const difficulty = el<HTMLSelectElement>('difficulty').value;
+  if (seasonMode) {
+    const humans = season && !seasonComplete(season) ? season.entrants.filter(e => e.human).length : humanCount;
+    // Nothing changes if the race cannot start: a season race already running stays the one being run.
+    if (!devicesReady(assignments, humans)) return;
+    seasonRace = seasonRaceToRun();
+    if (!seasonRace || !season) return;
+    humanCount = season.entrants.filter(e => e.human).length;
+    npcCount = season.entrants.length - humanCount;
+    // Season rounds are run on the original circuits.
+    if (track.course.id !== seasonRace.course.id || activeLayout) {
+      activeLayout = null;
+      el<HTMLSelectElement>('course').value = seasonRace.course.id;
+      rebuildTrack(new Track(seasonRace.course));
+    }
+  } else {
+    if (!devicesReady(assignments, Number(el<HTMLSelectElement>('humans').value))) return;
+    seasonRace = null;
+    humanCount = Number(el<HTMLSelectElement>('humans').value);
+    npcCount = Number(el<HTMLSelectElement>('npcs').value);
+  }
+  racedInSeason = null;
+  const lapCount = seasonRace ? 0 : Number(el<HTMLSelectElement>('laps').value);
+  const difficulty = season && seasonRace ? season.difficulty : el<HTMLSelectElement>('difficulty').value;
   if (!devicesReady(assignments, humanCount)) return;
   testMarkers.visible = practice;
   touchControls.clear();
@@ -451,7 +576,11 @@ function startRace() {
   for (const prefix of ['', 'pause-']) setVisible(`${prefix}ghost-setting`, trial || prefix === '');
   el('restart-pause').textContent = trial ? 'RESTART TIME TRIAL' : 'RESTART RACE';
   el('setup-pause').textContent = trial ? 'END TIME TRIAL' : 'RACE SETUP';
-  session.start({lapCount, difficulty, seed: gridSeed, catchUp: save.catchUp});
+  session.start(
+    season && seasonRace
+      ? seasonStart(season, seasonRace, save.catchUp)
+      : {lapCount, difficulty, seed: gridSeed, catchUp: save.catchUp},
+  );
   holeshot = null;
   prevPoses = [];
   setVisible('setup', false);
@@ -462,8 +591,9 @@ function startRace() {
   setVisible('countdown', true);
   touchControls.show(iphoneMode);
   audio.start();
-  el('session-label').textContent =
-    `${(track.customName || track.course.name).toUpperCase()} / ${trial ? 'TIME TRIAL' : practice ? 'FREE PRACTICE' : 'RACE NIGHT'}`;
+  el('session-label').textContent = seasonRace
+    ? raceTitle(seasonRace)
+    : `${(track.customName || track.course.name).toUpperCase()} / ${trial ? 'TIME TRIAL' : practice ? 'FREE PRACTICE' : 'RACE NIGHT'}`;
   el('countdown').innerHTML = countdownHtml(session.gate ? session.gate.board : 3);
   updateHud(hudContext());
 }
@@ -472,9 +602,13 @@ function toSetup() {
   touchControls.show(false);
   document.body.classList.remove('iphone-session');
   session.toSetup();
+  // A season race left before its end is not recorded: the season is still waiting for it.
+  seasonRace = null;
+  racedInSeason = null;
   audio.hush();
   ['hud', 'pause', 'results', 'countdown', 'race-bar'].forEach(id => setVisible(id, false));
   setVisible('setup', true);
+  refreshSeason();
   refreshSlots();
 }
 // Rider pose to draw: between the last two physics steps, so frames that run an uneven number of steps don't jump.
@@ -529,6 +663,8 @@ function hudContext(): HudContext {
     referenceLap: index => session.referenceLap(index),
     gate: session.gate,
     holeshot,
+    timed: session.timeLimit ? {limit: session.timeLimit, flagLap: session.flagLap, flagOut: session.flagOut} : null,
+    closeAfter: session.closeAfter,
   };
 }
 const audioCost: number[] = [];
@@ -680,7 +816,8 @@ function pollJoins() {
     const assigned = assignments.slice(0, humanCount).findIndex(d => d?.kind === 'gamepad' && d.index === p.index);
     if ((join && (assigned < 0 || !ready[assigned])) || (waitingForController && (pressed || p.index >= 1000))) {
       const slot = controllerJoinSlot(assignments.slice(0, humanCount), p.index, practice);
-      if (slot >= 0) {
+      // A season in progress has its riders: a new controller can take a free place but not add one.
+      if (slot >= 0 && !(slot === humanCount && seasonRunning())) {
         if (slot === humanCount) {
           humanCount++;
           el<HTMLSelectElement>('humans').value = String(humanCount);
@@ -763,22 +900,64 @@ function frame(now: number) {
   if (audioCost.length > 600) audioCost.shift();
   requestAnimationFrame(frame);
 }
-function setMode(mode: 'race' | 'practice' | 'trial') {
+/**
+ * Championship mode's part of the setup screen: what the season is waiting for, the table so far, and which
+ * settings can still be changed (the riders and the pace are fixed once a season has started).
+ */
+function refreshSeason() {
+  setVisible('season-panel', seasonMode);
+  const solo = practice || trial;
+  const running = seasonMode && !!season && !seasonComplete(season);
+  const next = running && season ? nextRace(season) : null;
+  for (const id of ['course', 'track-layout', 'laps', 'npcs'])
+    el<HTMLSelectElement>(id).disabled = seasonMode || (solo && id !== 'course' && id !== 'track-layout');
+  el<HTMLButtonElement>('open-editor').disabled = seasonMode;
+  el<HTMLSelectElement>('humans').disabled = solo || iphoneMode || running;
+  el<HTMLSelectElement>('difficulty').disabled = solo || running;
+  el('start').innerHTML = !seasonMode
+    ? 'DROP THE GATE <span>↗</span>'
+    : next
+      ? `START ROUND ${next.round + 1} ${next.stage.toUpperCase()} <span>↗</span>`
+      : 'START A NEW SEASON <span>↗</span>';
+  if (!seasonMode) return;
+  setVisible('season-confirm', false);
+  setVisible('new-season', running);
+  if (running && season && next) {
+    const humans = season.entrants.filter(e => e.human).length;
+    humanCount = humans;
+    el<HTMLSelectElement>('humans').value = String(humans);
+    el<HTMLSelectElement>('difficulty').value = season.difficulty;
+    // Show the circuit the season is at.
+    if (session.phase === 'setup' && (track.course.id !== next.course.id || activeLayout)) {
+      activeLayout = null;
+      el<HTMLSelectElement>('course').value = next.course.id;
+      rebuildTrack(new Track(next.course));
+    }
+  }
+  el('season-status').textContent = next
+    ? `${raceTitle(next)} IS NEXT. ${next.seconds / 60} minutes plus a lap` +
+      (next.stage === 'heat' ? '; the result sets the gates for the main.' : '; this one scores.')
+    : (season ? 'That season is finished. ' : '') +
+      `A season is ${SEASON_ROUNDS} rounds, one on each circuit. Each round is a 3-minute heat that sets the ` +
+      `gates and a 6-minute main for points, each plus a lap. Eight riders. Choose the riders and the pace below.`;
+  el('season-table').innerHTML = season && season.rounds[0].main ? standingsRowsHtml(season) : '';
+}
+function setMode(mode: 'race' | 'practice' | 'trial' | 'season') {
   practice = mode === 'practice';
   trial = mode === 'trial';
+  seasonMode = mode === 'season';
   const solo = practice || trial;
   el('practice-mode').classList.toggle('active', practice);
   el('trial-mode').classList.toggle('active', trial);
-  el('race-mode').classList.toggle('active', !solo);
+  el('season-mode').classList.toggle('active', seasonMode);
+  el('race-mode').classList.toggle('active', !solo && !seasonMode);
   if (solo) {
     humanCount = 1;
     el<HTMLSelectElement>('humans').value = '1';
   }
   setVisible('ghost-setting', trial);
-  el<HTMLSelectElement>('humans').disabled = solo || iphoneMode;
-  el<HTMLSelectElement>('laps').disabled = solo;
-  el<HTMLSelectElement>('difficulty').disabled = solo;
   refreshNpcOptions();
+  refreshSeason();
   refreshSlots();
 }
 el<HTMLSelectElement>('play-device').onchange = e => {
@@ -788,7 +967,6 @@ el<HTMLSelectElement>('play-device').onchange = e => {
   touchControls.show(false);
   humanCount = 1;
   el<HTMLSelectElement>('humans').value = '1';
-  el<HTMLSelectElement>('humans').disabled = practice || trial || iphoneMode;
   assignments = [{kind: iphoneMode ? 'touch' : 'keyboard'}, null, null, null];
   ready = [true, false, false, false];
   setVisible('touch-setup-hint', iphoneMode);
@@ -796,6 +974,7 @@ el<HTMLSelectElement>('play-device').onchange = e => {
   setVisible('pause-touch-directions', iphoneMode);
   document.body.classList.toggle('iphone-selected', iphoneMode);
   refreshNpcOptions();
+  refreshSeason();
   refreshSlots();
 };
 for (const prefix of ['', 'pause-']) {
@@ -816,6 +995,29 @@ for (const prefix of ['', 'pause-']) {
 el('race-mode').onclick = () => setMode('race');
 el('practice-mode').onclick = () => setMode('practice');
 el('trial-mode').onclick = () => setMode('trial');
+el('season-mode').onclick = () => setMode('season');
+// Giving up a season that has races in it needs a second, explicit answer.
+el('new-season').onclick = () => {
+  if (!season) return;
+  if (!seasonUnfinished(season)) return forgetSeason();
+  const next = nextRace(season)!;
+  el('season-confirm-text').textContent =
+    `This ends the season in progress at round ${next.round + 1} of ${SEASON_ROUNDS}. Its results and points are lost.`;
+  setVisible('season-confirm', true);
+  setVisible('new-season', false);
+  el('season-confirm-no').focus();
+};
+el('season-confirm-yes').onclick = forgetSeason;
+el('season-confirm-no').onclick = () => {
+  refreshSeason();
+  refreshSlots();
+};
+function forgetSeason() {
+  season = null;
+  seasonKept = save.setSeason(null);
+  refreshSeason();
+  refreshSlots();
+}
 el('restart-lap').onclick = () => {
   session.restartLap();
   el('restart-lap').blur();
@@ -847,7 +1049,8 @@ el<HTMLSelectElement>('npcs').onchange = e => (npcCount = Number((e.target as HT
 el('start').onclick = startRace;
 el('pause-button').onclick = () => session.togglePause();
 el('resume').onclick = () => session.togglePause();
-for (const id of ['restart-pause', 'restart-results']) el(id).onclick = startRace;
+el('restart-pause').onclick = startRace;
+el('restart-results').onclick = afterResults;
 // Leaving a Time Trial from the pause menu shows the laps of the session first.
 el('setup-pause').onclick = () => {
   if (session.trial) {
@@ -952,6 +1155,8 @@ describeCourse();
 if (['localhost', '127.0.0.1', '[::1]'].includes(location.hostname)) startNativeController();
 addEventListener('resize', resize);
 refreshNpcOptions();
+// A season with races still to run is where the game opens.
+if (seasonUnfinished(season)) setMode('season');
 refreshSlots();
 buildGrid();
 resize();
@@ -992,6 +1197,8 @@ if (import.meta.env.DEV) {
           : null,
       },
       holeshot: session.holeshot,
+      season: {mode: seasonMode, season, race: seasonRace, raced: racedInSeason, standings: showingStandings},
+      timed: {limit: session.timeLimit, flagLap: session.flagLap, flagOut: session.flagOut},
       holeshotLine: track.holeshot,
       raceTime: session.raceTime,
       humanCount,
@@ -1046,6 +1253,8 @@ if (import.meta.env.DEV) {
       updateHud(hudContext());
       return session.phase;
     },
+    /** Shortens the clock of the timed race being run, so a check need not ride for six minutes. */
+    timeLimit: (seconds: number) => (session.timeLimit = seconds),
     renderer: () => renderer.info,
   };
 }

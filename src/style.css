@@ -2530,3 +2530,71 @@ footer i {
 #ghost-notice {
   color: #ffdc69;
 }
+
+/* Championship */
+.season-panel {
+  margin: -6px 0 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #ffffff08;
+}
+.season-panel p {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.6;
+  color: #c9cfdc;
+}
+#season-status {
+  font-weight: 700;
+  letter-spacing: 0.4px;
+}
+#season-table .result-row {
+  padding: 6px 0;
+  font-size: 11px;
+}
+#season-table .result-row > b {
+  font-size: 17px;
+}
+#season-table {
+  margin-top: 10px;
+}
+#season-table:empty {
+  display: none;
+}
+.season-panel .text-button {
+  margin-top: 12px;
+  text-align: left;
+}
+.season-confirm {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.season-confirm button {
+  margin: 10px 14px 0 0;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: #fff0df;
+}
+.season-confirm button:first-of-type {
+  border-color: var(--orange);
+  color: var(--orange);
+}
+.points-tag {
+  font-style: normal;
+  color: var(--orange);
+}
+.standing-row.podium-1 > b {
+  color: #ffcf61;
+}
+.standing-row.podium-2 > b {
+  color: #d5dbe6;
+}
+.standing-row.podium-3 > b {
+  color: #d99a6c;
+}
