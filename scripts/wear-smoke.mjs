@@ -138,6 +138,24 @@ try {
   check(state.phase === 'results', 'the 3-lap race of eight is run', state.phase);
   wear = await page.evaluate(() => window.__game.wear());
   check(wear.worn > 5000, 'the race has worn the track', `${wear.worn} cells of ${wear.cols * wear.rows}`);
+  // Wear physics is on by default: the race has cut ruts and braking bumps, and the mesh has followed.
+  const worn = await page.evaluate(() => window.__game.surface());
+  const raced = (Date.now() - started) / 1000;
+  check(
+    worn.on && worn.rut >= 0.5 && worn.rough > 0.1,
+    'wear physics is on in a race, with ruts and braking bumps after 3 laps',
+    `deepest rut ${worn.rut.toFixed(2)}, roughest bumps ${worn.rough.toFixed(2)}`,
+  );
+  check(
+    worn.bump > 0.003 && worn.bump <= 0.0301,
+    'the bumps are real height, 3 cm at most',
+    `${(worn.bump * 100).toFixed(1)} cm`,
+  );
+  check(
+    worn.redraws >= 1 && worn.redraws <= Math.ceil(raced) + 1,
+    'the track mesh is redrawn, at most once a second',
+    `${worn.redraws} in ${raced.toFixed(1)} s, ${worn.rows} rows the last time`,
+  );
   const after = await photograph('after');
   const shares = [];
   for (let i = 0; i < VIEWS.length; i++)
@@ -166,6 +184,37 @@ try {
   }
   wear = await page.evaluate(() => window.__game.wear());
   check(next === 'countdown' && wear.sum === 0, 'the next race starts on fresh dirt', `${next}, sum ${wear.sum}`);
+  const fresh = await page.evaluate(() => window.__game.surface());
+  check(
+    fresh.on && fresh.rut === 0 && fresh.rough === 0,
+    'and with no ruts or bumps',
+    `rut ${fresh.rut}, bumps ${fresh.rough}`,
+  );
+
+  // The setting: off for a race when unticked, remembered, and never on in a Time Trial.
+  const toSetup = async () => {
+    await page.keyboard.press('Escape');
+    await click('#setup-pause');
+    if ((await page.evaluate(() => window.__game.snapshot().phase)) === 'results') await click('#setup-results');
+  };
+  await toSetup();
+  const ticked = await page.evaluate(() => document.querySelector('#wear-physics').checked);
+  await click('#wear-physics');
+  await click('#start');
+  let off = await page.evaluate(() => (window.__game.toRacing(), window.__game.surface()));
+  check(ticked && !off.on, 'unticking the setting turns wear physics off for the race');
+  await page.reload({waitUntil: 'commit'});
+  await page.waitForFunction(() => window.__game && !document.querySelector('#loading:not(.hidden)'), null, {
+    timeout: 60000,
+  });
+  const kept = await page.evaluate(() => document.querySelector('#wear-physics').checked);
+  check(kept === false, 'the setting is remembered after a reload');
+  await click('#wear-physics');
+  await click('#trial-mode');
+  await click('#start');
+  off = await page.evaluate(() => (window.__game.toRacing(), window.__game.surface()));
+  const trial = await page.evaluate(() => window.__game.snapshot().trial);
+  check(trial && !off.on, 'wear physics is off in a Time Trial, with the setting ticked');
   check(errors.length === 0, 'no page errors', errors.slice(0, 3).join(' | '));
 } finally {
   await browser.close();

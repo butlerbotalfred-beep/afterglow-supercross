@@ -34,6 +34,8 @@ export interface SaveData {
     volumes: Volumes;
     showGhost: boolean;
     catchUp: boolean;
+    /** Wear physics in races: ruts and braking bumps that change the riding. On unless the player turns it off. */
+    wearPhysics: boolean;
     /** Each of the four players' rider: name, number, colours and helmet. */
     riders: RiderSettings[];
   };
@@ -125,6 +127,7 @@ export function defaultSave(): SaveData {
       volumes: {...DEFAULT_VOLUMES},
       showGhost: true,
       catchUp: false,
+      wearPhysics: true,
       riders: defaultRiders(),
     },
     layouts: {},
@@ -151,6 +154,8 @@ function fromStored(v: Record<string, unknown>, physics: number): SaveData {
   if (isObject(v.settings)) data.settings.volumes = normalizeVolumes(v.settings.volumes);
   if (isObject(v.settings) && typeof v.settings.showGhost === 'boolean') data.settings.showGhost = v.settings.showGhost;
   if (isObject(v.settings) && typeof v.settings.catchUp === 'boolean') data.settings.catchUp = v.settings.catchUp;
+  if (isObject(v.settings) && typeof v.settings.wearPhysics === 'boolean')
+    data.settings.wearPhysics = v.settings.wearPhysics;
   if (isObject(v.layouts))
     for (const id of COURSE_IDS) {
       try {
@@ -278,6 +283,17 @@ export class SaveStore {
       this.update(stored => (stored.settings.catchUp = on));
     } catch {}
     this.data.settings.catchUp = on;
+    return on;
+  }
+  /** Whether races are run with wear physics. Time Trial never is. */
+  get wearPhysics() {
+    return this.data.settings.wearPhysics;
+  }
+  setWearPhysics(on: boolean) {
+    try {
+      this.update(stored => (stored.settings.wearPhysics = on));
+    } catch {}
+    this.data.settings.wearPhysics = on;
     return on;
   }
   get volumes() {

@@ -7,6 +7,7 @@ import {GhostRecorder, type Ghost, type GhostPose} from '../ghost';
 import {progressDistance} from '../race';
 import {catchUpEase, gridFor, shuffled, type RiderProfile} from '../riders';
 import {WearGrid, wearFor} from '../wear';
+import {surfaceFor} from '../surface-wear';
 import {collide, idleControl, makeRider, npcControl, stepRider, type Rider} from '../physics';
 import {createTiming, fasterLap, recordStep, type LapTime, type RiderTiming} from '../timing';
 import type {Track} from '../track';
@@ -80,6 +81,11 @@ export interface RaceConfig {
    * `lapCount` is then ignored.
    */
   timeLimit?: number;
+  /**
+   * Wear physics: ruts form in turns and braking bumps where riders brake, and both change the riding.
+   * Left out, the track rides as built. Never on in Time Trial, so ghosts and records stay comparable.
+   */
+  wearPhysics?: boolean;
 }
 export const COUNTDOWN_SECONDS = 3.8;
 /** A timed race closes this long after the winner takes the flag, whoever is still out there. */
@@ -233,7 +239,11 @@ export class RaceSession {
     return true;
   }
   /** Starts the countdown for the riders already on the grid. */
-  start({lapCount, difficulty, seed = 0, catchUp = false, timeLimit = 0}: RaceConfig) {
+  start({lapCount, difficulty, seed = 0, catchUp = false, timeLimit = 0, wearPhysics = false}: RaceConfig) {
+    const surface = surfaceFor(this.track);
+    surface.clear();
+    // Races only: practice and Time Trial (which is run as practice) are ridden on the track as built.
+    this.track.surface = wearPhysics && !this.practice ? surface : null;
     this.catchUp = catchUp;
     this.timeLimit = this.practice ? 0 : timeLimit;
     this.lapCount = this.timeLimit ? Infinity : lapCount;
@@ -264,6 +274,10 @@ export class RaceSession {
     this.reviewCrashTest = '';
     // Back at the setup screen the dirt is fresh: the last race's line is not shown behind the menus.
     this.wear?.clear();
+    if (this.track) {
+      surfaceFor(this.track).clear();
+      this.track.surface = null;
+    }
     this.phase = 'setup';
     this.paused = false;
   }
@@ -424,6 +438,7 @@ export class RaceSession {
         r.human ? this.slideAggression : 1,
       );
       this.wear?.ride(r);
+      track.surface?.ride(r);
       if (this.gate && this.holeshot === null && pastHoleshot(r.progress, track)) {
         this.holeshot = r.id;
         screen.holeshot?.(r);
