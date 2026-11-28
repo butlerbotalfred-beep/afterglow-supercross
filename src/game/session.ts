@@ -965,6 +965,7 @@ function frame(now: number) {
   }
   syncModels(session.paused || session.reviewFrozen ? 0 : dt);
   (scene.userData.wear as WearLayer | undefined)?.refresh(now);
+  track.surface?.warm(2);
   (scene.userData.surface as SurfaceMesh | undefined)?.refresh(now);
   syncGhost(session.paused || session.reviewFrozen ? 0 : dt);
   syncGate(session.paused || session.reviewFrozen ? 0 : dt);

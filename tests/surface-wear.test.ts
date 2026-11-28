@@ -5,7 +5,7 @@ import {TUNING} from '../src/config.ts';
 import {COURSES} from '../src/courses.ts';
 import {idleControl, makeRider, npcControl, stepRider} from '../src/physics.ts';
 import {SaveStore} from '../src/save.ts';
-import {SURFACE_REDRAW_MS, SurfaceMesh} from '../src/surface-mesh.ts';
+import {SURFACE_REDRAW_CELLS, SURFACE_REDRAW_MS, SurfaceMesh} from '../src/surface-mesh.ts';
 import {BUMP_AMPLITUDE, RUT_TURN_BONUS, SurfaceWear, surfaceFor} from '../src/surface-wear.ts';
 import {Track} from '../src/track.ts';
 import {RaceSession} from '../src/game/race-session.ts';
@@ -16,7 +16,7 @@ const course = (id: string) => COURSES.find(c => c.id === id)!;
 const dusk = new Track(course('dusk'));
 
 /** Eight computer riders (or one in Time Trial) raced for `seconds`, with wear physics as asked. */
-function race(track: Track, wearPhysics: boolean, seconds: number, trial = false, seed = 7) {
+function race(track: Track, wearPhysics: boolean, seconds: number, trial = false, seed = 7, practice = false) {
   const session: RaceSession = new RaceSession(
     {sample: () => npcControl(session.riders[0], track, [], 'club'), connectedGamepads: () => []},
     quiet,
@@ -24,8 +24,8 @@ function race(track: Track, wearPhysics: boolean, seconds: number, trial = false
   session.grid({
     track,
     npcCount: 8,
-    humanCount: trial ? 1 : 0,
-    practice: false,
+    humanCount: trial || practice ? 1 : 0,
+    practice,
     trial,
     assignments: [{kind: 'keyboard'}],
   });
@@ -80,6 +80,7 @@ test('the rut turning bonus never exceeds 8%', () => {
   let most = 0,
     turns = 0;
   // A bike at full lock, with and without the deepest rut under it, all round the lap at three speeds.
+  let away = 0;
   for (let s = 0; s < track.length; s += 3)
     for (const speed of [8, 16, 28])
       for (const steer of [-1, 1]) {
@@ -87,18 +88,26 @@ test('the rut turning bonus never exceeds 8%', () => {
           const r = makeRider(t, 0, true, 0);
           const p = t.at(s, 0);
           Object.assign(r, {x: p.x, z: p.z, y: t.height(s, 0), heading: Math.atan2(p.tx, p.tz), speed, surface: p});
+          r.progress = {...createProgress(s), lastLateral: 0};
           const before = r.heading;
           stepRider(r, {...idleControl(), steer, throttle: 0.5}, t, STEP, [r], 0);
+          // The bike was ridden, not picked up and put back on the track.
+          assert.equal(r.recovery, 0, `recovered at ${s} m`);
           return Math.abs(r.heading - before);
         };
         const ratio = turned(track) / turned(built);
         most = Math.max(most, ratio);
         if (ratio > 1.0001) turns++;
         assert.ok(ratio >= 1 - 1e-9 && ratio <= 1 + RUT_TURN_BONUS + 1e-9, `${ratio} at ${s} m`);
+        // Only steering into a turn gets any: against it, or on a straight, the rut gives nothing.
+        if (steer * track.curvature(s) <= 0) {
+          assert.ok(Math.abs(ratio - 1) < 1e-9, `${ratio} steering away at ${s} m`);
+          away++;
+        }
       }
-  // The full bonus is reached, and only steering into a turn gets any.
+  // The full bonus is reached, in many places.
   assert.ok(most > 1.079, `most ${most}`);
-  assert.ok(turns > 50);
+  assert.ok(turns > 300 && away > 1000, `${turns} with a bonus, ${away} without`);
   const straight = wornThrough().surface;
   for (let s = 0; s < dusk.length; s += 11) assert.ok(straight.rut(s, 0) <= 1);
 });
@@ -140,35 +149,61 @@ test('the drawn surface is within 2 cm of the physics height at bumps', () => {
   assert.ok(moved > 0.015, `moved ${moved}`);
 });
 
-test('the track mesh is redrawn for the worn stretch only, at most once a second', () => {
+test('the track mesh is redrawn a few stretches at a time, at most once a second', () => {
   const track = new Track(course('dusk'));
   const surface = surfaceFor(track);
   const geometry = track.geometry();
+  const built = Float32Array.from(geometry.getAttribute('normal').array);
   const mesh = new SurfaceMesh(track, geometry);
   assert.equal(SURFACE_REDRAW_MS, 1000);
   assert.equal(mesh.refresh(0), false, 'nothing worn, nothing redrawn');
   const brake = (s: number) =>
     surface.ride({id: 0, speed: 20, grounded: true, crashTime: 0, brake: 1, surface: {s, lateral: 0}});
-  // A minute at 60 frames a second with a bike braking somewhere new every frame.
+  // A minute at 60 frames a second with bikes braking somewhere new every frame: in one place, at the far
+  // side of the lap, and across the start line.
+  const rows = Math.ceil(track.length / 0.5);
+  // Four rows a cell, and a row or two more at the ends of each stretch.
+  const most = SURFACE_REDRAW_CELLS * 4 + 12;
   const sent: number[] = [];
-  let flatAt = 0;
+  let largest = 0;
   for (let frame = 0; frame < 3600; frame++) {
-    brake((flatAt = 300 + (frame % 200) * 0.3));
+    brake(300 + (frame % 200) * 0.3);
+    brake(1500 + (frame % 150) * 0.3);
+    brake(track.length - 12 + (frame % 80) * 0.3);
     const now = 10000 + (frame * 1000) / 60;
-    if (mesh.refresh(now)) sent.push(now);
+    if (mesh.refresh(now)) {
+      sent.push(now);
+      largest = Math.max(largest, mesh.rows);
+    }
   }
   assert.ok(sent.length >= 2 && sent.length <= 60, `${sent.length} redraws in a minute`);
   for (let i = 1; i < sent.length; i++) assert.ok(sent[i] - sent[i - 1] >= SURFACE_REDRAW_MS);
-  // Only the rows near the braking are redrawn, not the whole lap.
-  const rows = Math.ceil(track.length / 0.5);
-  assert.ok(mesh.rows > 0 && mesh.rows < rows / 4, `${mesh.rows} of ${rows} rows`);
-  // Cleared, the mesh goes back to the track as built.
-  mesh.refresh(80000);
+  // Never the whole lap, however far apart the braking: a fixed few metres of track at a time.
+  assert.ok(largest > 0 && largest <= most && most < rows / 20, `${largest} of ${rows} rows at most (limit ${most})`);
+  // Once the braking stops the mesh catches up, and is then the surface the bikes ride.
+  let later = 80000;
+  while (mesh.refresh((later += SURFACE_REDRAW_MS)));
+  const position = geometry.getAttribute('position'),
+    normal = geometry.getAttribute('normal');
+  let bumped = 0;
+  for (let i = 0; i <= rows; i++)
+    for (let j = 1; j < 40; j += 3) {
+      const at = (i / rows) * track.length,
+        l = ((j / 40) * 2 - 1) * (track.halfWidth + 2.8);
+      assert.ok(Math.abs(position.getY(i * 41 + j) - track.drawnHeight(at, l, false, surface)) < 1e-6, `row ${i}`);
+      if (surface.rough(at, l) > 0) bumped++;
+      // Ground with no bumps is lit exactly as it was built.
+      else for (let k = 0; k < 3; k++) assert.equal(normal.array[(i * 41 + j) * 3 + k], built[(i * 41 + j) * 3 + k]);
+    }
+  assert.ok(bumped > 50, `${bumped} points with bumps`);
+  // Cleared, the mesh goes back to the track as built in one redraw: heights and lighting.
   surface.clear();
-  assert.equal(mesh.refresh(90000), true);
-  const fresh = track.geometry().getAttribute('position'),
-    position = geometry.getAttribute('position');
-  for (let i = 0; i < position.count; i += 7) assert.ok(Math.abs(position.getY(i) - fresh.getY(i)) < 1e-6);
+  assert.equal(mesh.refresh((later += SURFACE_REDRAW_MS)), true);
+  assert.equal(mesh.refresh((later += SURFACE_REDRAW_MS)), false);
+  assert.ok(mesh.rows < rows / 2, `${mesh.rows} rows to take the bumps back`);
+  const fresh = track.geometry().getAttribute('position');
+  for (let i = 0; i < position.count; i++) assert.ok(Math.abs(position.getY(i) - fresh.getY(i)) < 1e-6);
+  assert.deepEqual(Float32Array.from(normal.array), built);
 });
 
 test('wear physics is off in Time Trial', () => {
@@ -180,6 +215,10 @@ test('wear physics is off in Time Trial', () => {
   const off = race(new Track(course('dusk')), false, 60, true);
   assert.deepEqual(on.trace, off.trace);
   for (const r of on.session.riders) assert.deepEqual([r.bump, r.rut, r.rutShake], [0, 0, 0]);
+  // Free Practice is ridden on the track as built too, so its laps still count for a best lap.
+  const practice = race(new Track(course('dusk')), true, 20, false, 7, true);
+  assert.equal(practice.session.practice, true);
+  assert.equal(practice.session.track.surface, null);
   // A race asked for with wear has it, and going back to setup takes it away again.
   const raced = race(new Track(course('dusk')), true, 30);
   assert.ok(raced.session.track.surface);
@@ -197,27 +236,21 @@ test('wear physics is off in Time Trial', () => {
   assert.equal(new SaveStore(storage).wearPhysics, false);
 });
 
-test('with wear off a race is the race it was, and with wear on it is a different one', () => {
-  // Wear physics left out and switched off are the same race.
+test('a wear-off race leaves no trace of wear, also straight after a wear-on race', () => {
+  // (That wear off is the riding it was before this milestone is the baselines' job: pace-gate and the rest.)
   const off = race(new Track(course('dusk')), false, 110);
-  const track = new Track(course('dusk'));
-  const session: RaceSession = new RaceSession(
-    {sample: () => npcControl(session.riders[0], track, [], 'club'), connectedGamepads: () => []},
-    quiet,
-  );
-  session.grid({track, npcCount: 8, humanCount: 0, practice: false, assignments: []});
-  session.start({lapCount: 9, difficulty: 'club', seed: 7});
-  const trace: number[] = [];
-  for (let i = 0; session.raceTime < 110; i++) {
-    session.step(STEP);
-    if (i % 30 === 0) for (const r of session.riders) trace.push(r.x, r.y, r.z, r.speed, r.heading, r.progress.lap);
-  }
-  assert.deepEqual(trace, off.trace);
   assert.equal(off.session.track.surface, null);
-  // A track that had a worn surface and has it no longer rides as built: nothing lingers on the riders.
-  const on = race(new Track(course('dusk')), true, 110);
+  for (const r of off.session.riders) assert.deepEqual([r.bump, r.rut, r.rutShake, r.rutHeld], [0, 0, 0, false]);
+  // With wear on it is a different race, and the riders carry ruts and bumps.
+  const track = new Track(course('dusk'));
+  const on = race(track, true, 110);
   assert.notDeepEqual(on.trace, off.trace);
   assert.ok(on.session.riders.some(r => r.rut > 0 || r.bump !== 0));
+  // The same track, raced again with wear off: the race it would have been on a track never worn.
+  const after = race(track, false, 110);
+  assert.equal(track.surface, null);
+  assert.deepEqual(after.trace, off.trace);
+  for (const r of after.session.riders) assert.deepEqual([r.bump, r.rut, r.rutShake, r.rutHeld], [0, 0, 0, false]);
 });
 
 test('identical inputs give an identical race with wear on', () => {
@@ -260,27 +293,66 @@ test('crossing out of a rut sets the bike wobbling, and it settles', () => {
   r.progress = {...createProgress(s), lastLateral: 0};
   let shook = 0,
     settled = false,
-    held = 0;
+    held = 0,
+    started = 0;
   for (let i = 0; i < 120 * 3; i++) {
     const out = i > 6 && shook === 0 ? 0.6 : 0;
     stepRider(r, {...idleControl(), steer: -Math.sign(track.curvature(s)) * out, throttle: 0.4}, track, STEP, [r], 0);
     held = Math.max(held, r.rut);
-    if (i % 20 === 0)
-      console.log(
-        i,
-        r.rut.toFixed(2),
-        r.grounded,
-        r.crashTime,
-        r.surface.s.toFixed(1),
-        r.surface.lateral.toFixed(2),
-        r.speed.toFixed(1),
-        r.rutShake,
-      );
-    if (r.rutShake > 0) shook++;
-    else if (shook) settled = true;
+    if (r.rutShake > 0) {
+      if (!shook) started = i;
+      shook++;
+    } else if (shook) settled = true;
   }
   assert.ok(held >= 0.5, `rut ${held}`);
   assert.ok(shook > 30 && shook < 60, `shook for ${shook} steps`);
-  assert.ok(settled);
+  assert.ok(settled && started > 6);
   assert.equal(r.crashes, 0);
+
+  // A wobble leaves the bike pointing where it would have pointed: the swing dies away to nothing.
+  const coast = (shake: boolean) => {
+    const b = makeRider(track, 0, true, 0);
+    const q = track.at(s + 3, 4);
+    Object.assign(b, {x: q.x, z: q.z, y: track.height(q.s, 4), heading: Math.atan2(q.tx, q.tz), speed: 12, surface: q});
+    b.progress = {...createProgress(q.s), lastLateral: 4};
+    if (shake) Object.assign(b, {rutShake: 0.4, rutSide: 1});
+    let swung = 0;
+    const plain = b.heading;
+    stepRider(b, idleControl(), track, STEP, [b], 0);
+    swung = Math.abs(b.heading - plain);
+    for (let i = 0; i < 59; i++) stepRider(b, idleControl(), track, STEP, [b], 0);
+    return {heading: b.heading, swung, shaking: b.rutShake};
+  };
+  const shaken = coast(true),
+    steady = coast(false);
+  assert.ok(shaken.swung > steady.swung, 'the wobble swings the bike');
+  assert.equal(shaken.shaking, 0);
+  assert.ok(Math.abs(shaken.heading - steady.heading) < 0.002, `left ${shaken.heading - steady.heading} rad off`);
+
+  // A rut that simply ends ahead of the bike does not wobble it: riding straight down the strip and off its end.
+  const along = makeRider(track, 0, true, 0);
+  Object.assign(along, {
+    x: p.x,
+    z: p.z,
+    y: track.height(p.s, 0),
+    heading: Math.atan2(p.tx, p.tz),
+    speed: 14,
+    surface: p,
+  });
+  along.progress = {...createProgress(s), lastLateral: 0};
+  let inRut = 0,
+    ended = false;
+  for (let i = 0; i < 120 * 6 && !ended; i++) {
+    // Steered to hold the middle of the track, where the strip is.
+    const steer = Math.max(-1, Math.min(1, -along.surface.lateral * 0.8 + track.curvature(along.surface.s) * 14));
+    stepRider(along, {...idleControl(), steer, throttle: 0.3}, track, STEP, [along], 0);
+    inRut = Math.max(inRut, along.rut);
+    assert.equal(
+      along.rutShake,
+      0,
+      `wobbled at ${along.surface.s.toFixed(1)} m, ${along.surface.lateral.toFixed(2)} across`,
+    );
+    ended = inRut >= 0.5 && along.rut === 0 && strip.rut(along.surface.s, 0) === 0;
+  }
+  assert.ok(ended, `rode off the end of the rut (deepest ${inRut}, lateral ${along.surface.lateral})`);
 });

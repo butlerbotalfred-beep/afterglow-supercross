@@ -224,7 +224,7 @@ In a race the wear also changes the riding, unless **Track wear changes the ridi
 - **Braking bumps** form where riders brake for a turn, up to 6 cm from top to bottom. They are part of the ground the bike stands on, and braking over them is up to 20% weaker.
 - Computer riders move towards a rut when one is within reach.
 
-Time Trial is always ridden on the track as built, so lap records and ghosts stay comparable. A lap ridden with wear physics on sets no record.
+Time Trial and Free Practice are always ridden on the track as built, so lap records and ghosts stay comparable. A lap ridden with wear physics on sets no record.
 
 `npm run test:wear` runs a 3-lap race of eight in a browser, photographs the track before and after, and checks the setting. `npm run wear-check` runs 5-lap races of eight with wear physics on and checks nobody fails to finish and the pace holds (`-- --all` for every circuit at every pace, `-- --off` for the same races without wear).
 

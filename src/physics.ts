@@ -67,6 +67,8 @@ export interface Rider {
   rutShake: number;
   /** True from when the bike is well down in a rut until it has climbed out of it. */
   rutHeld: boolean;
+  /** Where across the track the bike last was while well down in a rut. */
+  rutLateral: number;
   rutSide: number;
   /** How loaded the suspension is from holding the stick straight back on the ground, 0 to 1. */
   preload: number;
@@ -144,6 +146,7 @@ export function makeRider(track: Track, id: number, human: boolean, color: numbe
     rut: 0,
     rutShake: 0,
     rutHeld: false,
+    rutLateral: 0,
     rutSide: 0,
     crashAge: 0,
     crashSide: 1,
@@ -241,9 +244,12 @@ export function crash(r: Rider, reason: string, side = 1) {
 const RUT_HELD = 0.5;
 const RUT_LEFT = 0.2;
 const RUT_SHAKE_SECONDS = 0.4;
-/** The wobble's swing of the bars, in radians a second, and how fast it swings. */
-const RUT_SHAKE_YAW = 0.45;
+/** The wobble's swing of the bike's heading, in radians, and how fast it swings (radians a second). */
+const RUT_SHAKE_SWING = 0.017;
 const RUT_SHAKE_RATE = 26;
+/** How far the heading is swung `t` seconds into a wobble: it dies away to nothing, so a wobble leaves the bike pointing where it was. */
+const rutSwing = (t: number) =>
+  t >= RUT_SHAKE_SECONDS ? 0 : RUT_SHAKE_SWING * Math.sin(t * RUT_SHAKE_RATE) * (1 - t / RUT_SHAKE_SECONDS);
 /**
  * One physics step of one rider. The riding itself is `ride`; this adds what wear physics puts on top when
  * the track has a worn surface: the bike sits on the braking bumps, and wobbles when it crosses out of a rut.
@@ -262,22 +268,23 @@ export function stepRider(r: Rider, c: Control, track: Track, dt: number, others
   r.y -= r.bump;
   if (r.rutShake > 0 && r.grounded && r.crashTime === 0) {
     const t = RUT_SHAKE_SECONDS - r.rutShake;
-    r.heading += r.rutSide * RUT_SHAKE_YAW * Math.sin(t * RUT_SHAKE_RATE) * (r.rutShake / RUT_SHAKE_SECONDS) * dt;
+    r.heading += r.rutSide * (rutSwing(t + dt) - rutSwing(t));
   }
   r.rutShake = Math.max(0, r.rutShake - dt);
-  const lateralBefore = r.surface.lateral;
   ride(r, c, track, dt, others, slideAggression);
   const riding = r.grounded && r.crashTime === 0 && r.recovery === 0;
   r.rut = riding ? surface.rut(r.surface.s, r.surface.lateral) : 0;
   if (!riding) r.rutHeld = false;
-  else if (r.rut >= RUT_HELD) r.rutHeld = true;
-  else if (r.rutHeld && r.rut < RUT_LEFT) {
+  else if (r.rut >= RUT_HELD) {
+    r.rutHeld = true;
+    r.rutLateral = r.surface.lateral;
+  } else if (r.rutHeld && r.rut < RUT_LEFT) {
     r.rutHeld = false;
-    // Only climbing out sideways shakes the bike; a rut that simply ends ahead of it does not.
-    const sideways = Math.abs(r.surface.lateral - lateralBefore) > 0.15 * dt;
-    if (sideways && r.speed > 6) {
+    // Only climbing out sideways shakes the bike: the rut is still there beside it, where it was riding.
+    // A rut that simply ends ahead of the bike does not.
+    if (r.speed > 6 && surface.rut(r.surface.s, r.rutLateral) >= RUT_HELD) {
       r.rutShake = RUT_SHAKE_SECONDS;
-      r.rutSide = r.surface.lateral >= lateralBefore ? 1 : -1;
+      r.rutSide = r.surface.lateral >= r.rutLateral ? 1 : -1;
     }
   }
   r.bump = riding ? surface.bump(r.surface.s, r.surface.lateral) : 0;

@@ -242,7 +242,8 @@ export class RaceSession {
   start({lapCount, difficulty, seed = 0, catchUp = false, timeLimit = 0, wearPhysics = false}: RaceConfig) {
     const surface = surfaceFor(this.track);
     surface.clear();
-    this.track.surface = wearPhysics && !this.trial ? surface : null;
+    // Races only: practice and Time Trial (which is run as practice) are ridden on the track as built.
+    this.track.surface = wearPhysics && !this.practice ? surface : null;
     this.catchUp = catchUp;
     this.timeLimit = this.practice ? 0 : timeLimit;
     this.lapCount = this.timeLimit ? Infinity : lapCount;

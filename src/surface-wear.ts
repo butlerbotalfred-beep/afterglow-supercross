@@ -107,10 +107,15 @@ export class SurfaceWear {
   private readonly wave: number;
   /** The cells each rider last wore, by rider id, so a cell is worn once a pass. */
   private last = new Map<number, {rut: number; bump: number}>();
-  /** Goes up whenever the height of the ground changes, so the drawn track knows to catch up. */
-  version = 0;
-  /** The stretch of the lap whose height has changed since `takeChanged` was last called, or null. */
-  private changed: {from: number; to: number} | null = null;
+  /** The bump cells along the lap whose height has changed and has not been drawn yet, and how many. */
+  private readonly dirty: Uint8Array;
+  private waiting = 0;
+  /** The bump cells along the lap that have had bumps since the last clear. */
+  private readonly touched: Uint8Array;
+  /** Set when the surface is cleared: the drawn track should catch up at once, not a little at a time. */
+  private urgent = false;
+  /** How far `warm` has got round the lap. */
+  private warmed = 0;
 
   constructor(private readonly track: SurfaceTrack) {
     const reach = track.halfWidth + MARGIN;
@@ -121,6 +126,8 @@ export class SurfaceWear {
     const step = track.length / this.bumps.along;
     this.flat = new Uint8Array(this.bumps.along);
     this.sharp = new Uint8Array(this.bumps.along);
+    this.dirty = new Uint8Array(this.bumps.along);
+    this.touched = new Uint8Array(this.bumps.along);
     for (let i = 0; i < this.bumps.along; i++) {
       const from = i * step - 2,
         to = (i + 1) * step + 6;
@@ -165,18 +172,49 @@ export class SurfaceWear {
   }
   /** The memory the surface holds, in bytes. */
   get bytes() {
-    return this.ruts.cells.byteLength + this.bumps.cells.byteLength + this.flat.byteLength + this.sharp.byteLength;
+    return (
+      this.ruts.cells.byteLength +
+      this.bumps.cells.byteLength +
+      this.flat.byteLength +
+      this.sharp.byteLength +
+      this.dirty.byteLength +
+      this.touched.byteLength
+    );
+  }
+  /**
+   * Looks at the next few bump cells for sharp bends ahead of time, so the physics step that first brakes
+   * somewhere does not have to. What it finds is the same whenever it is found. True once the lap is done.
+   */
+  warm(cells: number) {
+    for (; cells > 0 && this.warmed < this.bumps.along; cells--) this.bends(this.warmed++);
+    return this.warmed >= this.bumps.along;
+  }
+  /** Marks the height at a bump cell, and as far as its blend reaches (a cell either side), as changed. */
+  private mark(along: number) {
+    for (let near = -1; near <= 1; near++) {
+      const i = wrap(along + near, this.bumps.along);
+      this.touched[i] = 1;
+      if (!this.dirty[i]) {
+        this.dirty[i] = 1;
+        this.waiting++;
+      }
+    }
   }
   /** Fresh ground everywhere. */
   clear() {
     this.last.clear();
-    const dirty = this.bumps.cells.some(v => v > 0);
     this.ruts.cells.fill(0);
     this.bumps.cells.fill(0);
-    if (dirty) {
-      this.version++;
-      this.changed = {from: 0, to: this.track.length};
-    }
+    // Only where there were bumps does the drawn track have anything to take back.
+    for (let i = 0; i < this.touched.length; i++)
+      if (this.touched[i]) {
+        this.touched[i] = 0;
+        this.urgent = true;
+        if (!this.dirty[i]) {
+          this.dirty[i] = 1;
+          this.waiting++;
+        }
+      }
   }
   /** How deep the rut is at a point, 0 to 1. */
   rut(s: number, lateral: number) {
@@ -216,33 +254,39 @@ export class SurfaceWear {
       const along = bump < 0 ? -1 : (bump - (bump % this.bumps.across)) / this.bumps.across;
       if (along >= 0 && r.brake >= BRAKE_FROM && r.speed >= BRAKE_SPEED && this.bumpable(along)) {
         this.bumps.add(bump, Math.round(BUMP_PASS * Math.min(1, r.brake)));
-        this.version++;
-        // The height changes as far as the blend reaches: a cell and a half either way.
-        const step = this.track.length / this.bumps.along;
-        const from = (along - 1.5) * step,
-          to = (along + 2.5) * step;
-        this.changed = this.changed
-          ? {from: Math.min(this.changed.from, from), to: Math.max(this.changed.to, to)}
-          : {from, to};
+        this.mark(along);
       }
     }
   }
   /**
-   * The stretch of the lap, in metres from the line, whose height has changed since this was last asked; it
-   * may start before 0 or end past the lap's length where it runs over the line. Null when nothing has.
+   * The stretches of the lap, in metres from the line, whose height has changed and has not been handed out
+   * yet: at most `cells` bump cells of them (the rest wait for the next call), or all of them after a clear.
+   * Empty when nothing has changed. Stretches never run over the line: one that does comes as two.
    */
-  takeChanged() {
-    const changed = this.changed;
-    this.changed = null;
-    return changed;
+  takeChanged(cells = Infinity) {
+    const stretches: {from: number; to: number}[] = [];
+    if (!this.waiting) return stretches;
+    const step = this.track.length / this.bumps.along;
+    let left = this.urgent ? Infinity : cells;
+    for (let i = 0; i < this.dirty.length && left > 0 && this.waiting > 0; i++) {
+      if (!this.dirty[i]) continue;
+      const from = i;
+      for (; i < this.dirty.length && this.dirty[i] && left > 0; i++, left--) {
+        this.dirty[i] = 0;
+        this.waiting--;
+      }
+      stretches.push({from: from * step, to: i * step});
+    }
+    if (!this.waiting) this.urgent = false;
+    return stretches;
   }
   /** For checks: every rut and bump cell worn through. */
   wearThrough() {
     this.ruts.cells.fill(FULL);
     for (let i = 0; i < this.bumps.along; i++)
       if (this.bumpable(i)) this.bumps.cells.fill(FULL, i * this.bumps.across, (i + 1) * this.bumps.across);
-    this.version++;
-    this.changed = {from: 0, to: this.track.length};
+    for (let i = 0; i < this.bumps.along; i++) this.mark(i);
+    this.urgent = true;
   }
 }
 

@@ -408,44 +408,62 @@ export class Track {
     return base + looks * (1 - Math.min(1, worn.rough(s, l) * 6)) + worn.bump(s, l);
   }
   /**
-   * Redraws the rows of a track mesh from `geometry()` that lie in a stretch of the lap, in metres from the
-   * line, to the worn surface given. Returns how many rows were redrawn.
+   * Redraws the rows of a track mesh from `geometry()` that lie in stretches of the lap, in metres from the
+   * line, to the worn surface given. `built` keeps the normals each row had as built: a point with no bumps
+   * gets its own back, so only the bumps themselves are lit anew. Returns how many rows were redrawn.
    */
-  redraw(g: THREE.BufferGeometry, from: number, to: number, worn: SurfaceWear, step = 0.5, lanes = 40) {
+  redraw(
+    g: THREE.BufferGeometry,
+    stretches: readonly {from: number; to: number}[],
+    worn: SurfaceWear,
+    built: Map<number, Float32Array>,
+    step = 0.5,
+    lanes = 40,
+  ) {
     const count = Math.ceil(this.length / step),
       row = this.length / count,
       width = lanes + 1;
     const position = g.getAttribute('position') as THREE.BufferAttribute,
       normal = g.getAttribute('normal') as THREE.BufferAttribute;
-    const first = Math.floor(from / row),
-      last = Math.min(first + count, Math.ceil(to / row));
-    // The row at the end of the lap is the row at its start, drawn twice.
     const rows = new Set<number>();
-    for (let i = first; i <= last; i++) {
-      const k = ((i % count) + count) % count;
-      rows.add(k);
-      if (k === 0) rows.add(count);
-    }
-    for (const i of rows)
-      for (let j = 0; j <= lanes; j++) {
-        const s = (i / count) * this.length,
-          l = ((j / lanes) * 2 - 1) * (this.halfWidth + 2.8);
-        position.setY(i * width + j, this.drawnHeight(s, l, j === 0 || j === lanes, worn));
+    for (const {from, to} of stretches) {
+      const first = Math.floor(from / row),
+        last = Math.min(first + count, Math.ceil(to / row));
+      for (let i = first; i <= last; i++) {
+        const k = ((i % count) + count) % count;
+        rows.add(k);
+        // The row at the end of the lap is the row at its start, drawn twice.
+        if (k === 0) rows.add(count);
       }
+    }
+    const lateral = (j: number) => ((j / lanes) * 2 - 1) * (this.halfWidth + 2.8);
+    for (const i of rows) {
+      if (!built.has(i)) built.set(i, (normal.array as Float32Array).slice(i * width * 3, (i + 1) * width * 3));
+      for (let j = 0; j <= lanes; j++)
+        position.setY(
+          i * width + j,
+          this.drawnHeight((i / count) * this.length, lateral(j), j === 0 || j === lanes, worn),
+        );
+    }
     // Light falls on the bumps by their slope, taken from the rows and lanes either side.
     const a = new THREE.Vector3(),
       b = new THREE.Vector3(),
+      c = new THREE.Vector3(),
       at = (i: number, j: number) => Math.min(count, Math.max(0, i)) * width + Math.min(lanes, Math.max(0, j));
-    for (const i of rows)
+    for (const i of rows) {
+      const kept = built.get(i)!;
       for (let j = 0; j <= lanes; j++) {
+        if (worn.rough((i / count) * this.length, lateral(j)) === 0) {
+          normal.setXYZ(i * width + j, kept[j * 3], kept[j * 3 + 1], kept[j * 3 + 2]);
+          continue;
+        }
         a.fromBufferAttribute(position, at(i + 1, j)).sub(b.fromBufferAttribute(position, at(i - 1, j)));
-        const across = new THREE.Vector3()
-          .fromBufferAttribute(position, at(i, j + 1))
-          .sub(b.fromBufferAttribute(position, at(i, j - 1)));
-        a.cross(across).normalize();
+        c.fromBufferAttribute(position, at(i, j + 1)).sub(b.fromBufferAttribute(position, at(i, j - 1)));
+        a.cross(c).normalize();
         if (a.y < 0) a.negate();
         normal.setXYZ(i * width + j, a.x, a.y, a.z);
       }
+    }
     position.needsUpdate = true;
     normal.needsUpdate = true;
     return rows.size;
