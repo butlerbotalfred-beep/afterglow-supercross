@@ -214,6 +214,12 @@ The number is on the bike's three plates and on the back of the jersey, where th
 
 `npm run test:rider` checks the editor in a browser and photographs the number on the bike at one, two and three digits.
 
+## Track wear
+
+The dirt darkens where the bikes ride, more where they are fast or sliding, so the racing line wears in over a race. It is only looked at: the riding is the same on worn dirt as on fresh. Every race starts on fresh dirt, and the track editor's preview never shows wear.
+
+`npm run test:wear` runs a 3-lap race of eight in a browser and photographs the track before and after.
+
 ## Circuit selection
 
 Choose a circuit in pre-race setup. Each has its own centerline, jump sequence and scenery; selection is retained on restart. Returning to setup and changing circuit rebuilds the environment and releases its previous graphics resources.

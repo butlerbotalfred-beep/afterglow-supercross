@@ -4,7 +4,8 @@ import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import {Track} from './track';
 import {addScenery} from './scenery';
 import {addStadium} from './stadium';
-import {dirtMaterial, barrierTexture} from './track-material';
+import {WearLayer, dirtMaterial, barrierTexture} from './track-material';
+import {wearFor} from './wear';
 import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
 export function textTexture(text: string, fg = '#fff5dc', bg = '#232737', w = 1024, h = 256) {
   const canvas = document.createElement('canvas');
@@ -122,7 +123,11 @@ export function createWorld(track: Track) {
     seed = (seed * 16807) % 2147483647;
     return seed / 2147483647;
   };
-  const terrain = new THREE.Mesh(track.geometry(), dirtMaterial());
+  // The race's wear is drawn on the track; a track too big for a wear picture is drawn without.
+  const grid = wearFor(track);
+  const wear = WearLayer.fits(grid) ? new WearLayer(grid) : undefined;
+  scene.userData.wear = wear;
+  const terrain = new THREE.Mesh(track.geometry(), dirtMaterial(false, undefined, wear));
   terrain.receiveShadow = true;
   scene.add(terrain);
   const mats = {

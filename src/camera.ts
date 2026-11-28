@@ -8,6 +8,8 @@ export class ChaseCamera {
   yaw = 0;
   /** Radians the camera is swung round the rider from straight behind. 0 in play; development checks set it. */
   orbit = 0;
+  /** A fixed place to look from and at, in world metres, instead of following the rider. Development checks only. */
+  fixed: {from: number[]; to: number[]} | null = null;
   update(r: Rider, track: Track, dt: number, distance: number, shake: number, time: number) {
     if (!this.initialized) this.yaw = r.heading;
     const delta = Math.atan2(Math.sin(r.heading - this.yaw), Math.cos(r.heading - this.yaw));
@@ -31,6 +33,11 @@ export class ChaseCamera {
     look.y += Math.sin(time * 43) * shake * Math.min(1, r.speed / 20) * 0.04;
     this.camera.lookAt(look);
     this.camera.fov = 63 + Math.min(5, r.speed * 0.14);
+    if (this.fixed) {
+      this.camera.position.fromArray(this.fixed.from);
+      this.camera.lookAt(new THREE.Vector3().fromArray(this.fixed.to));
+      this.camera.fov = 60;
+    }
     this.camera.updateProjectionMatrix();
   }
 }

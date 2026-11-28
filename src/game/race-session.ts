@@ -6,6 +6,7 @@ import {StartGate, pastHoleshot} from '../gate';
 import {GhostRecorder, type Ghost, type GhostPose} from '../ghost';
 import {progressDistance} from '../race';
 import {catchUpEase, gridFor, shuffled, type RiderProfile} from '../riders';
+import {WearGrid, wearFor} from '../wear';
 import {collide, idleControl, makeRider, npcControl, stepRider, type Rider} from '../physics';
 import {createTiming, fasterLap, recordStep, type LapTime, type RiderTiming} from '../timing';
 import type {Track} from '../track';
@@ -132,6 +133,8 @@ export class RaceSession {
   reviewFrozen = false;
   reviewCrashTest = '';
   track!: Track;
+  /** How worn the dirt is in the race being run. Only drawn: no rider reads it. */
+  wear: WearGrid | null = null;
   private lastTickSound = 4;
   private recorder = new GhostRecorder();
   /** The race time of the first pose the recorder was given for the lap being ridden. */
@@ -159,6 +162,8 @@ export class RaceSession {
     } = config;
     let {humanCount} = config;
     this.track = track;
+    this.wear = wearFor(track);
+    this.wear.clear();
     this.trial = trial;
     this.practice = practice || trial;
     if (trial) humanCount = 1;
@@ -248,6 +253,7 @@ export class RaceSession {
     this.timing = this.riders.map(() => createTiming());
     this.beginGhost(0);
     this.holeshot = null;
+    this.wear?.clear();
     this.gate = this.practice ? null : new StartGate(this.seed, this.riders, difficulty);
   }
   /** The lap a rider's sector times are compared with: the saved best (humans only) or their best this session. */
@@ -256,6 +262,8 @@ export class RaceSession {
   }
   toSetup() {
     this.reviewCrashTest = '';
+    // Back at the setup screen the dirt is fresh: the last race's line is not shown behind the menus.
+    this.wear?.clear();
     this.phase = 'setup';
     this.paused = false;
   }
@@ -415,6 +423,7 @@ export class RaceSession {
         riders,
         r.human ? this.slideAggression : 1,
       );
+      this.wear?.ride(r);
       if (this.gate && this.holeshot === null && pastHoleshot(r.progress, track)) {
         this.holeshot = r.id;
         screen.holeshot?.(r);
