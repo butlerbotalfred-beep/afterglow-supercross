@@ -95,17 +95,19 @@ export function asSeason(v: unknown): Season | null {
   if (s.version !== SEASON_VERSION || typeof s.seed !== 'number' || !DIFFICULTIES.includes(s.difficulty as string))
     return null;
   if (!Array.isArray(s.entrants) || s.entrants.length !== SEASON_RIDERS) return null;
-  const entrants: SeasonEntrant[] = [];
+  // Entrants are rebuilt from what a season can hold, never copied: the humans first, under their player
+  // names, then exactly the computer riders the pace setting picks, as the roster has them now. A season from
+  // before a roster change is therefore not carried on.
+  const humans = s.entrants.filter(e => e && typeof e === 'object' && e.human === true).length;
+  if (humans > 4) return null;
+  const expected = humans
+    ? newSeason(humans, s.difficulty as string, 1).entrants
+    : aiSeason(s.difficulty as string, 1).entrants;
   for (const [id, e] of s.entrants.entries()) {
-    if (!e || typeof e !== 'object' || e.id !== id || typeof e.human !== 'boolean') return null;
-    if (typeof e.name !== 'string' || typeof e.number !== 'number' || typeof e.color !== 'number') return null;
-    // Humans first, and every computer rider still in the roster.
-    if (e.human && id > 0 && !entrants[id - 1].human) return null;
-    const entrant = {id, human: e.human, name: e.name, number: e.number, color: e.color};
-    if (!e.human && !profileOf(entrant)) return null;
-    entrants.push(entrant);
+    const want = expected[id];
+    if (!e || typeof e !== 'object' || e.id !== id || e.human !== want.human || e.number !== want.number) return null;
   }
-  if (entrants.filter(e => e.human).length > 4) return null;
+  const entrants = expected;
   if (!Array.isArray(s.rounds) || s.rounds.length !== SEASON_ROUNDS) return null;
   const rounds: SeasonRound[] = [];
   let open = false;

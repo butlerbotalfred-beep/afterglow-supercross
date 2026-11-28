@@ -55,7 +55,7 @@ if (args.includes('--round')) {
       console.log(
         `season-check: ${ok ? 'ok  ' : 'FAIL'} ${level.padEnd(7)} round ${i + 1} ${SEASON_COURSES[i].id.padEnd(6)} ` +
           `heat ${r.seconds.heat.toFixed(1)} s + main ${r.seconds.main.toFixed(1)} s = ${minutes.toFixed(1)} min, ` +
-          `${r.crashes} crashes`,
+          `winner home after ${((r.won.heat + r.won.main) / 60).toFixed(1)} min, ${r.crashes} crashes`,
       );
     });
     // Valid standings: the season is complete and reads back as stored, every rider has five results, the

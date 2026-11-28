@@ -416,9 +416,12 @@ function refreshSlots() {
       .slice(0, humanCount)
       .every((d, i) => d && ready[i] && (d.kind !== 'gamepad' || pads.some(p => p.index === d.index)));
   el<HTMLButtonElement>('start').disabled = !valid;
+  const riders = seasonRunning() ? season!.entrants.filter(e => e.human).length : 1;
   el('setup-status').textContent = valid
     ? 'All riders ready. See you at the gate.'
-    : 'Assign a unique device and ready each rider. Press a gamepad button to connect.';
+    : iphoneMode && riders > 1
+      ? `This season has ${riders} riders. Choose Mac / Keyboard & gamepads above to carry on with it.`
+      : 'Assign a unique device and ready each rider. Press a gamepad button to connect.';
 }
 function buildGrid() {
   for (const m of models) {
@@ -465,9 +468,18 @@ function loadPersonalBest() {
 }
 function buildHud(lapCount: number) {
   loadPersonalBest();
-  el('hud').innerHTML = hudHtml(humanCount, session.riders, assignments, practice || trial, lapCount);
+  el('hud').innerHTML = hudHtml(
+    humanCount,
+    session.riders,
+    assignments,
+    practice || trial,
+    lapCount,
+    seasonRace ? 'CHAMPIONSHIP' : undefined,
+  );
   viewHud = [...el('hud').querySelectorAll<HTMLElement>('.viewport-hud')];
 }
+/** True in Championship mode while the season in hand has races still to run. */
+const seasonRunning = () => seasonMode && !!season && !seasonComplete(season);
 /** What the two buttons under the results do next: another ride, the next season race, or the standings. */
 function labelResultsButtons() {
   const next = season && racedInSeason ? nextRace(season) : null;
@@ -503,6 +515,14 @@ function afterResults() {
 /** Championship: the race to run now, starting a new season first if there is none to carry on with. */
 function seasonRaceToRun() {
   if (!season || seasonComplete(season)) {
+    // Another tab may have started a season since this page loaded. Show it instead of starting over it.
+    const stored = new SaveStore(browserStorage()).season;
+    if (stored && seasonUnfinished(stored)) {
+      season = stored;
+      refreshSeason();
+      refreshSlots();
+      return null;
+    }
     const humans = Number(el<HTMLSelectElement>('humans').value);
     const answer = startNewSeason(
       season,
@@ -517,9 +537,9 @@ function seasonRaceToRun() {
   return nextRace(season);
 }
 function startRace() {
-  seasonRace = null;
   if (seasonMode) {
     const humans = season && !seasonComplete(season) ? season.entrants.filter(e => e.human).length : humanCount;
+    // Nothing changes if the race cannot start: a season race already running stays the one being run.
     if (!devicesReady(assignments, humans)) return;
     seasonRace = seasonRaceToRun();
     if (!seasonRace || !season) return;
@@ -532,6 +552,8 @@ function startRace() {
       rebuildTrack(new Track(seasonRace.course));
     }
   } else {
+    if (!devicesReady(assignments, Number(el<HTMLSelectElement>('humans').value))) return;
+    seasonRace = null;
     humanCount = Number(el<HTMLSelectElement>('humans').value);
     npcCount = Number(el<HTMLSelectElement>('npcs').value);
   }
@@ -794,7 +816,8 @@ function pollJoins() {
     const assigned = assignments.slice(0, humanCount).findIndex(d => d?.kind === 'gamepad' && d.index === p.index);
     if ((join && (assigned < 0 || !ready[assigned])) || (waitingForController && (pressed || p.index >= 1000))) {
       const slot = controllerJoinSlot(assignments.slice(0, humanCount), p.index, practice);
-      if (slot >= 0) {
+      // A season in progress has its riders: a new controller can take a free place but not add one.
+      if (slot >= 0 && !(slot === humanCount && seasonRunning())) {
         if (slot === humanCount) {
           humanCount++;
           el<HTMLSelectElement>('humans').value = String(humanCount);

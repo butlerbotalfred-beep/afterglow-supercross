@@ -252,6 +252,46 @@ test('a timed race ends by the rule: time expires, then one more lap', () => {
   assert.equal(short.lapCount, Infinity);
 });
 
+test('time running out between the leader and a rider behind on the same lap does not cost the race a lap', () => {
+  // Eight computer riders, the same race three times. First with a clock that never runs out, to find when the
+  // leader and the last rider complete their third lap.
+  const season = aiSeason('club', 31);
+  const run = (seconds: number) => {
+    const race = {...nextRace(season)!, seconds};
+    const session = new RaceSession(
+      {sample: () => npcControl(session.riders[0], coast, [], 'club'), connectedGamepads: () => []},
+      quiet,
+    );
+    session.grid(seasonGrid(season, race, coast, []));
+    session.start(seasonStart(season, race));
+    return session;
+  };
+  const open = run(1e9);
+  const third: number[] = [];
+  while (third.length < 8) {
+    const before = open.riders.map(r => r.progress.lap);
+    open.step(STEP);
+    open.riders.forEach((r, i) => r.progress.lap === 3 && before[i] === 2 && third.push(open.raceTime));
+  }
+  const [leaderAt, lastAt] = [third[0], third[7]];
+  assert.ok(lastAt - leaderAt > 1, 'the field is spread out');
+  // Time up just after the leader has started lap 4, with riders still to complete lap 3: their crossings are
+  // not the leader's. The leader completes lap 4, and lap 5 is the last.
+  const between = run(leaderAt + 0.5);
+  while (between.phase !== 'results') between.step(STEP);
+  assert.equal(between.flagLap, 5);
+  assert.equal(ranking(between.riders, coast)[0].finishedLaps, 5);
+  // Time up just before the leader gets there: lap 3 is the lap in hand, and lap 4 is the last.
+  const before = run(leaderAt - 0.5);
+  while (before.phase !== 'results') before.step(STEP);
+  assert.equal(before.flagLap, 4);
+  // Either way all eight are classified, on the winner's lap or behind it.
+  for (const session of [between, before]) {
+    assert.ok(session.riders.every(r => r.finished !== null && r.finishedLaps! <= session.flagLap!));
+    assert.deepEqual([...seasonOrder(session)].sort(), [0, 1, 2, 3, 4, 5, 6, 7]);
+  }
+});
+
 test('riders on different laps are classified by laps, then time, with riders still out placed where they are', () => {
   const rider = (id: number, finished: number | null, finishedLaps: number | undefined, lap: number, s: number) =>
     ({
@@ -317,6 +357,12 @@ test('closing and reopening resumes at the next race', () => {
   const blocked = new SaveStore(null);
   assert.equal(blocked.setSeason(newSeason(1, 'club', 1)), false);
   assert.ok(blocked.season);
+  // The same when the browser refuses the write (storage full): not kept, and nothing there on reopening.
+  const full = {getItem: () => null, setItem: () => assert.fail('storage is full')};
+  const refused = new SaveStore(full);
+  assert.equal(refused.setSeason(newSeason(1, 'club', 1)), false);
+  assert.ok(refused.season);
+  assert.equal(new SaveStore(full).season, null);
 });
 
 test('a stored season that is damaged is not resumed', () => {
@@ -360,6 +406,29 @@ test('a stored season that is damaged is not resumed', () => {
     broken(s => (s.difficulty = 'pro')),
     null,
   );
+  assert.equal(
+    broken(s => (s.entrants[6].number = s.entrants[5].number)),
+    null,
+    'the same rider twice',
+  );
+  assert.equal(
+    broken(s => (s.difficulty = 'expert')),
+    null,
+    'riders who are not the ones that pace picks',
+  );
+  // Names and colours are not taken from storage: they come from the roster and the player slots.
+  const renamed = broken(s => {
+    s.entrants[0].name = '<img src=x>';
+    s.entrants[5].name = '<b>X</b>';
+    s.entrants[5].color = 1;
+  });
+  assert.deepEqual(renamed, good);
+  // A season with nobody playing in it (an automated one) is not offered to a player.
+  const storage = memory();
+  const save = new SaveStore(storage);
+  save.setSeason(aiSeason('club', 1));
+  assert.equal(new SaveStore(storage).season, null);
+  assert.ok(asSeason(JSON.parse(JSON.stringify(aiSeason('club', 1)))));
 });
 
 test('starting a new season over an unfinished one asks for confirmation', () => {

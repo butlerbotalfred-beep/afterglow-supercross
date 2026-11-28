@@ -273,6 +273,14 @@ export class RaceSession {
     // A race over laps stays open for a while after the first human; a timed one after its winner.
     if ((r.human || this.timeLimit) && this.firstFinish === null) this.firstFinish = this.raceTime;
   }
+  /**
+   * True when no rider is further round the race than `r`. A rider crossing the line on the same lap count as
+   * the leader, but behind on the road, is not the leader: the leader is already into the next lap.
+   */
+  private leads(r: Rider) {
+    const covered = progressDistance(r.progress, this.track.length);
+    return this.riders.every(o => o === r || progressDistance(o.progress, this.track.length) <= covered);
+  }
   /** Timed race: a rider who has not finished has just crossed the line. */
   private timedCrossing(r: Rider) {
     if (this.flagOut) this.finish(r);
@@ -281,7 +289,7 @@ export class RaceSession {
       this.flagOut = true;
       this.finish(r);
       this.screen.cue(1100, 0.35);
-    } else if (this.raceTime >= this.timeLimit && this.riders.every(o => o.progress.lap <= r.progress.lap)) {
+    } else if (this.raceTime >= this.timeLimit && this.leads(r)) {
       // Time is up and this is the leader: one more lap.
       this.flagLap = r.progress.lap + 1;
       this.screen.cue(880, 0.3);

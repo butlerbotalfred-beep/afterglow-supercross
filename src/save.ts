@@ -301,19 +301,24 @@ export class SaveStore {
   }
   /** The championship season in progress or last finished, or null. */
   get season(): Season | null {
-    return asSeason(this.data.career.season);
+    // A season to play has somebody playing in it.
+    const season = asSeason(this.data.career.season);
+    return season?.entrants[0].human ? season : null;
   }
   /**
    * Stores the season (null forgets it). Returns false when it could not be kept beyond this visit: storage
    * blocked or full, or the save belongs to a newer version of the game.
    */
   setSeason(season: Season | null) {
-    let kept = false;
+    // Kept only if the change was made and the browser took the write.
+    let changed = false,
+      kept = false;
     try {
       this.update(stored => {
         stored.career = {...(isObject(stored.career) ? stored.career : {}), season};
-        kept = true;
+        changed = true;
       });
+      kept = changed;
     } catch {}
     this.data.career = {...this.data.career, season};
     return kept;

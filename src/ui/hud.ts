@@ -86,6 +86,8 @@ export function hudHtml(
   assignments: (Device | null)[],
   practice: boolean,
   lapCount: number,
+  /** The kind of race, for the panel a three-rider screen has in its spare quarter. */
+  title = 'RACE NIGHT',
 ) {
   return (
     views(humanCount)
@@ -112,8 +114,8 @@ export function hudHtml(
       )
       .join('') +
     (humanCount === 3
-      ? '<section class="race-info"><div class="eyebrow">LIVE / RACE NIGHT</div>' +
-        '<h2>RACE NIGHT.</h2><div id="live-standings"></div>' +
+      ? `<section class="race-info"><div class="eyebrow">LIVE / ${title}</div>` +
+        `<h2>${title}.</h2><div id="live-standings"></div>` +
         '<small>R / B to recover · Esc / Menu to pause</small></section>'
       : '')
   );

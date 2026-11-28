@@ -37,6 +37,8 @@ export function runRound(season: Season, round: number) {
   const quiet = {countdown() {}, racing() {}, cue() {}, landing() {}, pause() {}, results() {}};
   const result: SeasonRound = {heat: null, main: null};
   const seconds = {heat: 0, main: 0};
+  /** When the winner took the flag: the race then stays open for the riders still out. */
+  const won = {heat: 0, main: 0};
   let crashes = 0;
   const track = new Track(roundRace(season, round).course);
   for (const stage of ['heat', 'main'] as const) {
@@ -49,7 +51,8 @@ export function runRound(season: Season, round: number) {
     if (session.phase !== 'results') throw new Error(`Round ${round + 1} ${stage} did not finish.`);
     result[stage] = seasonOrder(session);
     seconds[stage] = session.raceTime;
+    won[stage] = session.firstFinish ?? session.raceTime;
     crashes += session.riders.reduce((n, r) => n + r.crashes, 0);
   }
-  return {round: result, seconds, crashes};
+  return {round: result, seconds, won, crashes};
 }
