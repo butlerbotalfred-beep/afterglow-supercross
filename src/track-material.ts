@@ -75,7 +75,7 @@ export function dirtMaterial(ground = false, onLoad?: () => void, wear?: WearLay
             `#include <map_fragment>
         // Ridden dirt is packed down and damp: darker and a little redder, patchy with the grain of the clay.
         float worn=smoothstep(.02,.7,texture2D(wearMap,vWearUv).r);
-        float grain=texture2D(map,vMapUv*2.7).g;
+        float grain=sampledDiffuseColor.g;
         float pack=worn*(.34+.3*grain);
         diffuseColor.rgb*=vec3(1.-pack,1.-pack*1.08,1.-pack*1.2);`,
           );
@@ -100,6 +100,7 @@ export function dirtMaterial(ground = false, onLoad?: () => void, wear?: WearLay
       );
     };
     material.customProgramCacheKey = () => (wear ? 'clay-ruts-v3-wear' : 'clay-ruts-v3');
+    material.userData.wear = wear ?? null;
   }
   return material;
 }

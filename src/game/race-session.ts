@@ -262,6 +262,8 @@ export class RaceSession {
   }
   toSetup() {
     this.reviewCrashTest = '';
+    // Back at the setup screen the dirt is fresh: the last race's line is not shown behind the menus.
+    this.wear?.clear();
     this.phase = 'setup';
     this.paused = false;
   }

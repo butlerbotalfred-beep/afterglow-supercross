@@ -17,13 +17,23 @@ const SLIDE = 9;
  * The share of that left in the cells around it, by how many cells away (0 to 2, corners left out): a line
  * comes out about two metres wide and soft at the edges, as a pack of bikes leaves it.
  */
-const SPREAD = [
+const SHARES = [
   [0, 0, 1],
   [1, 0, 0.6],
   [1, 1, 0.45],
   [2, 0, 0.25],
   [2, 1, 0.15],
 ];
+/** Every cell of that stamp, as columns and rows from the middle and its share: 21 of them. */
+const STAMP: [number, number, number][] = [];
+for (const [a, b, share] of SHARES)
+  for (const [dc, dr] of [
+    [a, b],
+    [b, a],
+  ])
+    for (const sc of [1, -1])
+      for (const sr of [1, -1])
+        if (!STAMP.some(([c, r]) => c === dc * sc && r === dr * sr)) STAMP.push([dc * sc, dr * sr, share]);
 
 /** What the grid needs to know of a rider. */
 export interface WearSource {
@@ -47,8 +57,11 @@ export class WearGrid {
   readonly cells: Uint8Array;
   /** Goes up whenever a cell changes, so a picture of the grid knows when it is out of date. */
   version = 0;
-  /** The cell each rider was last in, by rider id, so a cell is worn once a pass however slowly it is crossed. */
-  private last = new Map<number, number>();
+  /**
+   * Where each rider last left wear, by rider id: the cell, so a cell is worn once a pass however slowly it
+   * is crossed, and the place, so a pass leaves the same whichever way it runs across the cells.
+   */
+  private last = new Map<number, {cell: number; x: number; z: number}>();
 
   constructor(track: Pick<Track, 'bounds' | 'halfWidth'>) {
     const pad = track.halfWidth + MARGIN;
@@ -92,28 +105,21 @@ export class WearGrid {
       return;
     }
     const cell = this.cellAt(r.x, r.z);
-    if (cell === this.last.get(r.id)) return;
-    this.last.set(r.id, cell);
+    const before = this.last.get(r.id);
+    if (cell === before?.cell) return;
+    // Wear by the metre: a line cutting the corners of cells enters more of them, and leaves less in each.
+    const travelled = before ? Math.hypot(r.x - before.x, r.z - before.z) / WEAR_CELL : 1;
+    this.last.set(r.id, {cell, x: r.x, z: r.z});
     if (cell < 0) return;
     const slide = Math.min(1, Math.max(r.powerSlide, Math.abs(r.slipAngle) / 0.6));
-    const amount = Math.round(BASE + PER_SPEED * Math.min(SPEED_CAP, r.speed) + SLIDE * slide);
+    const amount = (BASE + PER_SPEED * Math.min(SPEED_CAP, r.speed) + SLIDE * slide) * Math.min(1.5, travelled);
     const col = cell % this.cols,
       row = (cell - col) / this.cols;
-    for (const [a, b, share] of SPREAD) {
-      const left = Math.round(amount * share);
-      // Every cell that far away: (a, b) turned and mirrored, each once.
-      const offsets = new Set<number>();
-      for (const [dc, dr] of [
-        [a, b],
-        [b, a],
-      ])
-        for (const sc of [1, -1])
-          for (const sr of [1, -1]) {
-            const c = col + dc * sc,
-              r = row + dr * sr;
-            if (c >= 0 && r >= 0 && c < this.cols && r < this.rows) offsets.add(r * this.cols + c);
-          }
-      for (const at of offsets) this.add(at, left);
+    for (const [dc, dr, share] of STAMP) {
+      const c = col + dc,
+        at = row + dr;
+      if (c >= 0 && at >= 0 && c < this.cols && at < this.rows)
+        this.add(at * this.cols + c, Math.round(amount * share));
     }
     this.version++;
   }

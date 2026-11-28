@@ -1,11 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
+import {readFileSync, readdirSync} from 'node:fs';
 import {TUNING} from '../src/config.ts';
 import {COURSES} from '../src/courses.ts';
-import {npcControl, stepRider, makeRider} from '../src/physics.ts';
+import {npcControl} from '../src/physics.ts';
 import {Track} from '../src/track.ts';
 import {RaceSession} from '../src/game/race-session.ts';
+import {WEAR_REFRESH_MS, WearLayer} from '../src/track-material.ts';
 import {WEAR_CELL, WEAR_FULL, WearGrid, wearFor} from '../src/wear.ts';
 
 const STEP = TUNING.step;
@@ -63,23 +64,36 @@ test('the Dusk Valley wear grid is 0.5 MB or smaller', () => {
 });
 
 test('wear does not change the riding', () => {
-  // A rider's lap is step for step the same whatever has been worn: the physics never reads the grid.
-  const lap = (worn: boolean) => {
+  // The same race of eight three ways: as it is, with no grid at all, and with the dirt worn through
+  // everywhere before every step. Every rider is in the same place at the same speed all the way.
+  const ride = (mode: 'normal' | 'none' | 'worn') => {
     const track = new Track(dusk.course);
-    if (worn) wearFor(track).cells.fill(WEAR_FULL);
-    const r = makeRider(track, 0, false, 0);
+    const session: RaceSession = new RaceSession(
+      {sample: () => npcControl(session.riders[0], track, [], 'club'), connectedGamepads: () => []},
+      quiet,
+    );
+    session.grid({track, npcCount: 8, humanCount: 0, practice: false, assignments: [], difficulty: 'club', seed: 9});
+    session.start({lapCount: 1, difficulty: 'club', seed: 9});
+    if (mode === 'none') session.wear = null;
     const trace: number[] = [];
-    for (let i = 0; i < 120 * 40; i++) {
-      stepRider(r, npcControl(r, track, [], 'club'), track, STEP, [r], 1);
-      if (worn) wearFor(track).ride(r);
-      if (i % 120 === 0) trace.push(r.x, r.z, r.speed);
+    for (let i = 0; session.phase !== 'results' && i < 120 * 50; i++) {
+      if (mode === 'worn') session.wear!.cells.fill(WEAR_FULL);
+      session.step(STEP);
+      if (i % 60 === 0) for (const r of session.riders) trace.push(r.x, r.y, r.z, r.speed, r.heading, r.progress.lap);
     }
     return trace;
   };
-  assert.deepEqual(lap(true), lap(false));
-  // Nothing that rides or decides imports the grid.
-  for (const file of ['physics', 'track', 'takeoff', 'gate', 'riders', 'timing', 'season'])
-    assert.doesNotMatch(readFileSync(`src/${file}.ts`, 'utf8'), /['"]\.\/wear['"]/, `src/${file}.ts`);
+  const normal = ride('normal');
+  assert.ok(normal.length > 8 * 6 * 80);
+  assert.deepEqual(ride('none'), normal);
+  assert.deepEqual(ride('worn'), normal);
+  // Only the race session (which wears it) and the world and its material (which draw it) import the grid.
+  const importers = (readdirSync('src', {recursive: true}) as string[])
+    .filter(file => file.endsWith('.ts'))
+    .filter(file => /from '(\.\.?\/)+wear'/.test(readFileSync(`src/${file}`, 'utf8')))
+    .map(file => file.replaceAll('\\', '/'))
+    .sort();
+  assert.deepEqual(importers, ['game/race-session.ts', 'track-material.ts', 'world.ts']);
 });
 
 test('the racing line is worn after a 3-lap 8-rider race, most where the riders agree', () => {
@@ -116,14 +130,20 @@ test('the grid is empty at race start and in the editor preview', () => {
   assert.equal(sum(session.wear!.cells), 0);
   while (session.phase === 'countdown') session.step(STEP);
   assert.equal(sum(session.wear!.cells), 0);
-  // Lining up a new grid clears it too, so the setup screen never shows the last race's line.
+  // Going back to the setup screen clears it, so the last race's line is not shown behind the menus.
+  const back = race(dusk, 1, 3, 20);
+  assert.ok(sum(back.wear!.cells) > 0);
+  back.toSetup();
+  assert.equal(sum(back.wear!.cells), 0);
+  // Lining up a new grid clears it too.
   race(dusk, 1, 3, 20).grid({track: dusk, npcCount: 0, humanCount: 0, practice: true, assignments: []});
   assert.equal(sum(wearFor(dusk).cells), 0);
-  // The track editor's preview asks for the dirt without a wear layer, and never touches the grid.
-  const preview = readFileSync('src/track-preview.ts', 'utf8');
-  assert.match(preview, /dirtMaterial\(false, \(\) => this\.requestRender\(\)\)/);
-  assert.doesNotMatch(preview, /wear/i);
-  assert.doesNotMatch(readFileSync('src/track-editor.ts', 'utf8'), /wear/i);
+  // The track editor's preview: a wear layer reaches the dirt only as the third thing handed to
+  // dirtMaterial, and neither the preview nor the editor has anything to do with wear. Checked by reading.
+  const material = readFileSync('src/track-material.ts', 'utf8');
+  assert.equal(material.match(/shader\.uniforms\.wearMap/g)?.length, 1);
+  for (const file of ['track-preview', 'track-editor'])
+    assert.doesNotMatch(readFileSync(`src/${file}.ts`, 'utf8'), /wear/i, file);
 });
 
 test('wear is weighted by speed and slide, once a pass, and only from a bike on its wheels', () => {
@@ -153,4 +173,44 @@ test('wear is weighted by speed and slide, once a pass, and only from a bike on 
   assert.equal(grid.version, before);
   grid.clear();
   assert.equal(sum(grid.cells), 0);
+});
+
+test('a pass leaves the same wear whichever way it runs across the cells', () => {
+  const big = {bounds: {minX: 0, maxX: 60, minZ: 0, maxZ: 60}, halfWidth: 4.8};
+  const pass = (dx: number, dz: number) => {
+    const grid = new WearGrid(big);
+    for (let d = 0; d < 40; d += 20 * STEP) grid.ride(rider({x: 10 + dx * d, z: 10.2 + dz * d}));
+    return sum(grid.cells);
+  };
+  const straight = pass(1, 0);
+  for (const [dx, dz] of [
+    [0, 1],
+    [Math.SQRT1_2, Math.SQRT1_2],
+    [0.9, 0.436],
+  ])
+    assert.ok(Math.abs(pass(dx, dz) / straight - 1) < 0.1, `${dx}, ${dz}: ${pass(dx, dz)} against ${straight}`);
+});
+
+test('the wear picture is sent at most 4 times a second, and only when the grid has changed', () => {
+  const grid = new WearGrid(flat);
+  const layer = new WearLayer(grid);
+  assert.equal(layer.texture.image.data, grid.cells);
+  assert.equal(WEAR_REFRESH_MS, 250);
+  const first = layer.uploads;
+  // Twenty seconds at 60 frames a second with a bike wearing the track on every frame.
+  const sent: number[] = [];
+  for (let frame = 0; frame < 1200; frame++) {
+    const now = 5000 + (frame * 1000) / 60;
+    grid.ride(rider({x: 0.2 + (frame % 30) * 0.6}));
+    if (layer.refresh(now)) sent.push(now);
+  }
+  assert.equal(layer.uploads - first, sent.length);
+  assert.ok(sent.length >= 70 && sent.length <= 80, `${sent.length} in 20 s`);
+  for (let i = 1; i < sent.length; i++) assert.ok(sent[i] - sent[i - 1] >= WEAR_REFRESH_MS);
+  for (let i = 4; i < sent.length; i++) assert.ok(sent[i] - sent[i - 4] >= 1000, 'five within a second');
+  // Nothing changes: nothing is sent. Cleared: sent again, so the old line does not stay on screen.
+  layer.refresh(29000);
+  for (let now = 30000; now < 32000; now += 16) assert.equal(layer.refresh(now), false);
+  grid.clear();
+  assert.equal(layer.refresh(32000), true);
 });
