@@ -186,6 +186,19 @@ The computer riders are twelve made-up riders in `src/riders.ts`, each with a na
 
 A race replays exactly from its seed: the same seed and the same inputs give the same finishing order and times. `npm run roster-check` runs 50 seeded Club races on Dusk Valley, the fastest Club rider on every circuit against the old Club time, and the roster baselines in `baselines/roster.json`; `npm run roster-check -- --mistakes` rides every rider alone for 500 laps and compares the mistakes made with the rating, and `npm run roster-check -- --costs` measures what each kind of mistake costs on every circuit.
 
+## Championship
+
+**CHAMPIONSHIP** on the setup screen is a season of five rounds, one on each circuit in the order of the circuit list (Dusk Valley, Red Mesa, Pine Summit, Saltwind Coast, Iron Quarry). Eight riders race every time: the humans (one to four, all in the same season) and the computer riders the pace setting picks. The riders and the pace are fixed once a season has started.
+
+- **A round** is a heat and a main, both from the gate. The heat is 3 minutes plus a lap, the main 6 minutes plus a lap.
+- **Timed races.** When the clock reaches zero, the leader finishes the lap they are on and then rides one more; the first rider to complete that last lap wins. Everybody else finishes the next time they cross the line, so a lapped rider finishes a lap or more down. The race bar shows the time left, then `TIME UP · ONE MORE LAP FROM THE LINE`, `FINAL LAP` and `CHEQUERED FLAG`. A race closes two minutes after the winner; a rider still out is classified where they were.
+- **Gates.** The heat grid is drawn from the season's seed. The heat result is the gate order for the main: the heat winner starts from the first gate, second place from the next, and so on.
+- **Points** come from the mains only: 25, 22, 20, 18, 17, 16, 15, 14, so every main awards 147. Level on points, the rider with more main wins is ahead; if that is level too, the better result in the latest round decides.
+- **After a heat** the results window leads to the main; after a main it leads to the standings, and after round 5 to the final table and the champion.
+- **Saving.** The season is saved the moment a race ends. Close the game at any point and it opens on the season, waiting for the next race. A race left before its end is not recorded and is run again. **START OVER WITH A NEW SEASON** asks for a second answer when the season has races in it.
+
+Season rounds use the original circuits, not saved layouts. Race Night, Time Trial and Free Practice are as before. `npm run season-check` runs a whole Club season with eight computer riders (each round in its own process, about 20 seconds in all) and checks the round lengths and the final table; `npm run test:season` checks the season in a browser.
+
 ## Circuit selection
 
 Choose a circuit in pre-race setup. Each has its own centerline, jump sequence and scenery; selection is retained on restart. Returning to setup and changing circuit rebuilds the environment and releases its previous graphics resources.

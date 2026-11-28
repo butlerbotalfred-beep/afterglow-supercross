@@ -5,7 +5,7 @@ import {uniqueDevices, type Control, type Device} from '../input';
 import {StartGate, pastHoleshot} from '../gate';
 import {GhostRecorder, type Ghost, type GhostPose} from '../ghost';
 import {progressDistance} from '../race';
-import {catchUpEase, gridFor, shuffled} from '../riders';
+import {catchUpEase, gridFor, shuffled, type RiderProfile} from '../riders';
 import {collide, idleControl, makeRider, npcControl, stepRider, type Rider} from '../physics';
 import {createTiming, fasterLap, recordStep, type LapTime, type RiderTiming} from '../timing';
 import type {Track} from '../track';
@@ -58,6 +58,11 @@ export interface GridConfig {
   /** The pace setting, which picks the computer riders from the roster, and the seed for their grid order. */
   difficulty?: string;
   seed?: number;
+  /**
+   * A championship race: exactly these computer riders, in this order after the humans, and every rider's
+   * place on the grid (humans first, then the computer riders as listed). `npcCount` is then ignored.
+   */
+  lineup?: {profiles: RiderProfile[]; slots: number[]};
 }
 export interface RaceConfig {
   lapCount: number;
@@ -66,8 +71,16 @@ export interface RaceConfig {
   seed?: number;
   /** The catch-up assist: computer riders far ahead of the last human ease off, those far behind push on. */
   catchUp?: boolean;
+  /**
+   * A timed race, in seconds: once the time is up, the leader's next crossing of the line starts the last lap.
+   * The first rider to complete that lap wins, and everybody else finishes the next time they cross the line.
+   * `lapCount` is then ignored.
+   */
+  timeLimit?: number;
 }
 export const COUNTDOWN_SECONDS = 3.8;
+/** A timed race closes this long after the winner takes the flag, whoever is still out there. */
+export const TIMED_CLOSE_SECONDS = 120;
 
 /** True when every human slot has its own device. */
 export function devicesReady(assignments: (Device | null)[], humanCount: number) {
@@ -89,6 +102,14 @@ export class RaceSession {
   raceTime = 0;
   countdown = COUNTDOWN_SECONDS;
   firstFinish: number | null = null;
+  /** Seconds the race stays open after `firstFinish`. */
+  closeAfter: number = TUNING.finishTimeout;
+  /** A timed race's length in seconds; 0 for a race over a set number of laps. */
+  timeLimit = 0;
+  /** Timed race: the lap count that ends the race, known once the leader crosses the line after time is up. */
+  flagLap: number | null = null;
+  /** Timed race: the winner has taken the flag, so everybody finishes at the line. */
+  flagOut = false;
   /** The start gate of the race being run. Free Practice and Time Trial have none. */
   gate: StartGate | null = null;
   /** The id of the rider who took the holeshot in this race, once somebody has. */
@@ -122,15 +143,21 @@ export class RaceSession {
   ) {}
 
   /** Lines riders up on the start grid. Humans come first, then NPCs (none in practice). */
-  grid({track, humanCount, npcCount, practice, trial = false, assignments, difficulty = 'club', seed = 0}: GridConfig) {
+  grid(config: GridConfig) {
+    const {track, npcCount, practice, trial = false, assignments, difficulty = 'club', seed = 0, lineup} = config;
+    let {humanCount} = config;
     this.track = track;
     this.trial = trial;
     this.practice = practice || trial;
     if (trial) humanCount = 1;
-    this.riders = Array.from({length: humanCount + (this.practice ? 0 : npcCount)}, (_, i) =>
-      makeRider(track, i, i < humanCount, COLORS[i], i < humanCount ? assignments[i] || undefined : undefined),
-    );
-    const profiles = shuffled(gridFor(difficulty, this.riders.length - humanCount), seed);
+    const count = humanCount + (this.practice ? 0 : lineup ? lineup.profiles.length : npcCount);
+    this.riders = Array.from({length: count}, (_, i) => {
+      const device = i < humanCount ? assignments[i] || undefined : undefined;
+      const slot = lineup?.slots[i] ?? i;
+      const r = makeRider(track, i, i < humanCount, COLORS[i], device, slot);
+      return lineup ? Object.assign(r, {slot}) : r;
+    });
+    const profiles = lineup ? lineup.profiles : shuffled(gridFor(difficulty, this.riders.length - humanCount), seed);
     this.riders.forEach((r, i) => {
       const profile = profiles[i - humanCount];
       if (!r.human && profile) Object.assign(r, {profile, name: profile.name, color: profile.plate});
@@ -187,9 +214,13 @@ export class RaceSession {
     return true;
   }
   /** Starts the countdown for the riders already on the grid. */
-  start({lapCount, difficulty, seed = 0, catchUp = false}: RaceConfig) {
+  start({lapCount, difficulty, seed = 0, catchUp = false, timeLimit = 0}: RaceConfig) {
     this.catchUp = catchUp;
-    this.lapCount = lapCount;
+    this.timeLimit = this.practice ? 0 : timeLimit;
+    this.lapCount = this.timeLimit ? Infinity : lapCount;
+    this.flagLap = null;
+    this.flagOut = false;
+    this.closeAfter = this.timeLimit ? TIMED_CLOSE_SECONDS : TUNING.finishTimeout;
     this.difficulty = difficulty;
     this.seed = seed >>> 0;
     this.raceTime = 0;
@@ -236,9 +267,30 @@ export class RaceSession {
     this.paused = !this.paused;
     this.screen.pause(this.paused, missing);
   }
+  private finish(r: Rider) {
+    r.finished = this.raceTime;
+    r.finishedLaps = r.progress.lap;
+    // A race over laps stays open for a while after the first human; a timed one after its winner.
+    if ((r.human || this.timeLimit) && this.firstFinish === null) this.firstFinish = this.raceTime;
+  }
+  /** Timed race: a rider who has not finished has just crossed the line. */
+  private timedCrossing(r: Rider) {
+    if (this.flagOut) this.finish(r);
+    else if (this.flagLap !== null) {
+      if (r.progress.lap < this.flagLap) return;
+      this.flagOut = true;
+      this.finish(r);
+      this.screen.cue(1100, 0.35);
+    } else if (this.raceTime >= this.timeLimit && this.riders.every(o => o.progress.lap <= r.progress.lap)) {
+      // Time is up and this is the leader: one more lap.
+      this.flagLap = r.progress.lap + 1;
+      this.screen.cue(880, 0.3);
+    }
+  }
   private endRace() {
     this.phase = 'results';
-    this.riders.forEach(r => (r.dnf = r.finished === null));
+    // In a timed race a rider still out there when it closes is classified where it was, not a retirement.
+    this.riders.forEach(r => (r.dnf = r.finished === null && !this.timeLimit));
     this.screen.results();
   }
   /** Turns frame time into fixed physics steps. Returns how many steps ran. */
@@ -332,6 +384,7 @@ export class RaceSession {
         const p = this.poseBefore;
         [p.x, p.y, p.z, p.heading, p.pitch, p.lean] = [r.x, r.y, r.z, r.heading, r.pitch, r.lean];
       }
+      const lapBefore = r.progress.lap;
       stepRider(
         r,
         drive < 1 ? {...c, throttle: c.throttle * drive} : c,
@@ -358,16 +411,16 @@ export class RaceSession {
         }
       } else r.progress.crossings.length = 0;
       if (r.lastLanding > 3 && r.human) screen.landing(r.lastLanding);
-      if (!this.practice && r.finished === null && r.progress.lap >= this.lapCount) {
-        r.finished = this.raceTime;
-        if (r.human && this.firstFinish === null) this.firstFinish = this.raceTime;
-      }
+      if (this.timeLimit && r.finished === null && r.progress.lap > lapBefore) this.timedCrossing(r);
+      if (!this.practice && r.finished === null && r.progress.lap >= this.lapCount) this.finish(r);
     }
     collide(riders, track);
+    if (this.practice) return;
+    // A race with nobody at the controls (an automated season) runs until every rider is in.
+    const humans = riders.filter(r => r.human);
     if (
-      !this.practice &&
-      (riders.filter(r => r.human).every(r => r.finished !== null) ||
-        (this.firstFinish !== null && this.raceTime - this.firstFinish > TUNING.finishTimeout))
+      (humans.length ? humans : riders).every(r => r.finished !== null) ||
+      (this.firstFinish !== null && this.raceTime - this.firstFinish > this.closeAfter)
     )
       this.endRace();
   }

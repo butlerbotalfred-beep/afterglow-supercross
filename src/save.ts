@@ -6,6 +6,7 @@ import {PHYSICS_VERSION} from './config';
 import type {CourseId} from './courses';
 import {DEFAULT_VOLUMES, normalizeVolumes, type Volumes} from './audio';
 import {loadSlideAggression, normalizeSlideAggression} from './handling-settings';
+import {asSeason, type Season} from './season';
 import {COURSE_IDS, loadLayout, obstacleType, validateLayout, type TrackLayout} from './track-layout';
 
 export const SAVE_KEY = 'afterglow.save';
@@ -297,6 +298,25 @@ export class SaveStore {
     }
     // Not stored (blocked storage, or a save from a newer version): keep it for this visit.
     return stored ?? offer(this.data.records);
+  }
+  /** The championship season in progress or last finished, or null. */
+  get season(): Season | null {
+    return asSeason(this.data.career.season);
+  }
+  /**
+   * Stores the season (null forgets it). Returns false when it could not be kept beyond this visit: storage
+   * blocked or full, or the save belongs to a newer version of the game.
+   */
+  setSeason(season: Season | null) {
+    let kept = false;
+    try {
+      this.update(stored => {
+        stored.career = {...(isObject(stored.career) ? stored.career : {}), season};
+        kept = true;
+      });
+    } catch {}
+    this.data.career = {...this.data.career, season};
+    return kept;
   }
   layout(id: CourseId): TrackLayout | null {
     return this.data.layouts[id] || null;

@@ -30,6 +30,10 @@ export type HudContext = {
   gate?: StartGate | null;
   /** Who took the holeshot and the race time at which they did. */
   holeshot?: {name: string; id: number; time: number} | null;
+  /** A timed race: its length in seconds, the lap that ends it once known, and whether the winner is in. */
+  timed?: {limit: number; flagLap: number | null; flagOut: boolean} | null;
+  /** Seconds the race stays open after the first finisher; left out, the usual time for a race over laps. */
+  closeAfter?: number;
 };
 /** How long the result of a launch and the holeshot banner stay on screen, in seconds of race time. */
 const LAUNCH_RESULT_SECONDS = 1.8;
@@ -37,6 +41,12 @@ const HOLESHOT_SECONDS = 3;
 /** How long a finished sector or lap stays on screen, in seconds of race time. */
 const SPLIT_SECONDS = 4;
 
+/** The race bar's clock in a timed race: the time left, then what the flags are saying. */
+export function timedClock(timed: NonNullable<HudContext['timed']>, raceTime: number) {
+  if (raceTime < timed.limit) return `${formatTime(timed.limit - raceTime)} LEFT`;
+  if (timed.flagOut) return 'CHEQUERED FLAG';
+  return timed.flagLap === null ? 'TIME UP · ONE MORE LAP FROM THE LINE' : 'FINAL LAP';
+}
 export function raceChromeHtml() {
   return (
     `<div id="hud" class="hidden"></div><div id="race-bar" class="hidden">` +
@@ -289,13 +299,16 @@ export function launchMeter(gate: StartGate | null | undefined, index: number, r
 export function updateHud(ctx: HudContext) {
   const {track, riders, viewHud, phase, practice, lapCount, humanCount, raceTime, firstFinish, iphoneMode} = ctx;
   const ordered = ranking(riders, track);
+  const closeAfter = ctx.closeAfter ?? TUNING.finishTimeout;
   viewHud.forEach((h, i) => {
     const r = riders[i];
     h.querySelector('.position strong')!.innerHTML =
       `${String(ordered.indexOf(r) + 1).padStart(2, '0')}<span>/ ${riders.length}</span>`;
     h.querySelector('.lap b')!.textContent = String(
-      practice ? r.progress.lap + 1 : Math.min(lapCount, r.progress.lap + 1),
+      practice ? r.progress.lap + 1 : Math.min(ctx.timed?.flagLap ?? lapCount, r.progress.lap + 1),
     );
+    // A timed race has no lap count until the leader starts the last lap.
+    if (ctx.timed) h.querySelector('.lap small')!.textContent = ctx.timed.flagLap ? `/ ${ctx.timed.flagLap}` : '';
     updateTiming(h, ctx.timing[i], ctx.referenceLap(i), raceTime, r.finished !== null && !practice);
     h.querySelector('.speed strong')!.textContent = String(Math.round(r.speed * 3.6)).padStart(2, '0');
     (h.querySelector('.speed-track i') as HTMLElement).style.width = `${(r.speed / TUNING.maxSpeed) * 100}%`;
@@ -318,7 +331,7 @@ export function updateHud(ctx: HudContext) {
     const remaining =
       firstFinish === null
         ? ''
-        : Math.ceil(Math.max(0, TUNING.finishTimeout - (raceTime - firstFinish))) + 's for remaining riders';
+        : Math.ceil(Math.max(0, closeAfter - (raceTime - firstFinish))) + 's for remaining riders';
     const airHint = iphoneMode
       ? 'HOLD NOSE DOWN TO MATCH THE LANDING'
       : r.device?.kind === 'gamepad'
@@ -371,8 +384,8 @@ export function updateHud(ctx: HudContext) {
     drawMap(h.querySelector('canvas')!, r, track, riders, practice);
   });
   el('race-time').textContent =
-    formatTime(raceTime) +
-    (firstFinish !== null ? ` · ${Math.ceil(Math.max(0, 60 - (raceTime - firstFinish)))}s TO CLOSE` : '');
+    (ctx.timed ? timedClock(ctx.timed, raceTime) : formatTime(raceTime)) +
+    (firstFinish !== null ? ` · ${Math.ceil(Math.max(0, closeAfter - (raceTime - firstFinish)))}s TO CLOSE` : '');
   if (humanCount === 3)
     el('live-standings').innerHTML = ordered
       .slice(0, 5)

@@ -65,6 +65,8 @@ export interface Launch {
 }
 interface Starter {
   id: number;
+  /** The place on the grid, when it is not the rider's place in the list. */
+  slot?: number;
   human: boolean;
   x: number;
   z: number;
@@ -90,11 +92,14 @@ export class StartGate {
   readonly launches: Launch[];
   private readonly reactions: number[];
   private readonly human: boolean[];
+  /** Each rider's place on the grid. */
+  private readonly slots: number[];
 
   constructor(seed: number, riders: Starter[], difficulty: string) {
     this.dropAt = GATE.board + gateDelay(seed);
     this.launches = riders.map(r => ({revs: 0, jumped: false, held: 0, drive: 1, result: '', x: r.x, z: r.z}));
     this.human = riders.map(r => r.human);
+    this.slots = riders.map((r, index) => r.slot ?? index);
     this.reactions = riders.map(r =>
       r.human ? 0 : npcReaction(seed, r.id, difficulty, r.profile ? startSharpness(r.profile) : undefined),
     );
@@ -139,7 +144,7 @@ export class StartGate {
     });
     // The grid is rows of four. Nobody in the second row can go before the bike in front of them has.
     this.launches.forEach((launch, index) => {
-      const front = this.launches[index - GRID_ROW];
+      const front = this.launches[this.slots.indexOf(this.slots[index] - GRID_ROW)];
       if (front && !this.human[index]) launch.held = Math.max(launch.held, front.held + steps(ROW_GAP));
     });
     return {jumped, dropped: true};
