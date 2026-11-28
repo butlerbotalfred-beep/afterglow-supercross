@@ -226,12 +226,12 @@ export class SaveStore {
     if (!isObject(stored.settings)) stored.settings = {...this.data.settings};
     if (!isObject(stored.layouts)) stored.layouts = {...this.data.layouts};
     change(stored);
-    if (this.damaged !== null) {
-      // Keep a copy of a save this build could not read before replacing it.
-      this.storage.setItem(DAMAGED_SAVE_KEY, this.damaged);
-      this.damaged = null;
-    }
     try {
+      if (this.damaged !== null) {
+        // Keep a copy of a save this build could not read before replacing it.
+        this.storage.setItem(DAMAGED_SAVE_KEY, this.damaged);
+        this.damaged = null;
+      }
       this.storage.setItem(SAVE_KEY, JSON.stringify(stored));
     } catch (error) {
       this.unsaved = true;

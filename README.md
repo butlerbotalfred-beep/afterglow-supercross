@@ -1,6 +1,6 @@
 # Afterglow / Supercross
 
-A browser-based, third-person arcade Supercross game. Five selectable circuits, led by the 2,568 m dusk stadium, a track editor, a sculpted procedural motorcycle and rider, local split screen for 1–4 humans and up to eight racers. Race Night from a start gate against twelve named computer riders, Free Practice, Time Trial against the ghost of your best lap, and a five-round Championship; a rider editor, lap and sector timing, track wear, and sound made in the browser. No online networking or accounts. This is version 2.0.0.
+A browser-based, third-person arcade Supercross game. Five selectable circuits, led by the 2,568 m dusk stadium, a track editor, a sculpted procedural motorcycle and rider, local split screen for 1–4 humans and up to eight racers. Race Night from a start gate against up to seven of twelve named computer riders, Free Practice, Time Trial against the ghost of your best lap, and a five-round Championship; a rider editor, lap and sector timing, track wear, and sound made in the browser. No online networking or accounts. This is version 2.0.0.
 
 ## Play online
 
