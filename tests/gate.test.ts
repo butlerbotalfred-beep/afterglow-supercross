@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {TUNING} from '../src/config.ts';
 import {GATE, GATE_SECONDS_MAX, StartGate, gateDelay, inBand, npcReaction} from '../src/gate.ts';
 import {mapGamepad, mapKeyboard, neutralControl, routeControls, type Control} from '../src/input.ts';
+import {startSharpness} from '../src/riders.ts';
 import {idleControl, npcControl, type Rider} from '../src/physics.ts';
 import {TouchInput} from '../src/touch-input.ts';
 import {Track} from '../src/track.ts';
@@ -233,7 +234,8 @@ test('computer riders react to the drop after a seeded moment and always launch 
   const helds = gate.launches.map(launch => launch.held);
   h.session.riders.forEach((r, i) => {
     assert.equal(gate.launches[i].result, 'good', `rider ${i}`);
-    const own = Math.round(npcReaction(31, r.id, 'club') / STEP);
+    // A roster rider's starts rating sets how sharp it is.
+    const own = Math.round(npcReaction(31, r.id, 'club', r.profile && startSharpness(r.profile)) / STEP);
     if (r.human) return;
     // The front row goes on its own reaction; the second row never before the bike ahead of it.
     if (i < 4) assert.equal(helds[i], own);

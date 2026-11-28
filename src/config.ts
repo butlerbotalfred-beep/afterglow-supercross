@@ -99,6 +99,8 @@ export const TUNING = {
 };
 export const COLORS = [0xff703e, 0x41b9ec, 0xb5df55, 0xe589dc, 0xffcf61, 0xa19aff, 0xe9ede4, 0xe44f63];
 export const CSS_COLORS = COLORS.map(c => `#${c.toString(16).padStart(6, '0')}`);
+/** A rider's colour as CSS: a human's slot colour or a roster rider's plate. */
+export const cssColor = (color: number) => `#${color.toString(16).padStart(6, '0')}`;
 export const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 export const wrap = (v: number, length: number) => ((v % length) + length) % length;
 export const angleDelta = (a: number, b: number) => Math.atan2(Math.sin(a - b), Math.cos(a - b));

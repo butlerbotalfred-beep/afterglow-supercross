@@ -1,5 +1,6 @@
 // The start gate: the board, the seeded drop, the launch off the line and the holeshot. No browser in here.
 import {progressDistance} from './race';
+import {startSharpness, type RiderProfile} from './riders';
 import {Rng} from './rng';
 
 export const GATE = {
@@ -38,8 +39,9 @@ export function gateDelay(seed: number) {
   return mix(seed, 0x6a7e).range(GATE.minDelay, GATE.maxDelay);
 }
 /** Seconds a computer rider takes to react to the drop. Quicker riders are a little sharper. */
-export function npcReaction(seed: number, rider: number, difficulty: string) {
-  const sharp = difficulty === 'expert' ? 0.75 : difficulty === 'relaxed' ? 1.15 : 1;
+export function npcReaction(seed: number, rider: number, difficulty: string, sharpness?: number) {
+  // A roster rider's starts rating sets how sharp it is; without one the pace setting does.
+  const sharp = sharpness ?? (difficulty === 'expert' ? 0.75 : difficulty === 'relaxed' ? 1.15 : 1);
   return Math.min(GATE.maxReaction, mix(seed, 0x51ed + rider * 7).range(GATE.minReaction, GATE.maxReaction) * sharp);
 }
 export const inBand = (revs: number) => revs >= GATE.bandLow && revs <= GATE.bandHigh;
@@ -68,6 +70,7 @@ interface Starter {
   z: number;
   surface: {lateral: number};
   startLane?: number;
+  profile?: RiderProfile;
 }
 /** Riders in a grid row, and the seconds a second-row computer rider waits after the bike ahead moves. */
 const GRID_ROW = 4;
@@ -92,7 +95,9 @@ export class StartGate {
     this.dropAt = GATE.board + gateDelay(seed);
     this.launches = riders.map(r => ({revs: 0, jumped: false, held: 0, drive: 1, result: '', x: r.x, z: r.z}));
     this.human = riders.map(r => r.human);
-    this.reactions = riders.map(r => (r.human ? 0 : npcReaction(seed, r.id, difficulty)));
+    this.reactions = riders.map(r =>
+      r.human ? 0 : npcReaction(seed, r.id, difficulty, r.profile ? startSharpness(r.profile) : undefined),
+    );
     for (const r of riders) if (!r.human) r.startLane = r.surface.lateral * START_LANE;
   }
   /** True once the board has gone and the gate may drop at any moment: from here creeping is punished. */

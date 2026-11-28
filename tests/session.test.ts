@@ -4,7 +4,8 @@ import {TUNING} from '../src/config.ts';
 import type {Control, Device} from '../src/input.ts';
 import {idleControl, npcControl} from '../src/physics.ts';
 import {Track} from '../src/track.ts';
-import {COUNTDOWN_SECONDS, devicesReady, NPC_NAMES, RaceSession} from '../src/game/race-session.ts';
+import {gridFor} from '../src/riders.ts';
+import {COUNTDOWN_SECONDS, devicesReady, RaceSession} from '../src/game/race-session.ts';
 
 const track = new Track();
 const STEP = TUNING.step;
@@ -81,8 +82,13 @@ test('the grid puts humans first, then named NPCs, and practice has no NPCs', ()
   );
   assert.deepEqual(session.riders[1].device, pad(0));
   assert.deepEqual(
-    session.riders.slice(2).map(r => r.name),
-    NPC_NAMES.slice(0, 3),
+    session.riders
+      .slice(2)
+      .map(r => r.name)
+      .sort(),
+    gridFor('club', 3)
+      .map(p => p.name)
+      .sort(),
   );
   session.grid({track, humanCount: 1, npcCount: 5, practice: true, assignments: [{kind: 'keyboard'}]});
   assert.equal(session.riders.length, 1);

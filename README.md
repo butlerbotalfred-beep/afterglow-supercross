@@ -166,9 +166,25 @@ A Race Night start is a gate start. The grid is two rows of four with a gate bar
 
 While you wait, the throttle sets the revs on the launch meter under your bike. Hold the needle in the **green band** (55 to 80% throttle) as the gate falls and the bike leaves with full drive. Too few revs or too many and it bogs or spins: 70% drive for the first 14 m, which costs about 0.3 s down the start straight. Pin the throttle into the red (93% or more) once the gate is live and the bike creeps into the bar: **JUMPED THE GATE**, and it is held for exactly half a second after the drop. Revving as hard as you like while the board is still counting costs nothing. The launch works the same from the keyboard (W), a controller trigger, the Mac Xbox bridge and the touch GAS button; a key or the touch button is on or off, so tap it and watch the needle, which rises and falls slowly enough to hold in the band. A jumped gate always costs more than a poor launch.
 
-Computer riders hold the band and leave after a reaction time of 0.06 to 0.30 s that comes from the race seed (shorter on Expert, longer on Relaxed). They keep their own lane to the first corner, and the second row never leaves before the bike in front of it.
+Computer riders hold the band and leave after a reaction time that comes from the race seed and the rider's starts rating: 0.06 to 0.30 s for a rating of 60, about a quarter less for the best starters and up to a fifth more for the worst. They keep their own lane to the first corner, and the second row never leaves before the bike in front of it.
 
 The **holeshot** goes to the first rider across the striped line after the first corner (Dusk Valley 240 m, Red Mesa 325 m, Pine Summit 445 m, Saltwind Coast 415 m, Iron Quarry 350 m; a custom layout places it after its own first corner). A banner names the rider and the results screen marks them. There is exactly one a race. `src/gate.ts` holds the rules; `npm run start-check` runs 100 seeded eight-rider starts on every circuit and `npm run test:gate` checks the gate in a real browser.
+
+## The riders
+
+The computer riders are twelve made-up riders in `src/riders.ts`, each with a name, a number, a plate colour and five ratings from 0 to 100. Their numbers start at 7 and their colours are not the four player colours, so a computer rider is never taken for a player:
+
+- **Corner speed** sets how fast the rider goes through corners and down the straights (84 is the old Club pace, 96 the old Expert pace).
+- **Rhythm skill** sets pace through rhythm sections and how well landings are matched. Riders rated 84 or more also preload the face of rhythm jumps and hold it through the lip, which keeps the bike low.
+- **Starts** sets how quickly the rider reacts to the gate (60 is the old Club reaction, 93 the old Expert one, 40 the old Relaxed one).
+- **Aggression** sets how readily the rider moves to the inside of a slower bike going into a corner.
+- **Consistency** sets how often the rider makes a mistake: braking late, landing flat or running wide. None of them is a crash; each costs time (0.1 to 1.4 s measured, `npm run roster-check -- --costs`). A rider rated 90 makes one about every 17 laps, a rider rated 52 one about every 3.5 laps.
+
+**NPC PACE** on the setup screen picks who is on the grid instead of speeding everybody up or down: Expert races the fastest riders in the roster, Relaxed the slowest, and Club starts from the third fastest. The middle of the roster is close together, so on Relaxed the riders' pace is also squeezed into a narrow range around the old Relaxed pace (76 to 79% against 78%), which keeps Relaxed about as easy as it was. The riders line up in a different order each race. Names and numbers are shown on the results screen, in the holeshot banner and in the standings.
+
+**Catch-up assist** (setup screen, off unless you turn it on) eases computer riders that are far ahead of the last human by up to 5% and lets riders far behind push on by up to 3%, never past the top speed. Within 40 m of the last human nothing changes. With it off the riders are exactly as they are without it.
+
+A race replays exactly from its seed: the same seed and the same inputs give the same finishing order and times. `npm run roster-check` runs 50 seeded Club races on Dusk Valley, the fastest Club rider on every circuit against the old Club time, and the roster baselines in `baselines/roster.json`; `npm run roster-check -- --mistakes` rides every rider alone for 500 laps and compares the mistakes made with the rating, and `npm run roster-check -- --costs` measures what each kind of mistake costs on every circuit.
 
 ## Circuit selection
 

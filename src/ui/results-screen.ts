@@ -1,5 +1,6 @@
 // Results screen markup, race ranking and the classification table.
-import {CSS_COLORS} from '../config';
+import {cssColor} from '../config';
+import {riderLabel} from '../riders';
 import type {Rider} from '../physics';
 import {progressDistance} from '../race';
 import {formatLap, type RiderTiming} from '../timing';
@@ -72,8 +73,8 @@ export function showResultsTable(
         .join('');
       return (
         `<div class="result-row"><b>${String(i + 1).padStart(2, '0')}</b>` +
-        `<span style="color:${CSS_COLORS[r.id]}">●</span>` +
-        `<strong>${r.name}<small>${r.human ? 'HUMAN' : 'NPC'}` +
+        `<span style="color:${cssColor(r.color)}">●</span>` +
+        `<strong>${riderLabel(r)}<small>${r.human ? 'HUMAN' : 'NPC'}` +
         `${r.id === holeshot ? ' · <i class="holeshot-tag">HOLESHOT</i>' : ''}</small></strong>` +
         `<span class="result-time">${gap}</span>` +
         (lapList ? `<div class="result-laps">${lapList}</div>` : '') +
