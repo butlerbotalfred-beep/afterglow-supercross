@@ -1,3 +1,27 @@
+# M3.3 Track wear — 28 November 2026
+
+The dirt darkens where the bikes have ridden. `src/wear.ts` keeps a grid of 0.5 m cells over the track, one byte a cell, with nothing of the browser in it; the race session wears it in the physics step; `src/track-material.ts` draws it as a darkening layer on the track. Nothing that rides reads the grid. Physics is untouched (`PHYSICS_VERSION` stays 5) and no baseline changed.
+
+| Completion box | Result | Evidence |
+|---|---|---|
+| C1 The same race gives the same wear grid | Pass | `tests/wear.test.ts`, "the same race gives the same wear grid": a race of eight on Dusk Valley run twice, on two separately built tracks, leaves grids equal byte for byte; a race with another seed leaves a different one. |
+| C2 The Dusk Valley wear grid is 0.5 MB or smaller | Pass | "the Dusk Valley wear grid is 0.5 MB or smaller": 654 by 606 cells, 396,324 bytes, and every point across the track all the way round is on it. The browser check reads the same figure from the running game. |
+| C3 pace-gate at 0% matches the M2.3 baselines | Pass | `npm run pace-gate -- --tolerance 0` passes against the untouched `baselines/pace.json`, as do the landing, field, start, roster and season checks. "wear does not change the riding": a rider's 40 seconds are step for step the same on fresh dirt and on dirt worn through everywhere, and none of the physics, track, takeoff, gate, rider, timing or season files imports the grid. |
+| C4 The racing line is visibly darker after a 3-lap 8-rider race | Pass | Before and after screenshots from `npm run test:wear`, same camera, 3 laps, eight riders, Dusk Valley: `docs/verification/m3.3/before-33.jpg` and `after-33.jpg`, `before-58.jpg` and `after-58.jpg`. The check counts the share of the track in view that is clearly darker afterwards (more than 14 of 255 in brightness) from four places: see the figures below. "the racing line is worn after a 3-lap 8-rider race, most where the riders agree": along the lap the most worn cell across the track averages 0.66 of full wear, the ground 2 m outside the track 0.00, and 10.6% of the grid is touched at all. |
+| C5 The grid is empty at race start and in the editor preview | Pass | "the grid is empty at race start and in the editor preview": after a race the next start has every cell at 0 through the countdown; lining up a new grid clears it too; the editor's preview asks for the dirt with no wear layer and neither it nor the editor mentions wear. In Chromium: the sum of the grid is 0 at the start, 0 when the gate drops, and 0 at the start of the next race. |
+| C6 iPhone frame rate is within 5% of M1.5 | Not measured | Needs the phone. What changes for it: one more texture read per track pixel, and a one-byte picture of the grid (396 KB on Dusk Valley) sent to the graphics card at most 4 times a second, only when a cell has changed. |
+
+What to know:
+
+- **What wears.** A bike on its wheels wears the cell it rides into, once a pass, and the cells within a metre of it less, so a line is about two metres wide with soft edges. The amount is 2, plus 0.1 for each m/s up to 35, plus up to 9 for a slide. In the air, in a crash or standing still it leaves nothing. Three laps of eight leave the line about two thirds worn, so a longer race keeps wearing: the line widens before it stops darkening.
+- **How it looks.** Worn dirt is up to about 60% darker and a little redder, patchier where the clay texture is rough, so it reads as packed dirt and not as a painted stripe. Whether it does is the play review's question.
+- **Refresh.** The picture is sent again at most every 250 ms and only when the grid has changed (`WEAR_REFRESH_MS`). Measured by the browser check while eight bikes race.
+- **Reset.** Every race, restart, practice session and time trial starts on fresh dirt. Wear is not saved and does not carry from a heat to its main.
+- **Other circuits.** The grids are 454 KB (Red Mesa), 908 KB (Pine Summit), 581 KB (Saltwind Coast) and 566 KB (Iron Quarry). The box names Dusk Valley; the others are over 0.5 MB because their grounds are bigger. A track too big for a 4096-cell picture is drawn without wear.
+- **Crossing tracks.** The grid is flat: where a custom layout crosses over itself, both crossings share the wear.
+- **Browser check.** `npm run test:wear` (needs the dev server): 11 checks. On the software renderer here: 42,577 of 396,324 cells worn by the race; clearly darker afterwards is 8.4%, 16.3%, 13.4% and 4.2% of the track in view from the four places; the picture was sent 3 times in 7.5 s of racing.
+- **Not judged here.** Whether the line can be seen wearing in by lap 3 from the saddle, and whether it looks like dirt, are the play review. The iPhone frame rate (C6) joins the list of tests on the phone.
+
 # M3.2 Rider editor, names and numbers — 28 November 2026
 
 Each of the four players has a rider: a name, a number, three colours (bike, kit, helmet) and a helmet design, set in an editor on the setup screen and kept in the save. The name and number are shown on the bike, the HUD, the results and the standings. Round wins in the championship unlock colour sets and a championship win unlocks a fourth pace setting. `src/rider-settings.ts` holds the rules with nothing of the browser in it. Physics is untouched (`PHYSICS_VERSION` stays 5) and no baseline changed.

@@ -8,6 +8,7 @@ import {layoutFromTrack, type TrackLayout} from '../track-layout';
 import {COURSES, courseById} from '../courses';
 import {disposeWorld} from '../scenery';
 import {createWorld} from '../world';
+import type {WearLayer} from '../track-material';
 import {createBike} from '../bike-model';
 import {riderLabel} from '../riders';
 import {PRO_PACE, allowedPace} from '../rider-settings';
@@ -960,6 +961,7 @@ function frame(now: number) {
     return;
   }
   syncModels(session.paused || session.reviewFrozen ? 0 : dt);
+  (scene.userData.wear as WearLayer | undefined)?.refresh(now);
   syncGhost(session.paused || session.reviewFrozen ? 0 : dt);
   syncGate(session.paused || session.reviewFrozen ? 0 : dt);
   dust.update(session.riders, session.paused || session.reviewFrozen || session.phase !== 'racing' ? 0 : dt);
@@ -1251,6 +1253,18 @@ if (import.meta.env.DEV) {
     },
     riders: () => session.riders,
     timing: () => session.timing,
+    /** The wear grid of the race being run, summed up, and how often its picture has been sent. */
+    wear: () => {
+      const grid = session.wear,
+        layer = scene.userData.wear as WearLayer | undefined;
+      let sum = 0,
+        worn = 0;
+      for (const v of grid?.cells ?? []) {
+        sum += v;
+        if (v) worn++;
+      }
+      return {cols: grid?.cols, rows: grid?.rows, bytes: grid?.bytes, sum, worn, uploads: layer?.uploads ?? 0};
+    },
     snapshot: () => ({
       course: track.course.id,
       phase: session.phase,
@@ -1321,6 +1335,8 @@ if (import.meta.env.DEV) {
     restartLap: () => session.restartLap(),
     /** Swings every chase camera round its rider, in radians from straight behind, for screenshots. */
     orbit: (angle: number) => cameras.forEach(c => (c.orbit = angle)),
+    /** Fixes every camera at a place, looking at another, for before and after screenshots; no arguments lets go. */
+    view: (from?: number[], to?: number[]) => cameras.forEach(c => (c.fixed = from && to ? {from, to} : null)),
     ghostFromAutopilot: (on: boolean) => (ghost.fromAutopilot = on),
     clearPerf: () => {
       fpsFrames = [];

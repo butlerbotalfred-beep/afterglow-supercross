@@ -29,6 +29,7 @@
     "test:gate": "node scripts/gate-smoke.mjs",
     "test:season": "node scripts/season-smoke.mjs",
     "test:rider": "node scripts/rider-smoke.mjs",
+    "test:wear": "node scripts/wear-smoke.mjs",
     "season-check": "tsx scripts/season-check.ts",
     "start-check": "tsx scripts/start-check.ts",
     "roster-check": "tsx scripts/roster-check.ts",

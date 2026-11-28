@@ -165,5 +165,6 @@ export function disposeWorld(scene: THREE.Scene) {
     if (!t.userData.persistent) t.dispose();
   });
   geometries.forEach(g => g.dispose());
+  scene.userData.wear?.dispose();
   scene.clear();
 }
