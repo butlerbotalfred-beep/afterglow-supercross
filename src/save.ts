@@ -15,7 +15,7 @@ export const DAMAGED_SAVE_KEY = 'afterglow.save.damaged';
 
 export interface SaveData {
   version: number;
-  settings: {slideAggression: number; volumes: Volumes; showGhost: boolean};
+  settings: {slideAggression: number; volumes: Volumes; showGhost: boolean; catchUp: boolean};
   layouts: Partial<Record<CourseId, TrackLayout>>;
   /** Best times and similar; filled in by later milestones and kept as stored until then. */
   records: Record<string, unknown>;
@@ -99,7 +99,7 @@ const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v =
 export function defaultSave(): SaveData {
   return {
     version: SAVE_VERSION,
-    settings: {slideAggression: 1, volumes: {...DEFAULT_VOLUMES}, showGhost: true},
+    settings: {slideAggression: 1, volumes: {...DEFAULT_VOLUMES}, showGhost: true, catchUp: false},
     layouts: {},
     records: {},
     career: {},
@@ -123,6 +123,7 @@ function fromStored(v: Record<string, unknown>, physics: number): SaveData {
     data.settings.slideAggression = normalizeSlideAggression(v.settings.slideAggression);
   if (isObject(v.settings)) data.settings.volumes = normalizeVolumes(v.settings.volumes);
   if (isObject(v.settings) && typeof v.settings.showGhost === 'boolean') data.settings.showGhost = v.settings.showGhost;
+  if (isObject(v.settings) && typeof v.settings.catchUp === 'boolean') data.settings.catchUp = v.settings.catchUp;
   if (isObject(v.layouts))
     for (const id of COURSE_IDS) {
       try {
@@ -237,6 +238,17 @@ export class SaveStore {
     } catch {}
     this.data.settings.showGhost = show;
     return show;
+  }
+  /** Whether the catch-up assist is on. It is off unless the player turns it on. */
+  get catchUp() {
+    return this.data.settings.catchUp;
+  }
+  setCatchUp(on: boolean) {
+    try {
+      this.update(stored => (stored.settings.catchUp = on));
+    } catch {}
+    this.data.settings.catchUp = on;
+    return on;
   }
   get volumes() {
     return this.data.settings.volumes;

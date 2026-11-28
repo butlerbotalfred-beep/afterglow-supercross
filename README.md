@@ -170,6 +170,22 @@ Computer riders hold the band and leave after a reaction time of 0.06 to 0.30 s 
 
 The **holeshot** goes to the first rider across the striped line after the first corner (Dusk Valley 240 m, Red Mesa 325 m, Pine Summit 445 m, Saltwind Coast 415 m, Iron Quarry 350 m; a custom layout places it after its own first corner). A banner names the rider and the results screen marks them. There is exactly one a race. `src/gate.ts` holds the rules; `npm run start-check` runs 100 seeded eight-rider starts on every circuit and `npm run test:gate` checks the gate in a real browser.
 
+## The riders
+
+The computer riders are twelve made-up riders in `src/riders.ts`, each with a name, a number, a plate colour and five ratings from 0 to 100:
+
+- **Corner speed** sets how fast the rider goes through corners and down the straights (84 is the old Club pace, 96 the old Expert pace).
+- **Rhythm skill** sets pace through rhythm sections and how well landings are matched. Riders rated 84 or more also preload the face of rhythm jumps and hold it through the lip, which keeps the bike low.
+- **Starts** sets how quickly the rider reacts to the gate.
+- **Aggression** sets how readily the rider moves to the inside of a slower bike going into a corner.
+- **Consistency** sets how often the rider makes a mistake: braking late, landing flat or running wide. None of them is a crash; each costs a little time. A rider rated 90 makes one about every 17 laps, a rider rated 52 one about every 3.5 laps.
+
+**NPC PACE** on the setup screen picks who is on the grid instead of speeding everybody up or down: Expert races the fastest riders in the roster, Relaxed the slowest, and Club starts from the third fastest. The riders line up in a different order each race. Names and numbers are shown on the results screen, in the holeshot banner and in the standings.
+
+**Catch-up assist** (setup screen, off unless you turn it on) eases computer riders that are far ahead of the last human by up to 5% and lets riders far behind push on by up to 3%, never past the top speed. Within 40 m of the last human nothing changes. With it off the riders are exactly as they are without it.
+
+A race replays exactly from its seed: the same seed and the same inputs give the same finishing order and times. `npm run roster-check` runs 50 seeded Club races on Dusk Valley, the fastest Club rider on every circuit against the old Club time, and the roster baselines in `baselines/roster.json`; `npm run roster-check -- --mistakes` rides every rider alone for 500 laps and compares the mistakes made with the rating.
+
 ## Circuit selection
 
 Choose a circuit in pre-race setup. Each has its own centerline, jump sequence and scenery; selection is retained on restart. Returning to setup and changing circuit rebuilds the environment and releases its previous graphics resources.

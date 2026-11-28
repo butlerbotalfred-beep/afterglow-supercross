@@ -27,6 +27,8 @@ jobs:
         run: npm run lint:lines
       - name: Sound levels are always ramped (no clicks)
         run: npm run lint:audio
+      - name: Computer riders have names and numbers (no RIDER plus a number)
+        run: npm run lint:names
       - name: Type check
         run: npm run typecheck
       - name: Unit tests
@@ -41,3 +43,5 @@ jobs:
         run: npm run field-check -- --check
       - name: Start check (100 seeded 8-rider gate starts per circuit, no crashes before the holeshot line)
         run: npm run start-check -- --check
+      - name: Roster check (50 seeded Club races, fastest Club rider on every circuit, roster baselines)
+        run: npm run roster-check -- --check

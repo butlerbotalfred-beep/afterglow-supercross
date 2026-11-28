@@ -9,6 +9,7 @@ import {COURSES, courseById} from '../courses';
 import {disposeWorld} from '../scenery';
 import {createWorld} from '../world';
 import {createBike} from '../bike-model';
+import {riderLabel} from '../riders';
 import {createGateBars, type GateBars} from '../start-gate-model';
 import {RaceEffects} from '../race-effects';
 import {ChaseCamera} from '../camera';
@@ -84,7 +85,7 @@ const session = new RaceSession(input, {
   racing: () => setVisible('countdown', false),
   gateDropped: () => audio.clang(),
   jumpedGate: () => audio.cue(180, 0.25),
-  holeshot: rider => (holeshot = {name: rider.name, id: rider.id, time: session.raceTime}),
+  holeshot: rider => (holeshot = {name: riderLabel(rider), id: rider.id, time: session.raceTime}),
   cue: (frequency, seconds) => audio.cue(frequency, seconds),
   landing: impact => audio.landing(impact),
   pause(nowPaused, missing) {
@@ -232,6 +233,8 @@ let cameraDistance: number = TUNING.cameraDistance,
   renderScale = 1;
 let assignments: (Device | null)[] = [{kind: 'keyboard'}, null, null, null],
   ready = [true, false, false, false];
+/** The seed of the race on the grid: roster order and mistakes. 0 until the first race is started. */
+let gridSeed = 0;
 let models: ReturnType<typeof createBike>[] = [],
   cameras: ChaseCamera[] = [];
 let viewHud: HTMLElement[] = [],
@@ -396,7 +399,8 @@ function buildGrid() {
       }
     });
   }
-  session.grid({track, humanCount, npcCount, practice, trial, assignments});
+  const difficulty = el<HTMLSelectElement>('difficulty').value;
+  session.grid({track, humanCount, npcCount, practice, trial, assignments, difficulty, seed: gridSeed});
   if (gateBars) {
     scene.remove(gateBars.group);
     gateBars.dispose();
@@ -409,7 +413,7 @@ function buildGrid() {
     gateBars.set(0);
   }
   models = session.riders.map(r => {
-    const m = createBike(r.color, r.id + 1);
+    const m = createBike(r.color, r.profile?.number ?? r.id + 1);
     scene.add(m.root);
     return m;
   });
@@ -435,6 +439,8 @@ function startRace() {
   testMarkers.visible = practice;
   touchControls.clear();
   document.body.classList.toggle('iphone-session', iphoneMode);
+  // A new seed every race: the roster riders line up in a different order and make different mistakes.
+  gridSeed = (Date.now() % 4294967295) + 1;
   buildGrid();
   buildHud(lapCount);
   if (trial) loadGhost();
@@ -445,8 +451,7 @@ function startRace() {
   for (const prefix of ['', 'pause-']) setVisible(`${prefix}ghost-setting`, trial || prefix === '');
   el('restart-pause').textContent = trial ? 'RESTART TIME TRIAL' : 'RESTART RACE';
   el('setup-pause').textContent = trial ? 'END TIME TRIAL' : 'RACE SETUP';
-  // A new seed every race: the computer riders' mistakes fall on different jumps each time.
-  session.start({lapCount, difficulty, seed: (Date.now() % 4294967295) + 1});
+  session.start({lapCount, difficulty, seed: gridSeed, catchUp: save.catchUp});
   holeshot = null;
   prevPoses = [];
   setVisible('setup', false);
@@ -820,6 +825,11 @@ el('restart-lap-pause').onclick = () => {
   session.togglePause();
   session.restartLap();
 };
+{
+  const box = el<HTMLInputElement>('catch-up');
+  box.checked = save.catchUp;
+  box.onchange = () => save.setCatchUp(box.checked);
+}
 for (const prefix of ['', 'pause-']) {
   const box = el<HTMLInputElement>(`${prefix}show-ghost`);
   box.checked = save.showGhost;

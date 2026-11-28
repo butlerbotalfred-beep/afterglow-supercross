@@ -1,0 +1,261 @@
+{
+  "note": "Roster races as the game runs them: 8 named riders, gate start, seed 2026, 3 laps, 120 Hz, physics version 5. Regenerate only with sign-off. pace.json (riders without ratings) is unchanged and still checked.",
+  "seed": 2026,
+  "races": [
+    {
+      "course": "dusk",
+      "difficulty": "relaxed",
+      "winner": 288.125,
+      "last": 313.592,
+      "order": [
+        "T. FOX",
+        "M. PARK",
+        "R. VALE",
+        "D. OKORO",
+        "L. HARTE",
+        "E. SOLBERG",
+        "C. IBARRA",
+        "B. QUILL"
+      ],
+      "crashes": 0
+    },
+    {
+      "course": "canyon",
+      "difficulty": "relaxed",
+      "winner": 187.575,
+      "last": 210.733,
+      "order": [
+        "T. FOX",
+        "R. VALE",
+        "M. PARK",
+        "D. OKORO",
+        "L. HARTE",
+        "E. SOLBERG",
+        "C. IBARRA",
+        "B. QUILL"
+      ],
+      "crashes": 0
+    },
+    {
+      "course": "alpine",
+      "difficulty": "relaxed",
+      "winner": 184.1,
+      "last": 204.225,
+      "order": [
+        "T. FOX",
+        "R. VALE",
+        "M. PARK",
+        "D. OKORO",
+        "L. HARTE",
+        "E. SOLBERG",
+        "C. IBARRA",
+        "B. QUILL"
+      ],
+      "crashes": 0
+    },
+    {
+      "course": "coast",
+      "difficulty": "relaxed",
+      "winner": 156.55,
+      "last": 174.433,
+      "order": [
+        "T. FOX",
+        "R. VALE",
+        "M. PARK",
+        "D. OKORO",
+        "L. HARTE",
+        "E. SOLBERG",
+        "C. IBARRA",
+        "B. QUILL"
+      ],
+      "crashes": 0
+    },
+    {
+      "course": "quarry",
+      "difficulty": "relaxed",
+      "winner": 198.975,
+      "last": 223.2,
+      "order": [
+        "T. FOX",
+        "R. VALE",
+        "M. PARK",
+        "D. OKORO",
+        "L. HARTE",
+        "E. SOLBERG",
+        "C. IBARRA",
+        "B. QUILL"
+      ],
+      "crashes": 0
+    },
+    {
+      "course": "dusk",
+      "difficulty": "club",
+      "winner": 286.875,
+      "last": 305.158,
+      "order": [
+        "J. REYES",
+        "T. FOX",
+        "L. HARTE",
+        "A. RIVERS",
+        "R. VALE",
+        "M. PARK",
+        "D. OKORO",
+        "E. SOLBERG"
+      ],
+      "crashes": 0
+    },
+    {
+      "course": "canyon",
+      "difficulty": "club",
+      "winner": 186.833,
+      "last": 205.558,
+      "order": [
+        "J. REYES",
+        "A. RIVERS",
+        "T. FOX",
+        "R. VALE",
+        "M. PARK",
+        "L. HARTE",
+        "D. OKORO",
+        "E. SOLBERG"
+      ],
+      "crashes": 0
+    },
+    {
+      "course": "alpine",
+      "difficulty": "club",
+      "winner": 183.675,
+      "last": 195.8,
+      "order": [
+        "J. REYES",
+        "T. FOX",
+        "A. RIVERS",
+        "R. VALE",
+        "M. PARK",
+        "D. OKORO",
+        "L. HARTE",
+        "E. SOLBERG"
+      ],
+      "crashes": 0
+    },
+    {
+      "course": "coast",
+      "difficulty": "club",
+      "winner": 155.8,
+      "last": 167.508,
+      "order": [
+        "J. REYES",
+        "T. FOX",
+        "A. RIVERS",
+        "R. VALE",
+        "M. PARK",
+        "D. OKORO",
+        "L. HARTE",
+        "E. SOLBERG"
+      ],
+      "crashes": 0
+    },
+    {
+      "course": "quarry",
+      "difficulty": "club",
+      "winner": 198.3,
+      "last": 216.717,
+      "order": [
+        "J. REYES",
+        "T. FOX",
+        "A. RIVERS",
+        "R. VALE",
+        "M. PARK",
+        "D. OKORO",
+        "L. HARTE",
+        "E. SOLBERG"
+      ],
+      "crashes": 0
+    },
+    {
+      "course": "dusk",
+      "difficulty": "expert",
+      "winner": 273.908,
+      "last": 299.275,
+      "order": [
+        "S. MORA",
+        "K. NOVA",
+        "J. REYES",
+        "M. PARK",
+        "T. FOX",
+        "A. RIVERS",
+        "R. VALE",
+        "D. OKORO"
+      ],
+      "crashes": 0
+    },
+    {
+      "course": "canyon",
+      "difficulty": "expert",
+      "winner": 175.133,
+      "last": 201.592,
+      "order": [
+        "S. MORA",
+        "K. NOVA",
+        "J. REYES",
+        "T. FOX",
+        "A. RIVERS",
+        "M. PARK",
+        "R. VALE",
+        "D. OKORO"
+      ],
+      "crashes": 0
+    },
+    {
+      "course": "alpine",
+      "difficulty": "expert",
+      "winner": 170.175,
+      "last": 190.283,
+      "order": [
+        "S. MORA",
+        "K. NOVA",
+        "J. REYES",
+        "T. FOX",
+        "R. VALE",
+        "A. RIVERS",
+        "M. PARK",
+        "D. OKORO"
+      ],
+      "crashes": 0
+    },
+    {
+      "course": "coast",
+      "difficulty": "expert",
+      "winner": 144.425,
+      "last": 163.35,
+      "order": [
+        "S. MORA",
+        "K. NOVA",
+        "J. REYES",
+        "T. FOX",
+        "A. RIVERS",
+        "M. PARK",
+        "R. VALE",
+        "D. OKORO"
+      ],
+      "crashes": 2
+    },
+    {
+      "course": "quarry",
+      "difficulty": "expert",
+      "winner": 186.5,
+      "last": 212.617,
+      "order": [
+        "S. MORA",
+        "K. NOVA",
+        "J. REYES",
+        "T. FOX",
+        "A. RIVERS",
+        "M. PARK",
+        "R. VALE",
+        "D. OKORO"
+      ],
+      "crashes": 0
+    }
+  ]
+}

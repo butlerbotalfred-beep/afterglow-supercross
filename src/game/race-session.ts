@@ -4,6 +4,8 @@ import {COLORS, TUNING} from '../config';
 import {uniqueDevices, type Control, type Device} from '../input';
 import {StartGate, pastHoleshot} from '../gate';
 import {GhostRecorder, type Ghost, type GhostPose} from '../ghost';
+import {progressDistance} from '../race';
+import {catchUpEase, gridFor, shuffled} from '../riders';
 import {collide, idleControl, makeRider, npcControl, stepRider, type Rider} from '../physics';
 import {createTiming, fasterLap, recordStep, type LapTime, type RiderTiming} from '../timing';
 import type {Track} from '../track';
@@ -53,14 +55,18 @@ export interface GridConfig {
   /** Time Trial: one rider alone against the clock, lap after lap, with a ghost of the best lap. */
   trial?: boolean;
   assignments: (Device | null)[];
+  /** The pace setting, which picks the computer riders from the roster, and the seed for their grid order. */
+  difficulty?: string;
+  seed?: number;
 }
 export interface RaceConfig {
   lapCount: number;
   difficulty: string;
   /** Makes the computer riders fallible, the same way every time for the same seed. Left out or 0, they are perfect. */
   seed?: number;
+  /** The catch-up assist: computer riders far ahead of the last human ease off, those far behind push on. */
+  catchUp?: boolean;
 }
-export const NPC_NAMES = ['S. MORA', 'J. REYES', 'K. NOVA', 'A. RIVERS', 'T. FOX', 'R. VALE', 'M. PARK'];
 export const COUNTDOWN_SECONDS = 3.8;
 
 /** True when every human slot has its own device. */
@@ -79,6 +85,7 @@ export class RaceSession {
   difficulty = 'club';
   /** The seed for the computer riders' mistakes in this race; 0 means they make none. */
   seed = 0;
+  catchUp = false;
   raceTime = 0;
   countdown = COUNTDOWN_SECONDS;
   firstFinish: number | null = null;
@@ -115,7 +122,7 @@ export class RaceSession {
   ) {}
 
   /** Lines riders up on the start grid. Humans come first, then NPCs (none in practice). */
-  grid({track, humanCount, npcCount, practice, trial = false, assignments}: GridConfig) {
+  grid({track, humanCount, npcCount, practice, trial = false, assignments, difficulty = 'club', seed = 0}: GridConfig) {
     this.track = track;
     this.trial = trial;
     this.practice = practice || trial;
@@ -123,11 +130,20 @@ export class RaceSession {
     this.riders = Array.from({length: humanCount + (this.practice ? 0 : npcCount)}, (_, i) =>
       makeRider(track, i, i < humanCount, COLORS[i], i < humanCount ? assignments[i] || undefined : undefined),
     );
+    const profiles = shuffled(gridFor(difficulty, this.riders.length - humanCount), seed);
     this.riders.forEach((r, i) => {
-      if (!r.human) r.name = NPC_NAMES[(i - humanCount) % NPC_NAMES.length];
+      const profile = profiles[i - humanCount];
+      if (!r.human && profile) Object.assign(r, {profile, name: profile.name, color: profile.plate});
     });
     this.timing = this.riders.map(() => createTiming());
     this.beginGhost(0);
+  }
+  /** The catch-up assist's share of pace for a computer rider, from how far it is from the last human on track. */
+  private ease(r: Rider) {
+    let last = Infinity;
+    for (const h of this.riders)
+      if (h.human && h.finished === null) last = Math.min(last, progressDistance(h.progress, this.track.length));
+    return last === Infinity ? 1 : catchUpEase(progressDistance(r.progress, this.track.length) - last);
   }
   /**
    * Starts recording a lap that began `since` seconds ago, from where the rider is now. A lap that starts as
@@ -171,7 +187,8 @@ export class RaceSession {
     return true;
   }
   /** Starts the countdown for the riders already on the grid. */
-  start({lapCount, difficulty, seed = 0}: RaceConfig) {
+  start({lapCount, difficulty, seed = 0, catchUp = false}: RaceConfig) {
+    this.catchUp = catchUp;
     this.lapCount = lapCount;
     this.difficulty = difficulty;
     this.seed = seed >>> 0;
@@ -299,6 +316,7 @@ export class RaceSession {
               riders,
               this.difficulty,
               this.gate && !pastHoleshot(r.progress, track) ? 0 : this.seed,
+              this.catchUp ? this.ease(r) : 1,
             );
       if (humanControl?.pause) {
         // The lap clock has already moved on by this step, so the ghost records the rider standing still for it.

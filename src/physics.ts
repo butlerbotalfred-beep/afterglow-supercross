@@ -5,6 +5,8 @@ import {createProgress, updateProgress, restoreDeparture, trackDeferred, type Pr
 import type {Control, Device} from './input';
 import {lipAhead, lipDistance, safeTakeoffSpeed} from './takeoff';
 import {Rng} from './rng';
+import {cornerPace, landingError, preloads, rhythmPace, slipFor, type RiderProfile, type SlipKind} from './riders';
+import {ROSTER} from './riders';
 export interface Rider {
   id: number;
   human: boolean;
@@ -73,6 +75,12 @@ export interface Rider {
    * runs the first corner side by side instead of crossing over each other.
    */
   startLane?: number;
+  /** A computer rider's roster entry: who they are and how they ride. Without one they ride at the pace setting. */
+  profile?: RiderProfile;
+  /** Mistakes this rider has made in the race, and the lap of the latest, so each is counted once. */
+  slips?: number;
+  slipLap?: number;
+  slipKind?: SlipKind;
 }
 export const idleControl = (): Control => ({throttle: 0, brake: 0, steer: 0, pitch: 0, reset: false, pause: false});
 export function makeRider(track: Track, id: number, human: boolean, color: number, device?: Device): Rider {
@@ -82,7 +90,7 @@ export function makeRider(track: Track, id: number, human: boolean, color: numbe
     id,
     human,
     device,
-    name: human ? `PLAYER ${id + 1}` : ['', '', '', '', ''][id] || `RIDER ${id + 1}`,
+    name: human ? `PLAYER ${id + 1}` : ROSTER[id % ROSTER.length].name,
     color,
     x: p.x,
     z: p.z,
@@ -257,9 +265,10 @@ export function stepRider(r: Rider, c: Control, track: Track, dt: number, others
     r.powerSlide = 0;
     r.slipAngle = 0;
   }
-  // Preload: the stick straight back loads the suspension. AI riders do not use it.
+  // Preload: the stick straight back loads the suspension. Of the computer riders only the roster's best rhythm
+  // riders use it.
   if (c.pitch < 0.2) r.pitchHold = false;
-  if (r.human && r.grounded) {
+  if ((r.human || (r.profile && preloads(r.profile))) && r.grounded) {
     const back = c.pitch >= TUNING.preloadStick;
     if (back && Math.abs(c.steer) < TUNING.preloadSteerLimit) {
       r.preload = Math.min(1, r.preload + dt / TUNING.preloadCharge);
@@ -529,13 +538,136 @@ export function npcMistake(seed: number, rider: number, lap: number, jump: numbe
   if (!rng.chance(NPC_MISTAKE_RATE[difficulty] ?? 0)) return 0;
   return rng.range(NPC_MISTAKE_HOT[0], NPC_MISTAKE_HOT[1]);
 }
+/** The catch-up assist may slow a computer rider by 5% at most and speed one up by 3% at most. */
+export const ASSIST_EASE_MIN = 0.95;
+export const ASSIST_GAIN_MAX = 1.03;
+/** A rider braking late sees this share of its usual braking distance, then goes through the corner this slowly. */
+const SLIP_LATE_LOOK = 0.55;
+const SLIP_LATE_PACE = 0.8;
+/** A rider running wide goes round the outside at this share of its pace. */
+const SLIP_WIDE_PACE = 0.9;
+/** Radians of nose-high a rider landing flat is out by. */
+const SLIP_FLAT_NOSE = 0.24;
+/** A preloading rider pulls back this many seconds before a lip and holds it through, which keeps the bike low. */
+const NPC_PRELOAD_REACH = 30;
+const NPC_PRELOAD_SECONDS = 0.5;
+/** Where a mistake can happen on a track: its corners (which way they turn) and its jumps. */
+interface Spots {
+  corners: {start: number; end: number; inside: number}[];
+  jumps: {start: number; end: number}[];
+}
+const spots = new WeakMap<Track, Spots>();
+function spotsOf(track: Track): Spots {
+  let found = spots.get(track);
+  if (found) return found;
+  const corners: Spots['corners'] = [];
+  let open: {start: number; end: number; turn: number} | null = null;
+  for (let s = 40; s < track.length - 40; s += 2) {
+    const c = track.curvature(s);
+    if (Math.abs(c) >= 0.02) {
+      if (!open) open = {start: s, end: s, turn: 0};
+      open.end = s;
+      open.turn += c;
+    } else if (open && s - open.end > 10) {
+      if (open.end - open.start >= 8) corners.push({start: open.start, end: open.end, inside: insideOf(track, open)});
+      open = null;
+    }
+  }
+  const jumps = track.jumps
+    .filter(j => j.start > 40 && j.start + j.rise + j.flat + j.fall < track.length - 60)
+    .map(j => ({start: j.start - 4, end: j.start + j.rise + j.flat + j.fall + 40}));
+  found = {corners, jumps};
+  spots.set(track, found);
+  return found;
+}
+/** The side of the track, +1 or -1 in lateral terms, that is the short way round a corner. */
+function insideOf(track: Track, corner: {start: number; end: number}) {
+  const path = (lateral: number) => {
+    let d = 0,
+      a = track.at(corner.start, lateral);
+    for (let s = corner.start + 2; s <= corner.end; s += 2) {
+      const b = track.at(s, lateral);
+      d += Math.hypot(b.x - a.x, b.z - a.z);
+      a = b;
+    }
+    return d;
+  };
+  return path(2) < path(-2) ? 1 : -1;
+}
+/**
+ * The mistake this rider is in the middle of, if any. A lap's mistake has one corner or jump; the rider is "in"
+ * it from the approach to the exit, and it is counted once, the first time the rider gets there.
+ */
+function activeSlip(seed: number, r: Rider, track: Track, p: RiderProfile) {
+  const lap = r.progress.lap;
+  const slip = slipFor(seed, p, lap);
+  if (!slip) return null;
+  const all = spotsOf(track);
+  // On the first lap the pack is still in its start lanes as far as the holeshot line.
+  const clear = (x: {start: number}) => lap > 0 || x.start > track.holeshot + NPC_START_MERGE + 80;
+  const s = r.surface.s;
+  let hit: {kind: SlipKind; inCorner: boolean; inside: number} | null = null;
+  if (slip.kind === 'flat') {
+    const list = all.jumps.filter(clear);
+    const jump = list[Math.floor(slip.where * list.length)];
+    if (jump && s >= jump.start && s < jump.end) hit = {kind: 'flat', inCorner: false, inside: 0};
+  } else {
+    const list = all.corners.filter(clear);
+    const corner = list[Math.floor(slip.where * list.length)];
+    const approach = slip.kind === 'late' ? 90 : 20;
+    if (corner && s >= corner.start - approach && s < corner.end)
+      hit = {kind: slip.kind, inCorner: s >= corner.start - 4, inside: corner.inside};
+  }
+  if (hit && r.slipLap !== lap) {
+    r.slipLap = lap;
+    r.slips = (r.slips ?? 0) + 1;
+    r.slipKind = hit.kind;
+  }
+  return hit;
+}
+/**
+ * An aggressive rider stuck behind a slower bike into a corner moves to the inside of it; a patient one stays
+ * in line. Returns the lane to aim for.
+ */
+function insideLine(r: Rider, track: Track, others: Rider[], p: RiderProfile, lane: number) {
+  const s = r.surface.s;
+  let turn = 0;
+  for (let d = 6; d <= 40; d += 6) {
+    const c = track.curvature(s + d);
+    if (Math.abs(c) > Math.abs(turn)) turn = c;
+  }
+  if (Math.abs(turn) < 0.02) return lane;
+  for (const o of others) {
+    if (o === r || o.crashTime > 0 || o.recovery > 0) continue;
+    const gap = (o.surface.s - s + track.length) % track.length;
+    if (gap < 2 || gap > 12 || Math.abs(o.surface.lateral - r.surface.lateral) > 1.8 || o.speed > r.speed + 1) continue;
+    const corner = spotsOf(track).corners.find(c => c.end > s && c.start < s + 46);
+    if (!corner) return lane;
+    const want = clamp(o.surface.lateral + corner.inside * 1.7, -2.5, 2.5);
+    return lane + (want - lane) * (p.aggression / 100);
+  }
+  return lane;
+}
 /**
  * `mistakes` is the race seed that makes computer riders fallible; 0 keeps them perfect, as the pace checks need.
+ * `ease` is the catch-up assist's share of pace for this rider: exactly 1 when the assist is off.
  */
-export function npcControl(r: Rider, track: Track, others: Rider[], difficulty: string, mistakes = 0): Control {
-  const committed = mistakes ? lipAhead(track, r.surface.s, NPC_MISTAKE_REACH) : null;
+export function npcControl(
+  r: Rider,
+  track: Track,
+  others: Rider[],
+  difficulty: string,
+  mistakes = 0,
+  ease = 1,
+): Control {
+  const p = r.profile;
+  // A rider from the roster makes the mistakes of its consistency rating instead of misjudging jumps.
+  const slip = p && mistakes ? activeSlip(mistakes, r, track, p) : null;
+  const committed = !p && mistakes ? lipAhead(track, r.surface.s, NPC_MISTAKE_REACH) : null;
   const hot = committed ? npcMistake(mistakes, r.id, r.progress.lap, committed.index, difficulty) : 0;
-  const pace = difficulty === 'relaxed' ? 0.78 : difficulty === 'expert' ? 1.04 : 0.91;
+  let pace = p ? cornerPace(p) : difficulty === 'relaxed' ? 0.78 : difficulty === 'expert' ? 1.04 : 0.91;
+  // The catch-up assist: 1 unless it is switched on, and then never more than 3% up or 5% down.
+  if (ease !== 1) pace *= clamp(ease, ASSIST_EASE_MIN, ASSIST_GAIN_MAX);
   const ahead = 4 + r.speed * 0.32;
   let lane = Math.sin(r.surface.s * 0.043 + r.id * 2) * 0.65 + ((r.id % 3) - 1) * 0.55;
   // Off a gate the pack keeps its grid lanes to the holeshot line, then drifts onto the racing line.
@@ -552,21 +684,27 @@ export function npcControl(r: Rider, track: Track, others: Rider[], difficulty: 
     const blocked = gap < 4 && o.speed < r.speed - 1 && Math.abs(o.surface.lateral - r.surface.lateral) < 1.2;
     lane += (o.surface.lateral > r.surface.lateral ? -1 : 1) * (blocked ? 1 : 1 - hold);
   }
+  if (p && hold === 0) lane = insideLine(r, track, others, p, lane);
+  if (slip?.kind === 'wide' && slip.inCorner) lane = -slip.inside * 2.6;
   lane = clamp(lane, -2.5, 2.5);
   const target = track.at(r.surface.s + ahead, lane);
   const desired = Math.atan2(target.x - r.x, target.z - r.z);
   const err = angleDelta(desired, r.heading);
   // Look through the braking distance before using the faster straight-line pace.
-  const brakingLook = 13 + (r.speed * r.speed) / (2 * TUNING.braking);
+  const brakingLook = (13 + (r.speed * r.speed) / (2 * TUNING.braking)) * (slip?.kind === 'late' ? SLIP_LATE_LOOK : 1);
   let curvature = 0;
   for (let distance = 5; distance <= brakingLook; distance += 6)
     curvature = Math.max(curvature, Math.abs(track.curvature(r.surface.s + distance)));
   // A rider misjudging a jump is also carrying more speed down the straight towards it than its pace allows.
   let targetSpeed = clamp(46.875 - curvature * 460, 11.8, 45) * pace * (curvature < 0.004 ? 1 + hot : 1);
+  if (ease !== 1) targetSpeed = Math.min(targetSpeed, TUNING.maxSpeed);
+  if (slip?.inCorner) targetSpeed *= slip.kind === 'late' ? SLIP_LATE_PACE : slip.kind === 'wide' ? SLIP_WIDE_PACE : 1;
+  let inRhythm = false;
   for (const rhythm of track.rhythms) {
     const inLane = hot > 0 && committed!.lip >= rhythm.start - 1 && committed!.lip < rhythm.end;
-    const entrySpeed =
-      rhythm.pace * (difficulty === 'relaxed' ? 0.98 : difficulty === 'expert' ? 1.02 : 1) * (inLane ? 1 + hot : 1);
+    const skill = p ? rhythmPace(p) : difficulty === 'relaxed' ? 0.98 : difficulty === 'expert' ? 1.02 : 1;
+    const entrySpeed = rhythm.pace * skill * (inLane ? 1 + hot : 1);
+    if (r.surface.s >= rhythm.start && r.surface.s < rhythm.end) inRhythm = true;
     if (r.surface.s >= rhythm.start && r.surface.s < rhythm.end) targetSpeed = Math.min(targetSpeed, entrySpeed);
     else {
       const distance = (rhythm.start - r.surface.s + track.length) % track.length;
@@ -594,13 +732,22 @@ export function npcControl(r: Rider, track: Track, others: Rider[], difficulty: 
       if (safe !== null) targetSpeed = Math.min(targetSpeed, safe * (1 + hot));
     }
   }
+  const steer = clamp(err * 2.4, -1, 1);
+  // The nose is held a little high by riders with less rhythm skill, and a lot by one landing flat.
+  const nose = p ? landingError(p) + (slip?.kind === 'flat' ? SLIP_FLAT_NOSE : 0) : 0;
+  let pitch = r.grounded
+    ? 0
+    : clamp(((landingPitch(r, track) + nose - r.pitch) * 6 - r.pitchRate * 0.7 + r.pitch * 0.5) / 3.6, -0.85, 0.85);
+  // The best rhythm riders load the suspension up the face and hold it through the lip, so the bike stays low.
+  if (p && r.grounded && inRhythm && preloads(p) && !slip && Math.abs(steer) < TUNING.preloadSteerLimit) {
+    const lip = lipDistance(track, r.surface.s, NPC_PRELOAD_REACH);
+    if (lip !== null && lip < r.speed * NPC_PRELOAD_SECONDS) pitch = 0.7;
+  }
   return {
     throttle: clamp((targetSpeed - r.speed) * 0.55, 0, 1),
     brake: clamp((r.speed - targetSpeed - 1) * 0.28, 0, 0.7),
-    steer: clamp(err * 2.4, -1, 1),
-    pitch: r.grounded
-      ? 0
-      : clamp(((landingPitch(r, track) - r.pitch) * 6 - r.pitchRate * 0.7 + r.pitch * 0.5) / 3.6, -0.85, 0.85),
+    steer,
+    pitch,
     reset: false,
     pause: false,
   };

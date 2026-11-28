@@ -1,3 +1,30 @@
+# M2.3 Named riders — 28 November 2026
+
+The computer riders are now twelve made-up riders with a name, a number, a plate colour and five ratings (`src/riders.ts`). The ratings drive how each one rides, the pace setting picks who is on the grid, and a catch-up assist can be switched on. Bike physics is untouched (`PHYSICS_VERSION` stays 5).
+
+| Completion box | Result | Evidence |
+|---|---|---|
+| C1 Same seed and inputs give an identical finishing order and times, run twice | Pass | `tests/riders.test.ts`, "the same seed and inputs give an identical finishing order and times, run twice": an eight-rider race through the race session twice on one seed, compared exactly, and a different result on another seed. `baselines/roster.json` holds 15 such races and `npm run roster-check -- --check` (a CI step) matches them exactly. |
+| C2 First-to-last gap is 5 to 25 s in at least 45 of 50 seeded AI races | Pass: 50 of 50, 13.2 to 19.7 s | `npm run roster-check`: 50 seeded Club races of 8 riders, 3 laps, Dusk Valley, from the gate. |
+| C3 At least 4 different riders win at least once across those 50 races | Pass: 5 | Same run: J. REYES 20, T. FOX 17, R. VALE 8, M. PARK 4, A. RIVERS 1. |
+| C4 0 DNFs across those 50 races and no rider stopped for more than 5 s | Pass: 0 DNFs, longest stop 3.13 s | Same run. The stops are crashes from contact in the pack (13 in the 50 races); a mistake is never a stop. |
+| C5 Each rider's mistake rate over 500 laps is within 20% of their consistency rating | Pass: all twelve within 0.1% | `npm run roster-check -- --mistakes`: each rider alone for 500 laps of Saltwind Coast. Mistakes made against rated, per lap: S. MORA 0.060 / 0.060, K. NOVA 0.132 / 0.132, A. RIVERS 0.036 / 0.036, J. REYES 0.204 / 0.204, R. VALE 0.108 / 0.108, T. FOX 0.288 / 0.288, M. PARK 0.180 / 0.180, D. OKORO 0.072 / 0.072, L. HARTE 0.252 / 0.252, E. SOLBERG 0.120 / 0.120, C. IBARRA 0.228 / 0.228, B. QUILL 0.168 / 0.168. No crashes in the 6,000 laps. |
+| C6 Catch-up off is identical to no assist code; on never exceeds the speed cap or +3% pace | Pass | `tests/riders.test.ts`, "catch-up off is identical to no assist code; on never exceeds the speed cap or +3% pace": with it off the assist is never consulted and the race is step-for-step the same; the share of pace is exactly 1 within 40 m and stays between 0.95 and 1.03 at any distance; a rider given the full gain never passes the top speed and laps at most 3% quicker. |
+| C7 HUD and results show names and numbers; no RIDER-plus-number text anywhere | Pass | `npm run lint:names` (`scripts/check-rider-names.mjs`), a CI step: nothing in `src/` or `index.html` builds a name from RIDER and a number. "the pace setting chooses which riders are on the grid" checks every computer rider in a session has a roster name and number. |
+| C8 Fastest AI rider's 3-lap Club time is within 3% of the M1.2 Club time on every circuit | Pass: −1.03% to −0.32% | `npm run roster-check`: Dusk Valley 286.875 s against 287.8 (−0.32%), Red Mesa 186.833 against 188.783 (−1.03%), Pine Summit 183.675 against 184.383 (−0.38%), Saltwind Coast 155.8 against 157.033 (−0.79%), Iron Quarry 198.3 against 199.842 (−0.77%). |
+
+What to know:
+
+- **The pace setting.** Expert is the fastest riders of the roster, Relaxed the slowest, Club starts from the third fastest. The middle of the roster is close together on purpose (that is what makes C2 and C3 work), so with a full grid Relaxed and Club share several riders: Relaxed drops the quickest two Club riders for the two slowest in the roster. Relaxed is therefore closer to Club than it used to be when everybody on it rode at 78% pace. This is the plan's design ("choose which riders are on the grid instead of one multiplier") and is a question for the play review.
+- **Mistakes are not crashes.** Braking late (the rider sees 55% of its braking distance, then takes the corner at 80% pace), landing flat (0.24 rad nose-high) and running wide (round the outside at 90%). Each costs time and none stops the rider. They are spread evenly through a rider's laps at the rated number per lap, starting from a point set by the race seed, which is why the 500-lap count is exact. The computer riders no longer misjudge jumps and crash on their own as they did after M1.3; crashes now come from contact.
+- **No mistakes before the holeshot line**, as in M2.2.
+- **Preload.** Riders with rhythm skill of 84 or more (S. MORA, K. NOVA, A. RIVERS, R. VALE) pull back up the face of rhythm jumps and hold it through the lip, which keeps the bike lower (about 0.2 s a lap on Dusk Valley). Until now preload was for human riders only.
+- **Aggression** moves a rider towards the inside of a slower bike within 12 m ahead going into a corner, by the share of its rating.
+- **Baselines (W7).** `baselines/pace.json` is not changed and `pace-gate` still matches it at 0%: riders without a rating ride exactly as before. The roster races are recorded beside it in the new `baselines/roster.json` (15 races: 5 circuits at Relaxed, Club and Expert, seed 2026) and checked exactly by `roster-check`.
+- **The start check** (M2.2 C5) now uses the roster riders the game puts on the grid.
+- **Catch-up assist** is a tick box on the setup screen, off by default and remembered. It works from the last human still racing.
+- **Not judged here.** Whether there is a real fight for position, whether riders can be told apart by how they ride and whether a mistake looks fake are the play review.
+
 # M2.2 Start gate and holeshot — 27 November 2026
 
 Race Night now starts from a gate: a 5-second board, a drop 1 to 3 s later, a rev meter with a green band, a half-second hold for moving early, and a holeshot line after the first corner. `src/gate.ts` holds the rules and `RaceSession` runs them; Free Practice and Time Trial skip the gate. Physics constants are untouched (`PHYSICS_VERSION` stays 5).

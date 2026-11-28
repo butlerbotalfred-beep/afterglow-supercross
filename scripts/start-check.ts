@@ -1,9 +1,10 @@
-// Start check: 100 seeded 8-rider starts on every circuit, all computer riders, from the gate to the holeshot
+// Start check: 100 seeded 8-rider starts on every circuit, all roster riders, from the gate to the holeshot
 // line. Nobody may crash, be sent back to the track or fail to reach the line.
 //   npx tsx scripts/start-check.ts            print the result for each circuit
 //   npx tsx scripts/start-check.ts --check    also fail if any start has a crash
 import {StartGate, pastHoleshot} from '../src/gate';
 import {collide, makeRider, npcControl, stepRider} from '../src/physics';
+import {gridFor, shuffled} from '../src/riders';
 import {Track} from '../src/track';
 import {COURSES, STEP} from './sim';
 
@@ -20,7 +21,10 @@ for (const course of COURSES) {
   const winners = new Set<number>();
   for (let seed = 1; seed <= STARTS; seed++) {
     const difficulty = LEVELS[seed % LEVELS.length];
-    const riders = Array.from({length: RIDERS}, (_, id) => makeRider(track, id, false, 0xffffff));
+    // The riders the game puts on the grid for the pace setting, in the game's seeded order.
+    const riders = shuffled(gridFor(difficulty, RIDERS), seed).map((profile, id) =>
+      Object.assign(makeRider(track, id, false, profile.plate), {profile, name: profile.name}),
+    );
     const gate = new StartGate(seed, riders, difficulty);
     while (!gate.wait(STEP, () => null).dropped);
     let first = -1,

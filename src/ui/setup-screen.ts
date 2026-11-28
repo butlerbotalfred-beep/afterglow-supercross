@@ -52,7 +52,8 @@ export function setupScreenHtml() {
     `<option value="5">5 laps / Endurance</option></select></label>` +
     `<label>NPC PACE<select id="difficulty"><option value="relaxed">Relaxed</option>` +
     `<option selected value="club">Club</option><option value="expert">Expert</option></select>` +
-    `</label></div>
+    `</label></div><label class="catch-up-setting"><input id="catch-up" type="checkbox"> Catch-up assist: ` +
+    `riders far ahead ease off, riders far behind push on</label>
 <div class="riders-label"><span>RIDERS & DEVICES</span>` +
     `<span>GAMEPAD A / × TO USE / READY</span></div><div id="slots"></div>` +
     `<div id="controller-connection">` +
