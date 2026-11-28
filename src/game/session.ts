@@ -105,9 +105,14 @@ let seasonMode = false,
 let racedInSeason: SeasonRace | null = null,
   showingStandings = false,
   seasonKept = true;
+let countdownShown = '';
 // Race flow and rules live in RaceSession; this file is the browser around it.
 const session = new RaceSession(input, {
-  countdown: n => (el('countdown').innerHTML = countdownHtml(n)),
+  countdown: n => {
+    // Called every physics step at the gate: only touch the page when what it shows changes.
+    const html = countdownHtml(n);
+    if (html !== countdownShown) el('countdown').innerHTML = countdownShown = html;
+  },
   racing: () => setVisible('countdown', false),
   gateDropped: () => audio.clang(),
   jumpedGate: () => audio.cue(180, 0.25),
@@ -118,6 +123,8 @@ const session = new RaceSession(input, {
     touchControls.show(iphoneMode && !nowPaused);
     setVisible('pause', nowPaused);
     el('pause-message').textContent = pauseMessage(missing);
+    // A championship race is on the original circuit and cannot be left for the editor.
+    setVisible('pause-editor', !seasonMode);
     // Resuming is a tap or a key press, which is when a phone lets the sound hardware wake.
     if (nowPaused) audio.hush();
     else audio.start();
@@ -674,7 +681,7 @@ function startRace() {
   el('session-label').textContent = seasonRace
     ? raceTitle(seasonRace)
     : `${(track.customName || track.course.name).toUpperCase()} / ${trial ? 'TIME TRIAL' : practice ? 'FREE PRACTICE' : 'RACE NIGHT'}`;
-  el('countdown').innerHTML = countdownHtml(session.gate ? session.gate.board : 3);
+  el('countdown').innerHTML = countdownShown = countdownHtml(session.gate ? session.gate.board : 3);
   updateHud(hudContext());
 }
 function toSetup() {
@@ -899,7 +906,7 @@ function pollJoins() {
     // Only visible slots count: a pad left in a hidden slot (after lowering the rider count) can still join.
     const assigned = assignments.slice(0, humanCount).findIndex(d => d?.kind === 'gamepad' && d.index === p.index);
     if ((join && (assigned < 0 || !ready[assigned])) || (waitingForController && (pressed || p.index >= 1000))) {
-      const slot = controllerJoinSlot(assignments.slice(0, humanCount), p.index, practice);
+      const slot = controllerJoinSlot(assignments.slice(0, humanCount), p.index, practice || trial);
       // A season in progress has its riders: a new controller can take a free place but not add one.
       if (slot >= 0 && !(slot === humanCount && seasonRunning())) {
         if (slot === humanCount) {
@@ -1139,7 +1146,11 @@ el<HTMLSelectElement>('npcs').onchange = e => (npcCount = Number((e.target as HT
 el('start').onclick = startRace;
 el('pause-button').onclick = () => session.togglePause();
 el('resume').onclick = () => session.togglePause();
-el('restart-pause').onclick = startRace;
+el('restart-pause').onclick = () => {
+  startRace();
+  // A restart clears the pause: a rider whose controller is still gone pauses the new race at once.
+  if (session.phase !== 'setup') session.checkControllers();
+};
 el('restart-results').onclick = afterResults;
 // Leaving a Time Trial from the pause menu shows the laps of the session first.
 el('setup-pause').onclick = () => {

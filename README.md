@@ -1,6 +1,6 @@
 # Afterglow / Supercross
 
-A playable browser-based, third-person arcade Supercross milestone. Five selectable circuits, led by the 2,568 m dusk stadium (800% longer than the original), sculpted procedural motorcycle/rider, local split screen for 1–4 humans, and up to eight total racers. No online networking or accounts.
+A browser-based, third-person arcade Supercross game. Five selectable circuits, led by the 2,568 m dusk stadium, a track editor, a sculpted procedural motorcycle and rider, local split screen for 1–4 humans and up to eight racers. Race Night from a start gate against up to seven of twelve named computer riders, Free Practice, Time Trial against the ghost of your best lap, and a five-round Championship; a rider editor, lap and sector timing, track wear, and sound made in the browser. No online networking or accounts. This is version 2.0.0.
 
 ## Play online
 
@@ -21,7 +21,7 @@ npm ci
 npm run dev -- --port 5173
 ```
 
-Open **http://localhost:5173** in a desktop browser with WebGL2. Select a **Circuit** before racing. Choose **Drop the gate** for the default three-lap race, or **Free practice** for an untimed solo session. The keyboard is assigned and ready by default. The start button waits until each selected human has a unique connected device and is ready.
+Open **http://localhost:5173** in a desktop browser with WebGL2. Select a **Circuit** before racing. Choose **Drop the gate** for the default three-lap race, or **Free practice** for a solo session with no race to finish (laps are still timed). The keyboard is assigned and ready by default. The start button waits until each selected human has a unique connected device and is ready.
 
 ```sh
 npm run build             # TypeScript check and production bundle in dist/
@@ -32,7 +32,9 @@ node scripts/course-smoke.mjs   # five-course selection, laps, restart, resource
 NODE_PATH=$(npm root -g) npm run test:load   # production build: loading screen, WebP textures, editor downloaded on demand (needs npm run build and Playwright)
 ```
 
-The browser smoke script uses pinned `agent-browser@0.27.0` via npm, requires its Chrome browser installation, opens an isolated verification session, simulates inputs, and saves captures plus a JSON report in `output/`. If necessary, install its browser with `npm exec --yes --package=agent-browser@0.27.0 -- agent-browser install`. Browser verification is a developer tool, not a dependency for playing.
+The browser, course and touch smoke scripts use pinned `agent-browser@0.27.0` via npm, require its Chrome browser installation, open an isolated verification session, simulate inputs, and save captures plus a JSON report in `output/`. If necessary, install its browser with `npm exec --yes --package=agent-browser@0.27.0 -- agent-browser install`. The other browser checks (`test:load`, `test:prod`, `test:hud`, `test:trial`, `test:gate`, `test:season`, `test:rider`, `test:wear`) use Playwright, found through `NODE_PATH`; all but `test:load` and `test:prod` need the dev server, and take its address from `AFTERGLOW_URL`. Browser verification is a developer tool, not a dependency for playing.
+
+The checks that need no browser, all run in CI: `npm run pace-gate`, `landing-harness`, `field-check`, `start-check`, `roster-check`, `season-check` and `wear-check` (each with `-- --check`; the pace gate with `-- --tolerance 0`), `npm run build:report -- --check` for the size of the build, and `npm run format:check`, `lint:lines`, `lint:audio` and `lint:names`.
 
 Fonts and all game content are served locally after installation; the built game makes no external asset requests. Serve `dist/` over HTTP instead of opening `index.html` as a file.
 
@@ -100,7 +102,7 @@ The iPhone option assigns one human rider to touch input; optional NPCs and free
 
 On an iPhone, open the hosted link **https://afterglow-supercross.vercel.app** (see **Play online** above); it needs no Mac and no Tailscale. To play the Mac's own copy instead, connect Tailscale on both devices, keep the Mac awake and open the Mac's Tailscale address on port 5173 (`tailscale ip -4` on the Mac prints it). Touch input works without the browser Gamepad API, including HTTP contexts where that API is unavailable. This is a separate local game session on the phone, not remote control of the Mac's race or online multiplayer.
 
-Mobile landscape/portrait rendering and multi-touch events were tested in Chromium emulation. Physical iPhone Safari performance and feel remain unverified. Use the setup render-scale setting if needed.
+Mobile landscape/portrait rendering and multi-touch events are tested in Chromium emulation. On a physical iPhone the game was measured at about 53 frames a second early in version 2; the frame rate with track wear, the sound and the feel on the phone have not been checked since (see `VERIFICATION.md`). Use the setup render-scale setting if needed.
 
 `npm run test:touch` runs the reproducible mobile interaction check and saves phone-sized captures and `output/touch-verification.json`.
 
@@ -122,7 +124,7 @@ This fallback requires macOS and the installed Swift command-line tools, and run
 | Scrub, just off the lip | A or D with Q | Left stick forward and fully to one side |
 | Whip, in the air | A or D | Left stick fully to one side |
 | Recover to checkpoint | R | B / east face button |
-| Shared pause | Escape / P | Menu / Start |
+| Shared pause | Escape / P (when a rider is on the keyboard; otherwise the pause button on screen) | Menu / Start |
 | Join / ready | Setup buttons | A / south face button |
 | Mute | M / sound button | Sound button in UI |
 
@@ -156,7 +158,7 @@ Every rider is timed. The sixteen timing gates are grouped into four sectors per
 
 **TIME TRIAL** is the third tab on the setup screen, beside Race Night and Free Practice: one rider, no computer riders, as many laps as you like. Every lap is timed as in a race. **↺ RESTART LAP** in the top bar (Backspace on the keyboard, or RESTART LAP in the pause menu, which a controller can reach) puts you back on the start line at a standstill and starts the clock again; the laps you have already ridden are kept. There is no results screen while you ride. **END TIME TRIAL** in the pause menu shows the laps of the session and your best.
 
-Your best valid lap on each circuit and layout is kept as a **ghost**: a see-through bike that rides that lap again beside you, starting each time you cross the line or restart. It cannot be touched and changes nothing about your ride. A faster valid lap replaces it; a slower lap, a lap with a shortcut return or an autopilot lap never does. **Show the ghost of my best lap** on the setup screen and in the pause menu switches it off and on, and is remembered.
+Your best valid Time Trial lap on each circuit and layout is kept as a **ghost**: a see-through bike that rides that lap again beside you, starting each time you cross the line or restart. It cannot be touched and changes nothing about your ride. The saved best lap shown as the time to beat can also come from Race Night or Free Practice, so it can be a different, faster lap than the ghost's. A faster valid Time Trial lap replaces the ghost; a slower lap, a lap with a shortcut return or an autopilot lap never does. **Show the ghost of my best lap** on the setup screen and in the pause menu switches it off and on, and is remembered.
 
 The ghost records where the bike was (position, heading, pitch and lean), not what was pressed, at least 15 times a second with extra samples at takeoffs, landings and crashes, packed as 16-bit values: about 19 KB for a Dusk Valley lap. Playback is never more than 0.10 m from the lap as ridden. Ghosts are stored in the browser's IndexedDB (`afterglow-ghosts`), stamped with the physics version; a ghost from an older version is not loaded. A ghost is never larger than 40 KB, about three minutes of riding; a slower lap leaves no ghost. Saving compares and writes in one step, so a second tab cannot replace a faster ghost with a slower one. If the browser has no IndexedDB, refuses it or does not answer within four seconds, the ghost still works until the page is closed and the top bar says it is not being saved. `src/ghost.ts` holds all of it; `npm run test:trial` checks it in a real browser.
 
@@ -172,7 +174,7 @@ The **holeshot** goes to the first rider across the striped line after the first
 
 ## The riders
 
-The computer riders are twelve made-up riders in `src/riders.ts`, each with a name, a number, a plate colour and five ratings from 0 to 100. Their numbers start at 7 and their colours are not the four player colours, so a computer rider is never taken for a player:
+The computer riders are twelve made-up riders in `src/riders.ts`, each with a name, a number, a plate colour and five ratings from 0 to 100. Their numbers start at 7 and their colours are not the four default player colours. A player can still choose a number or colour a computer rider has; the editor only stops two players sharing a number:
 
 - **Corner speed** sets how fast the rider goes through corners and down the straights (84 is the old Club pace, 96 the old Expert pace).
 - **Rhythm skill** sets pace through rhythm sections and how well landings are matched. Riders rated 84 or more also preload the face of rhythm jumps and hold it through the lip, which keeps the bike low.
@@ -271,7 +273,7 @@ Primary values live in `src/config.ts`. Units are metres, seconds and radians.
 
 `src/track.ts` controls the centerline, analytic jump profiles and berm banking; the mesh is sampled from that same height function. `src/physics.ts` contains weight, landing and NPC pace tuning. NPCs steer, throttle, brake, jump, collide and validate gates using the same movement logic as humans. They can lose time and recover; they are not position-animated along the circuit.
 
-**Computer riders make mistakes.** In a race each computer rider misjudges a small share of its jumps (3% on Relaxed, 1.5% on Club, 0.7% on Expert) and takes them 10 to 30% too fast. It then overshoots under the same landing rule as a player: a heavy landing that costs speed, or a HARD LANDING crash and the usual recovery. Which jumps go wrong comes from a seed chosen when the race starts (shown as `seed` in `window.__game.snapshot()`), so a race can be replayed exactly. The pace gate and landing harness run with the seed at 0, where the riders are perfect; `npm run field-check` also runs seeded fields and fails if anyone fails to finish or the crash rate leaves 0.2 to 3 a race.
+**Computer riders make mistakes.** In the game every computer rider is one of the twelve in the roster and makes the mistakes of its consistency rating (see **The riders**): braking late, landing flat or running wide, each costing time and none of them a crash by itself. Which mistakes happen comes from a seed chosen when the race starts (shown as `seed` in `window.__game.snapshot()`), so a race can be replayed exactly. An older rule, where a rider with no roster entry misjudges a share of its jumps (3% on Relaxed, 1.5% on Club, 0.7% on Expert) and overshoots, is still in `src/physics.ts` and is what `npm run field-check` exercises with its seeded fields; no rider in the game uses it. The pace gate and landing harness run with the seed at 0, where the riders are perfect.
 
 The camera maintains a stable horizon, smooths heading and position, stays above terrain, and hides an opponent mesh only when it intersects the camera's near region. Render scale (100%, 75%, 50%) is in setup. Pixel ratio is capped at 1.5; one directional shadow map focused around active riders, batched scenery, layered crowd cards and a small dust pool limit rendering cost.
 
@@ -289,17 +291,22 @@ Every level change is a short glide, never a jump, so nothing clicks; `npm run l
 
 ## Project map
 
-- `src/main.ts`: session lifecycle, UI integration and one shared simulation/render loop.
-- `src/courses.ts`, `src/scenery.ts`: five course definitions, terrain themes and scenery resource cleanup.
-- `src/physics.ts`, `src/track.ts`, `src/race.ts`: movement, terrain and validated race progression.
-- `src/timing.ts`: lap and sector times from the timing gates; `src/save.ts`: the one versioned save, including best laps.
-- `src/input.ts`: isolated keyboard/gamepad/touch routing and edge-triggered actions.
+- `src/main.ts`: starts the game; `src/game/session.ts`: the page's session, UI wiring and the one shared simulation and render loop; `src/game/race-session.ts`: a race with nothing of the browser in it (grid, gate, steps, finish); `src/game/season-run.ts`: a championship race.
+- `src/courses.ts`, `src/scenery.ts`, `src/stadium.ts`, `src/world.ts`: five course definitions, terrain themes, the built scene and its cleanup.
+- `src/physics.ts`, `src/track.ts`, `src/race.ts`, `src/takeoff.ts`: movement and computer riders, terrain, validated race progression, and the safe takeoff speeds of every jump.
+- `src/gate.ts`, `src/start-gate-model.ts`: the start gate and holeshot. `src/riders.ts`: the twelve computer riders and their ratings. `src/rng.ts`: seeded random numbers.
+- `src/timing.ts`: lap and sector times; `src/save.ts`: the one versioned save (best laps, settings, riders, season); `src/ghost.ts`: Time Trial ghosts.
+- `src/season.ts`: championship rules and points. `src/rider-settings.ts`, `src/rider-gear.ts`: the players' riders, colours and unlocks.
+- `src/wear.ts`, `src/track-material.ts`: the wear that is seen. `src/surface-wear.ts`, `src/surface-mesh.ts`: the ruts and braking bumps that are ridden.
+- `src/track-editor.ts`, `src/track-layout.ts`, `src/track-preview.ts`, `src/track-markers.ts`: the track editor and saved layouts.
+- `src/input.ts`, `src/menu-controller.ts`, `src/native-controller.ts`: keyboard, gamepad and touch routing, controller menus, and the Mac controller bridge.
 - `src/touch-input.ts`, `src/touch-controls.ts`: multi-touch pointer ownership and the explicitly selected iPhone overlay.
-- `src/bike-model.ts`, `src/world.ts`, `src/dust.ts`: procedural visuals and animation.
+- `src/ui/`: setup screen, HUD, pause menu, results, rider editor and loading screen.
+- `src/bike-model.ts`, `src/dust.ts`, `src/render/`, `src/render-interp.ts`: procedural visuals, animation, the renderer and smoothing between physics steps.
 - `src/camera.ts`: chase views.
 - `src/audio/`: the sound engine (engine voices, crowd, effects, mixer); see **Sound** above.
-- `tests/`: deterministic regression tests; `scripts/browser-smoke.mjs`: actual browser loop verification.
-- `ASSETS.md`: attribution; `VERIFICATION.md`: acceptance status and measured limitations.
+- `tests/`: deterministic regression tests; `scripts/`: the checks named above; `baselines/`: the recorded results they compare with.
+- `ASSETS.md`: attribution; `VERIFICATION.md`: what was checked for each milestone, with measured values and known limits.
 
 The dev build exposes `window.__game` for verification controls, stepping and telemetry. This harness is removed from production builds. Automated driving in verification supplies throttle/steer inputs to normal physics; normal human play never uses it.
 
@@ -309,13 +316,13 @@ The Dusk Valley stadium now uses an original dusk panorama, granular clay and ra
 
 For reproducible **development-only** visual review, open `http://localhost:5173/?review=1`. Grid, Jump, Berm and Rhythm advance the regular physics with simulated riders to a comparison frame; Four views uses the normal four-camera render. Run / freeze measures moving performance. The review toolbar is absent from the normal game and production build. Screenshots bearing its label show simulated controls, not four physical controller tests.
 
-Visual fidelity is a subjective estimate against the selected stadium concepts; it is not a pixel metric. See `output/art-review/report.md` for the category scores, limitations and evidence. Original texture sources are documented in `ASSETS.md`.
+Visual fidelity is a subjective estimate against the selected stadium concepts; it is not a pixel metric. The category scores, limitations and evidence were written to `output/art-review/report.md`, which is kept locally and is not in the repository. Original texture sources are documented in `ASSETS.md`.
 
-The October 21 speed pass raises engine acceleration and the speed ceiling by exactly 50%. NPC straight-line targets also rise by 50%; they inspect the braking distance before corners. Actual speeds vary with drag, jumps, landings and cornering. The later visual review is in `output/art-review/speed-and-visual-pass.md`.
+The October 21 speed pass raises engine acceleration and the speed ceiling by exactly 50%. NPC straight-line targets also rise by 50%; they inspect the braking distance before corners. Actual speeds vary with drag, jumps, landings and cornering. The later visual review was written to `output/art-review/speed-and-visual-pass.md` (local, not in the repository).
 
 ## Faster rhythm and crash pass — 22 October 2026
 
-Acceleration and the speed ceiling rise a further **25%** from the previous build. All five jump layouts are spaced for the new approach speeds, with terrain-specific takeoff tuning in Iron Quarry. Fifteen four-rider, three-lap simulations across all courses and difficulties finish faster than their saved baselines, with zero crashes or checkpoint recoveries. Standard Dusk Valley completion improves from 350.3 to 298.0 seconds (14.9%). See `output/art-review/rhythm-and-crash-pass.md` for the full comparison.
+Acceleration and the speed ceiling rise a further **25%** from the previous build. All five jump layouts are spaced for the new approach speeds, with terrain-specific takeoff tuning in Iron Quarry. Fifteen four-rider, three-lap simulations across all courses and difficulties finish faster than their saved baselines, with zero crashes or checkpoint recoveries. Standard Dusk Valley completion improves from 350.3 to 298.0 seconds (14.9%). The full comparison was written to `output/art-review/rhythm-and-crash-pass.md` (local, not in the repository); the lap times since then are in `baselines/` and `VERIFICATION.md`.
 
 Contact crashes use relative closing speed above 9 m/s, not absolute riding speed. Landing checks consider impact normal to the surface and bike alignment: impact above 21 m/s, or pitch error above 0.95 radians with a substantial impact, can cause a crash. A landing more than 0.10 radians away from the slope of the ground costs speed, in proportion to how far off it is and never more than 29% in one landing (1.4 per radian; both were raised in physics version 3 so a missed landing still costs about the same lap time with the stronger engine). A landing matched to a downslope after at least 0.3 s in the air adds up to 3 km/h, and the HUD calls it CLEAN LANDING; one that costs speed is called FLAT LANDING. The values are `landingPenaltyStart`, `landingPenaltySlope`, `landingPenaltyMax`, `landingBonusMax`, `landingBonusSlope` and `landingJudgeAir` in `src/config.ts`. Physics version 3 raised acceleration 15% and lowered the top speed to 162 km/h: best laps saved on earlier versions are archived. Riders who rub in the air are pushed apart but keep their speed. AI riders read each jump's safe takeoff speeds (`src/takeoff.ts`) and will not close on a much slower rider in their line at more than 5 m/s. Fallen riders slide without earning checkpoint progress and cannot bypass remount time by pressing recover. This remains assisted arcade physics with animated falls, not a full ragdoll or wheel-by-wheel rigid-body simulation.
 
