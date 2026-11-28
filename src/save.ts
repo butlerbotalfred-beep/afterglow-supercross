@@ -203,6 +203,8 @@ export class SaveStore {
       if (text !== null && this.source === 'legacy') this.damaged = text;
     }
   }
+  /** True once the browser has refused a write in this visit: memory may then hold more than storage does. */
+  private unsaved = false;
   /** True when a later build wrote the save. Changes then last for this visit only. */
   get readOnly() {
     return this.source === 'newer';
@@ -229,8 +231,21 @@ export class SaveStore {
       this.storage.setItem(DAMAGED_SAVE_KEY, this.damaged);
       this.damaged = null;
     }
-    this.storage.setItem(SAVE_KEY, JSON.stringify(stored));
-    this.data = fromStored(stored, this.physics);
+    try {
+      this.storage.setItem(SAVE_KEY, JSON.stringify(stored));
+    } catch (error) {
+      this.unsaved = true;
+      throw error;
+    }
+    if (!this.unsaved) {
+      this.data = fromStored(stored, this.physics);
+      return;
+    }
+    // An earlier write was refused, so memory holds things storage does not (a best lap or an unlock kept for
+    // this visit). Reading storage back would drop them: apply the same change to what is in memory instead.
+    const mine: Record<string, any> = JSON.parse(JSON.stringify(this.data));
+    change(mine);
+    this.data = fromStored(mine, this.physics);
   }
   /**
    * Stores records and career as they stand in `data`. A faster best lap another tab stored meanwhile is kept.

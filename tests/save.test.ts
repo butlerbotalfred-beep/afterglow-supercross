@@ -210,3 +210,29 @@ test('a save that another tab upgraded to a newer version is not written over', 
   save.write();
   assert.equal(storage.values.get(SAVE_KEY), newer);
 });
+
+test('what is kept for this visit after a refused write survives the next write that fits', () => {
+  // Storage that fills up: writes are refused while `fullNow` is set.
+  const values = new Map<string, string>();
+  let fullNow = false;
+  const storage = {
+    getItem: (k: string) => values.get(k) ?? null,
+    setItem: (k: string, v: string) => {
+      if (fullNow) throw new Error('QuotaExceededError');
+      values.set(k, v);
+    },
+  };
+  const save = new SaveStore(storage);
+  save.setShowGhost(false);
+  fullNow = true;
+  assert.equal(save.submitLap('dusk', {time: 80, sectors: [20, 20, 20, 20]}), true);
+  assert.equal(save.bestLap('dusk')?.time, 80, 'kept for this visit');
+  // A small write gets through later: the lap held in memory is still the best lap.
+  fullNow = false;
+  save.setShowGhost(true);
+  assert.equal(save.showGhost, true);
+  assert.equal(save.bestLap('dusk')?.time, 80, 'still there after an accepted write');
+  // And a store that never had a refused write still reads back what storage holds.
+  const other = new SaveStore(storage);
+  assert.equal(other.showGhost, true);
+});
