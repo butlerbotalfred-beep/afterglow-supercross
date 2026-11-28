@@ -63,7 +63,9 @@ export function setupScreenHtml() {
     `<option selected value="club">Club</option><option value="expert">Expert</option>` +
     `<option value="pro" disabled>Pro / win a championship to unlock</option></select>` +
     `</label></div><label class="catch-up-setting"><input id="catch-up" type="checkbox"> Catch-up assist: ` +
-    `riders far ahead ease off, riders far behind push on</label>
+    `riders far ahead ease off, riders far behind push on</label>` +
+    `<label class="catch-up-setting"><input id="wear-physics" type="checkbox"> Track wear changes the riding: ` +
+    `ruts in turns, braking bumps before them (never in Time Trial)</label>
 <div class="riders-label"><span>RIDERS & DEVICES</span>` +
     `<span>GAMEPAD A / × TO USE / READY</span></div><div id="slots"></div>` +
     `<div id="controller-connection">` +

@@ -9,6 +9,7 @@ import {COURSES, courseById} from '../courses';
 import {disposeWorld} from '../scenery';
 import {createWorld} from '../world';
 import type {WearLayer} from '../track-material';
+import type {SurfaceMesh} from '../surface-mesh';
 import {createBike} from '../bike-model';
 import {riderLabel} from '../riders';
 import {PRO_PACE, allowedPace} from '../rider-settings';
@@ -124,14 +125,16 @@ const session = new RaceSession(input, {
   lap(rider, lap) {
     if (!lapCountsForRecord(lap, rider, session.reviewDrive || session.override.size > 0)) return;
     // When another tab already holds a faster lap, show that one as the time to beat.
-    if (save.submitLap(recordKey(track.course.id, activeLayout), lap)) session.personalBest = lap;
+    // A lap ridden on ruts and bumps is not comparable with one ridden on the track as built: no record.
+    if (!track.surface && save.submitLap(recordKey(track.course.id, activeLayout), lap)) session.personalBest = lap;
     else loadPersonalBest();
   },
   ghostLap(rider, lap, lapGhost) {
     const key = recordKey(track.course.id, activeLayout);
     // Autopilot laps never become a ghost, except when a development check asks for one.
     const assisted = !ghost.fromAutopilot && (session.reviewDrive || session.override.size > 0);
-    const counts = lapCountsForRecord(lap, rider, assisted);
+    // Nor does a lap ridden on ruts and bumps: its ghost would be chased on a track without them.
+    const counts = !track.surface && lapCountsForRecord(lap, rider, assisted);
     // The player may have left for another track while the browser was saving: showGhostFor checks.
     void ghosts.submit(key, lapGhost, counts).then(became => showGhostFor(key, became ? lapGhost : null));
   },
@@ -655,8 +658,8 @@ function startRace() {
   el('setup-pause').textContent = trial ? 'END TIME TRIAL' : 'RACE SETUP';
   session.start(
     season && seasonRace
-      ? seasonStart(season, seasonRace, save.catchUp)
-      : {lapCount, difficulty, seed: gridSeed, catchUp: save.catchUp},
+      ? {...seasonStart(season, seasonRace, save.catchUp), wearPhysics: save.wearPhysics}
+      : {lapCount, difficulty, seed: gridSeed, catchUp: save.catchUp, wearPhysics: save.wearPhysics},
   );
   holeshot = null;
   prevPoses = [];
@@ -713,7 +716,7 @@ function syncModels(dt: number) {
         time: globalTime,
         throttle: r.throttle,
         brake: r.brake,
-        groundDistance: Math.max(0, r.y - track.height(r.surface.s, r.surface.lateral)),
+        groundDistance: Math.max(0, r.y - track.surfaceHeight(r.surface.s, r.surface.lateral)),
         crashed: r.crashTime > 0,
         crashAge: r.crashAge,
         airLean: r.airLean,
@@ -962,6 +965,7 @@ function frame(now: number) {
   }
   syncModels(session.paused || session.reviewFrozen ? 0 : dt);
   (scene.userData.wear as WearLayer | undefined)?.refresh(now);
+  (scene.userData.surface as SurfaceMesh | undefined)?.refresh(now);
   syncGhost(session.paused || session.reviewFrozen ? 0 : dt);
   syncGate(session.paused || session.reviewFrozen ? 0 : dt);
   dust.update(session.riders, session.paused || session.reviewFrozen || session.phase !== 'racing' ? 0 : dt);
@@ -1113,6 +1117,9 @@ el('restart-lap-pause').onclick = () => {
   const box = el<HTMLInputElement>('catch-up');
   box.checked = save.catchUp;
   box.onchange = () => save.setCatchUp(box.checked);
+  const wear = el<HTMLInputElement>('wear-physics');
+  wear.checked = save.wearPhysics;
+  wear.onchange = () => save.setWearPhysics(wear.checked);
 }
 for (const prefix of ['', 'pause-']) {
   const box = el<HTMLInputElement>(`${prefix}show-ghost`);
@@ -1264,6 +1271,22 @@ if (import.meta.env.DEV) {
         if (v) worn++;
       }
       return {cols: grid?.cols, rows: grid?.rows, bytes: grid?.bytes, sum, worn, uploads: layer?.uploads ?? 0};
+    },
+    /** Wear physics in the race being run: whether it is on, the deepest rut, the roughest bumps, the mesh redraws. */
+    surface: () => {
+      const surface = track.surface,
+        mesh = scene.userData.surface as SurfaceMesh | undefined;
+      let rut = 0,
+        rough = 0,
+        bump = 0;
+      if (surface)
+        for (let s = 0; s < track.length; s += 1)
+          for (let l = -track.halfWidth; l <= track.halfWidth; l += 0.4) {
+            rut = Math.max(rut, surface.rut(s, l));
+            rough = Math.max(rough, surface.rough(s, l));
+            bump = Math.max(bump, Math.abs(surface.bump(s, l)));
+          }
+      return {on: !!surface, rut, rough, bump, redraws: mesh?.redraws ?? 0, rows: mesh?.rows ?? 0};
     },
     snapshot: () => ({
       course: track.course.id,

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import {TUNING, clamp, wrap} from './config';
+import type {SurfaceWear} from './surface-wear';
 import {COURSES, type Course} from './courses';
 import {validateLayout, obstacleCount, obstacleLength, type LayoutJump, type TrackLayout} from './track-layout';
 export interface TrackPoint {
@@ -27,6 +28,11 @@ export class Track {
   readonly rhythms: {start: number; end: number; pace: number; name: string}[] = [];
   /** Metres from the start line to the holeshot line, just after the first corner. */
   readonly holeshot: number;
+  /**
+   * Ruts and braking bumps, while a race is run with wear physics on; null otherwise, and then the track
+   * rides exactly as built.
+   */
+  surface: SurfaceWear | null = null;
   private readonly cells = new Map<string, number[]>();
   private readonly cellSize = 20;
   constructor(
@@ -374,11 +380,75 @@ export class Track {
     const p = this.at(s, lateral);
     return h + this.baseHeight(p.x, p.z);
   }
+  /** The ground a bike stands on: `height`, and the braking bumps when wear physics is on. */
+  surfaceHeight(s: number, lateral = 0) {
+    const h = this.height(s, lateral);
+    return this.surface ? h + this.surface.bump(s, lateral) : h;
+  }
   sector(s: number) {
     const distance = wrap(s, this.length);
     for (let i = this.sections.length - 1; i >= 0; i--)
       if (this.sections[i].start <= distance) return this.sections[i].name;
     return 'FINISH STRAIGHT';
+  }
+  /**
+   * The height the track is drawn at: the ground, with a fine ripple and shallow grooves for looks, and the
+   * outermost row tucked under. Where braking bumps have formed the looks give way to them, so what is drawn
+   * there is what is ridden.
+   */
+  drawnHeight(s: number, l: number, edge = false, worn: SurfaceWear | null = null) {
+    const ripple =
+      Math.sin(s * 4.7 + l * 11) *
+      Math.sin(s * 2.13 - l * 7) *
+      (0.016 + Math.pow(Math.abs(l) / this.halfWidth, 3) * 0.035);
+    const looks = ripple - 0.025 * Math.pow(0.5 + 0.5 * Math.sin(l * 9 + Math.sin(s * 0.06) * 0.5), 4);
+    const base = this.height(s, l) - (edge ? 0.4 : 0);
+    if (!worn) return base + looks;
+    // Gone by the time the bumps are half a centimetre high.
+    return base + looks * (1 - Math.min(1, worn.rough(s, l) * 6)) + worn.bump(s, l);
+  }
+  /**
+   * Redraws the rows of a track mesh from `geometry()` that lie in a stretch of the lap, in metres from the
+   * line, to the worn surface given. Returns how many rows were redrawn.
+   */
+  redraw(g: THREE.BufferGeometry, from: number, to: number, worn: SurfaceWear, step = 0.5, lanes = 40) {
+    const count = Math.ceil(this.length / step),
+      row = this.length / count,
+      width = lanes + 1;
+    const position = g.getAttribute('position') as THREE.BufferAttribute,
+      normal = g.getAttribute('normal') as THREE.BufferAttribute;
+    const first = Math.floor(from / row),
+      last = Math.min(first + count, Math.ceil(to / row));
+    // The row at the end of the lap is the row at its start, drawn twice.
+    const rows = new Set<number>();
+    for (let i = first; i <= last; i++) {
+      const k = ((i % count) + count) % count;
+      rows.add(k);
+      if (k === 0) rows.add(count);
+    }
+    for (const i of rows)
+      for (let j = 0; j <= lanes; j++) {
+        const s = (i / count) * this.length,
+          l = ((j / lanes) * 2 - 1) * (this.halfWidth + 2.8);
+        position.setY(i * width + j, this.drawnHeight(s, l, j === 0 || j === lanes, worn));
+      }
+    // Light falls on the bumps by their slope, taken from the rows and lanes either side.
+    const a = new THREE.Vector3(),
+      b = new THREE.Vector3(),
+      at = (i: number, j: number) => Math.min(count, Math.max(0, i)) * width + Math.min(lanes, Math.max(0, j));
+    for (const i of rows)
+      for (let j = 0; j <= lanes; j++) {
+        a.fromBufferAttribute(position, at(i + 1, j)).sub(b.fromBufferAttribute(position, at(i - 1, j)));
+        const across = new THREE.Vector3()
+          .fromBufferAttribute(position, at(i, j + 1))
+          .sub(b.fromBufferAttribute(position, at(i, j - 1)));
+        a.cross(across).normalize();
+        if (a.y < 0) a.negate();
+        normal.setXYZ(i * width + j, a.x, a.y, a.z);
+      }
+    position.needsUpdate = true;
+    normal.needsUpdate = true;
+    return rows.size;
   }
   geometry(step = 0.5, lanes = 40) {
     const positions: number[] = [],
@@ -393,18 +463,7 @@ export class Track {
         const s = (i / count) * this.length,
           l = ((j / lanes) * 2 - 1) * (this.halfWidth + 2.8),
           p = this.at(s, l);
-        const ripple =
-          Math.sin(s * 4.7 + l * 11) *
-          Math.sin(s * 2.13 - l * 7) *
-          (0.016 + Math.pow(Math.abs(l) / this.halfWidth, 3) * 0.035);
-        positions.push(
-          p.x,
-          this.height(s, l) +
-            ripple -
-            0.025 * Math.pow(0.5 + 0.5 * Math.sin(l * 9 + Math.sin(s * 0.06) * 0.5), 4) -
-            (j === 0 || j === lanes ? 0.4 : 0),
-          p.z,
-        );
+        positions.push(p.x, this.drawnHeight(s, l, j === 0 || j === lanes), p.z);
         uvs.push(l * 0.32, s * 0.32);
         const edge = Math.abs(l) / this.halfWidth;
         const lane = Math.cos(l * 4) * 0.025;

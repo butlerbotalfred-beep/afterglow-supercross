@@ -7,6 +7,7 @@ import {lipAhead, lipDistance, safeTakeoffSpeed} from './takeoff';
 import {Rng} from './rng';
 import {cornerPace, landingError, preloads, rhythmPace, slipFor, type RiderProfile, type SlipKind} from './riders';
 import {PRO_PACE, ROSTER, relaxedPace} from './riders';
+import {BUMP_BRAKE_LOSS, RUT_TURN_BONUS, type SurfaceWear} from './surface-wear';
 export interface Rider {
   id: number;
   human: boolean;
@@ -58,6 +59,15 @@ export interface Rider {
   crashReason: string;
   crashes: number;
   recoveryReason: string;
+  /** What the braking bumps under the bike add to its height, in metres; part of `y`. 0 with wear physics off. */
+  bump: number;
+  /** How deep the rut under the bike is, 0 to 1. 0 with wear physics off. */
+  rut: number;
+  /** Seconds of wobble left after crossing out of a rut, and the side (1 or -1) the bike left by. */
+  rutShake: number;
+  /** True from when the bike is well down in a rut until it has climbed out of it. */
+  rutHeld: boolean;
+  rutSide: number;
   /** How loaded the suspension is from holding the stick straight back on the ground, 0 to 1. */
   preload: number;
   /** The load that was let go, kept until the bike leaves the ground or preloadRun passes the release distance. */
@@ -130,6 +140,11 @@ export function makeRider(track: Track, id: number, human: boolean, color: numbe
     prevX: p.x,
     prevZ: p.z,
     crashTime: 0,
+    bump: 0,
+    rut: 0,
+    rutShake: 0,
+    rutHeld: false,
+    rutSide: 0,
     crashAge: 0,
     crashSide: 1,
     crashReason: '',
@@ -222,7 +237,53 @@ export function crash(r: Rider, reason: string, side = 1) {
   clearPreload(r);
 }
 
+/** A rut this deep holds the bike; crossing out of one to ground this shallow sets it wobbling. */
+const RUT_HELD = 0.5;
+const RUT_LEFT = 0.2;
+const RUT_SHAKE_SECONDS = 0.4;
+/** The wobble's swing of the bars, in radians a second, and how fast it swings. */
+const RUT_SHAKE_YAW = 0.45;
+const RUT_SHAKE_RATE = 26;
+/**
+ * One physics step of one rider. The riding itself is `ride`; this adds what wear physics puts on top when
+ * the track has a worn surface: the bike sits on the braking bumps, and wobbles when it crosses out of a rut.
+ * With wear physics off it is `ride` and nothing else.
+ */
 export function stepRider(r: Rider, c: Control, track: Track, dt: number, others: Rider[], slideAggression = 1) {
+  const surface = track.surface;
+  if (!surface) {
+    if (r.bump !== 0) r.y -= r.bump;
+    r.bump = r.rut = r.rutShake = 0;
+    r.rutHeld = false;
+    ride(r, c, track, dt, others, slideAggression);
+    return;
+  }
+  // The riding is worked out on the ground as built; the bumps are put back under the bike afterwards.
+  r.y -= r.bump;
+  if (r.rutShake > 0 && r.grounded && r.crashTime === 0) {
+    const t = RUT_SHAKE_SECONDS - r.rutShake;
+    r.heading += r.rutSide * RUT_SHAKE_YAW * Math.sin(t * RUT_SHAKE_RATE) * (r.rutShake / RUT_SHAKE_SECONDS) * dt;
+  }
+  r.rutShake = Math.max(0, r.rutShake - dt);
+  const lateralBefore = r.surface.lateral;
+  ride(r, c, track, dt, others, slideAggression);
+  const riding = r.grounded && r.crashTime === 0 && r.recovery === 0;
+  r.rut = riding ? surface.rut(r.surface.s, r.surface.lateral) : 0;
+  if (!riding) r.rutHeld = false;
+  else if (r.rut >= RUT_HELD) r.rutHeld = true;
+  else if (r.rutHeld && r.rut < RUT_LEFT) {
+    r.rutHeld = false;
+    // Only climbing out sideways shakes the bike; a rut that simply ends ahead of it does not.
+    const sideways = Math.abs(r.surface.lateral - lateralBefore) > 0.15 * dt;
+    if (sideways && r.speed > 6) {
+      r.rutShake = RUT_SHAKE_SECONDS;
+      r.rutSide = r.surface.lateral >= lateralBefore ? 1 : -1;
+    }
+  }
+  r.bump = riding ? surface.bump(r.surface.s, r.surface.lateral) : 0;
+  r.y += r.bump;
+}
+function ride(r: Rider, c: Control, track: Track, dt: number, others: Rider[], slideAggression: number) {
   r.lastLanding = 0;
   r.landingCueAge += dt;
   r.compression *= Math.exp(-dt * 9);
@@ -294,15 +355,22 @@ export function stepRider(r: Rider, c: Control, track: Track, dt: number, others
   const targetSlip = c.steer * TUNING.slideSlipAngle * r.powerSlide * aggression * slideBoost;
   r.slipAngle += (targetSlip - r.slipAngle) * (1 - Math.exp(-dt * 10));
   const off = Math.abs(r.surface.lateral) > track.halfWidth;
+  // Wear physics: braking bumps unload the wheels, and a rut holds the bike into the turn it was worn by.
+  const worn = track.surface;
+  const brakeGrip = worn ? 1 - BUMP_BRAKE_LOSS * worn.rough(r.surface.s, r.surface.lateral) : 1;
+  const rutTurn =
+    worn && r.grounded && c.steer * track.curvature(r.surface.s) > 0
+      ? 1 + RUT_TURN_BONUS * worn.rut(r.surface.s, r.surface.lateral)
+      : 1;
   const accel = r.grounded
     ? TUNING.acceleration * c.throttle -
-      TUNING.braking * c.brake -
+      TUNING.braking * c.brake * brakeGrip -
       TUNING.drag * r.speed -
       TUNING.slideDrag * r.powerSlide -
       (off ? 6 : 0)
     : -0.08 * r.speed;
   r.speed = clamp(r.speed + accel * dt, 0, TUNING.maxSpeed);
-  const steerPower = TUNING.turnRate * (0.18 + 0.82 * clamp(r.speed / 6, 0, 1)) * (r.grounded ? 1 : 0.36);
+  const steerPower = TUNING.turnRate * (0.18 + 0.82 * clamp(r.speed / 6, 0, 1)) * (r.grounded ? 1 : 0.36) * rutTurn;
   // In a scrub the sideways stick lays the bike over instead of steering it.
   if (!r.scrub)
     r.heading += c.steer * steerPower * (1 + TUNING.slideYawBoost * r.powerSlide * aggression * slideBoost) * dt;
@@ -510,6 +578,23 @@ export function collide(riders: Rider[], track: Track) {
     }
 }
 
+/** A computer rider looks this far either side of its line for a rut, in metres, and wants one at least this deep. */
+const RUT_REACH = 0.8;
+const RUT_WORTH = 0.25;
+/**
+ * Wear physics: the line a computer rider takes through a turn once ruts have formed. It moves towards the
+ * deepest rut within reach of the line it had in mind, further the deeper the rut is.
+ */
+function rutLine(track: Track, surface: SurfaceWear, s: number, lane: number) {
+  if (Math.abs(track.curvature(s)) < 0.025) return lane;
+  let best = lane,
+    depth = surface.rut(s, lane);
+  for (const offset of [-RUT_REACH / 2, RUT_REACH / 2, -RUT_REACH, RUT_REACH]) {
+    const d = surface.rut(s, lane + offset);
+    if (d > depth + 0.05) [best, depth] = [lane + offset, d];
+  }
+  return depth < RUT_WORTH ? lane : lane + (best - lane) * Math.min(1, depth);
+}
 /** Predict the downslope under the ballistic path, so NPCs prepare before touchdown. */
 function landingPitch(r: Rider, track: Track) {
   for (let t = 0.08; t < 2.8; t += 0.08) {
@@ -714,6 +799,7 @@ export function npcControl(
   }
   if (p && hold === 0) lane = insideLine(r, track, others, p, lane);
   if (slip?.kind === 'wide' && slip.inCorner) lane = -slip.inside * 2.6;
+  else if (track.surface && hold === 0) lane = rutLine(track, track.surface, r.surface.s + ahead, lane);
   lane = clamp(lane, -2.5, 2.5);
   const target = track.at(r.surface.s + ahead, lane);
   const desired = Math.atan2(target.x - r.x, target.z - r.z);

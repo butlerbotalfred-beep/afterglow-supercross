@@ -216,9 +216,17 @@ The number is on the bike's three plates and on the back of the jersey, where th
 
 ## Track wear
 
-The dirt darkens where the bikes ride, more where they are fast or sliding, so the racing line wears in over a race. It is only looked at: the riding is the same on worn dirt as on fresh. Every race starts on fresh dirt, and the track editor's preview never shows wear.
+The dirt darkens where the bikes ride, more where they are fast or sliding, so the racing line wears in over a race. Every race starts on fresh dirt, and the track editor's preview never shows wear.
 
-`npm run test:wear` runs a 3-lap race of eight in a browser and photographs the track before and after.
+In a race the wear also changes the riding, unless **Track wear changes the riding** is unticked on the setup screen:
+
+- **Ruts** form on the line through turns. A bike in a rut and steering into the turn turns up to 8% tighter. Crossing out of a rut sideways wobbles the bars for under half a second.
+- **Braking bumps** form where riders brake for a turn, up to 6 cm from top to bottom. They are part of the ground the bike stands on, and braking over them is up to 20% weaker.
+- Computer riders move towards a rut when one is within reach.
+
+Time Trial is always ridden on the track as built, so lap records and ghosts stay comparable. A lap ridden with wear physics on sets no record.
+
+`npm run test:wear` runs a 3-lap race of eight in a browser, photographs the track before and after, and checks the setting. `npm run wear-check` runs 5-lap races of eight with wear physics on and checks nobody fails to finish and the pace holds (`-- --all` for every circuit at every pace, `-- --off` for the same races without wear).
 
 ## Circuit selection
 

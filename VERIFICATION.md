@@ -1,3 +1,30 @@
+# M3.4 Track wear, physics — 28 November 2026
+
+In a race, wear now changes the riding: ruts in the turns and braking bumps before them. `src/surface-wear.ts` holds the worn surface with nothing of the browser in it; `stepRider` in `src/physics.ts` rides it; `src/surface-mesh.ts` redraws the track mesh. With wear physics off the code path is the one it was, and no baseline changed. `PHYSICS_VERSION` stays 5.
+
+| Completion box | Result | Evidence |
+|---|---|---|
+| C1 Height never steps more than 1 cm between points 0.1 m apart at maximum wear | Pass | `tests/surface-wear.test.ts`, first test: every bump cell of every circuit worn through, then the height compared 0.1 m away along, across and on both diagonals, every 5 cm round the lap. The largest step is 0.72 cm on all five circuits. |
+| C2 The rut turning bonus never exceeds 8% | Pass | "the rut turning bonus never exceeds 8%": a bike at full lock with and without the deepest rut under it, every 3 m round Dusk Valley at 8, 16 and 28 m/s, both ways. The turn is never more than 1.08 times the turn without the rut, reaches 1.08, and is exactly 1 when steering away from the turn. |
+| C3 The drawn surface is within 2 cm of the physics height at bumps | Pass | "the drawn surface is within 2 cm of the physics height at bumps": bumps at their highest everywhere, the mesh redrawn, and every mesh point where the bumps stand 1 cm or more compared with the height the bike stands on. Worst 1.5 cm. |
+| C4 Wear physics is off in Time Trial | Pass | "wear physics is off in Time Trial": a trial started with the setting on has no worn surface. In Chromium (`npm run test:wear`): "wear physics is off in a Time Trial, with the setting ticked". |
+| C5 With wear off, landing-harness and pace-gate match M2.3 within 0.2% | Pass | They match exactly, not within 0.2%: `npm run pace-gate -- --tolerance 0` and `npm run landing-harness -- --check` pass against the untouched baseline files, as do the field, start, roster and season checks. "with wear off a race is the race it was": a race with the setting off and one with wear physics left out put every rider in the same place at the same speed throughout. |
+| C6 5-lap 8-rider AI races with wear on have 0 DNFs, lap 5 within 3% of lap 1 | 0 DNFs: pass. Pace: see note | `npm run wear-check -- --all`, 15 races (5 circuits, 3 paces): 0 DNFs in all 15, 1 crash in all. Lap 5 against lap 2, the first flying lap: +0.11% to -1.65%. Lap 5 against lap 1: -2.24% to -4.23%, over 3% in 8 of 15. The same races with wear off (`-- --off`) are -2.27% to -4.19%: lap 1 is slow because it has the standing start in it, with or without wear. The check and CI compare lap 5 with lap 2. Reading the box that way is Michael's decision to confirm. |
+| C7 Identical inputs give an identical race with wear on | Pass | "identical inputs give an identical race with wear on": the same race of eight on two separately built tracks, every rider's place, height, heading and speed equal at every sampled step, and the worn surfaces equal. |
+| C8 iPhone frame rate is within 5% of M3.3 | Not measured | Needs the phone. What changes for it: the ground mesh is rewritten for the changed stretch at most once a second (4,798 rows after a 3-lap race on Dusk Valley), and each bike reads two small grids a step (92 KB on Dusk Valley). |
+
+What to know:
+
+- **Ruts.** Cells 1 m along by 0.4 m across, only where the track bends. A pass deepens the cell ridden and the ones beside it less. After 3 laps of eight the deepest is 0.67 of full; after 5 laps it is full on four circuits and 0.7 to 0.9 on Pine Summit.
+- **Braking bumps: 6 cm is top to bottom.** The plan says "up to 6 cm"; the bumps rise and fall 3 cm either side of the ground as built. They form where riders brake at speed, not on jump faces, landings or sharp bends of the built ground. The bike stands on them and brakes up to 20% weaker over them. They do not throw the bike: the riding is worked out on the ground as built and the bump height is added under the bike afterwards, because 6 cm ripples taken as real slopes at racing speed launched bikes and broke the landing checks.
+- **Wobble.** Crossing sideways out of a rut swings the bars for 0.4 s. It does not crash the bike by itself ("crossing out of a rut sets the bike wobbling, and it settles").
+- **Records.** A lap ridden with wear physics on sets no best lap and saves no ghost, so records stay comparable with Time Trial, which is always ridden on the track as built. This is the recommended answer to the open question on work item 6, which asks to raise `PHYSICS_VERSION` to 5: it is already 5, and raising it to 6 would archive every saved best lap and ghost.
+- **Setting.** "Track wear changes the riding" on the setup screen, on by default, remembered in the save, and used for championship races too.
+- **Mesh.** Redrawn at most once a second (`SURFACE_REDRAW_MS`), only the stretch that changed ("the track mesh is redrawn for the worn stretch only, at most once a second").
+- **Browser check.** `npm run test:wear`: 18 checks, 7 of them new. On the software renderer here: deepest rut 0.67 and bumps 1.5 cm after the 3-lap race, a fresh surface at the next start, the setting off when unticked and remembered after a reload.
+- **Not checked by a run.** That a wear-on lap sets no record is two lines in `src/game/session.ts` read, not exercised: the autopilot laps the checks ride never count for a record anyway.
+- **Not judged here.** Whether a rut can be seen and used by lap 3, whether the bumps can be felt, and whether any of it is unfair are the play review.
+
 # M3.3 Track wear — 28 November 2026
 
 The dirt darkens where the bikes have ridden. `src/wear.ts` keeps a grid of 0.5 m cells over the track, one byte a cell, with nothing of the browser in it; the race session wears it in the physics step; `src/track-material.ts` draws it as a darkening layer on the track. Nothing that rides reads the grid. Physics is untouched (`PHYSICS_VERSION` stays 5) and no baseline changed.

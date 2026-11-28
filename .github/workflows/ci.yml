@@ -47,3 +47,5 @@ jobs:
         run: npm run roster-check -- --check
       - name: Season check (a whole Club championship with eight computer riders, under 60 s)
         run: npm run season-check -- --check
+      - name: Wear check (5-lap races of eight with wear physics on, no DNFs, lap 5 within 3% of the first flying lap)
+        run: npm run wear-check -- --check

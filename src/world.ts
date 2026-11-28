@@ -6,6 +6,7 @@ import {addScenery} from './scenery';
 import {addStadium} from './stadium';
 import {WearLayer, dirtMaterial, barrierTexture} from './track-material';
 import {wearFor} from './wear';
+import {SurfaceMesh} from './surface-mesh';
 import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
 export function textTexture(text: string, fg = '#fff5dc', bg = '#232737', w = 1024, h = 256) {
   const canvas = document.createElement('canvas');
@@ -129,6 +130,7 @@ export function createWorld(track: Track) {
   scene.userData.wear = wear;
   const terrain = new THREE.Mesh(track.geometry(), dirtMaterial(false, undefined, wear));
   terrain.receiveShadow = true;
+  scene.userData.surface = new SurfaceMesh(track, terrain.geometry);
   scene.add(terrain);
   const mats = {
     navy: new THREE.MeshStandardMaterial({color: '#292e42', roughness: 0.8}),
